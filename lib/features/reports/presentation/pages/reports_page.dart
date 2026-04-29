@@ -85,7 +85,7 @@ class ReportsPage extends ConsumerWidget {
                   ),
                   allBatches.when(
                     data: (b) {
-                      final total = b.fold<int>(0, (sum, bt) => sum + (bt.quantity as int));
+                      final total = b.fold<int>(0, (sum, bt) => sum + bt.quantity);
                       return CasaInfoCard(
                         title: 'Total de Itens',
                         value: '$total',
@@ -140,7 +140,7 @@ class ReportsPage extends ConsumerWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        b.productName as String,
+                                        b.productName,
                                         style: AppTypography.labelLarge
                                             .copyWith(
                                                 color: AppColors.neutral900),
@@ -149,7 +149,7 @@ class ReportsPage extends ConsumerWidget {
                                       ),
                                       Text(
                                         b.expiryDate != null
-                                            ? fmt.format(b.expiryDate as DateTime)
+                                            ? fmt.format(b.expiryDate!)
                                             : 'Sem validade',
                                         style: AppTypography.bodySmall
                                             .copyWith(
@@ -161,7 +161,7 @@ class ReportsPage extends ConsumerWidget {
                                 Text(
                                   '${b.daysToExpiry}d',
                                   style: AppTypography.numberSmall.copyWith(
-                                    color: (b.daysToExpiry as int) <= 7
+                                    color: (b.daysToExpiry ?? 0) <= 7
                                         ? AppColors.danger600
                                         : AppColors.warning600,
                                   ),
