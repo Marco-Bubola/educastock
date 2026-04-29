@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../tokens/color_tokens.dart';
-import '../tokens/spacing_tokens.dart';
 import '../tokens/typography_tokens.dart';
 
 class CasaTextField extends StatelessWidget {
