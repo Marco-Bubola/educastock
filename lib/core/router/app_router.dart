@@ -1,19 +1,19 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../features/auth/presentation/controllers/auth_provider.dart';
-import '../features/auth/presentation/pages/login_page.dart';
-import '../features/dashboard/presentation/pages/dashboard_page.dart';
-import '../features/scanner/presentation/pages/scanner_page.dart';
-import '../features/scanner/presentation/pages/product_review_page.dart';
-import '../features/products/presentation/pages/product_list_page.dart';
-import '../features/products/presentation/pages/product_detail_page.dart';
-import '../features/products/presentation/pages/product_form_page.dart';
-import '../features/batches/presentation/pages/batch_form_page.dart';
-import '../features/stock/presentation/pages/movement_page.dart';
-import '../features/alerts/presentation/pages/alerts_page.dart';
-import '../features/audit/presentation/pages/audit_page.dart';
-import '../features/reports/presentation/pages/reports_page.dart';
-import '../features/settings/presentation/pages/settings_page.dart';
+import '../../features/auth/presentation/controllers/auth_provider.dart';
+import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/dashboard/presentation/pages/dashboard_page.dart';
+import '../../features/scanner/presentation/pages/scanner_page.dart';
+import '../../features/scanner/presentation/pages/product_review_page.dart';
+import '../../features/products/presentation/pages/product_list_page.dart';
+import '../../features/products/presentation/pages/product_detail_page.dart';
+import '../../features/products/presentation/pages/product_form_page.dart';
+import '../../features/batches/presentation/pages/batch_form_page.dart';
+import '../../features/stock/presentation/pages/movement_page.dart';
+import '../../features/alerts/presentation/pages/alerts_page.dart';
+import '../../features/audit/presentation/pages/audit_page.dart';
+import '../../features/reports/presentation/pages/reports_page.dart';
+import '../../features/settings/presentation/pages/settings_page.dart';
 
 abstract class AppRoutes {
   static const login = '/login';
