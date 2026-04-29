@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../features/auth/data/datasources/auth_remote_datasource.dart';
-import '../../features/auth/domain/entities/app_user.dart';
+import '../../data/datasources/auth_remote_datasource.dart';
+import '../../domain/entities/app_user.dart';
 
 final authDatasourceProvider = Provider<AuthRemoteDatasource>(
   (_) => AuthRemoteDatasource(),
