@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../controllers/products_provider.dart';
 
 class ProductListPage extends ConsumerStatefulWidget {
@@ -25,19 +26,35 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
+    final user = ref.watch(currentUserProvider);
+    final totalProducts = productsAsync.valueOrNull?.length ?? 0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Estoque')),
+      appBar: ModernProfileAppBar(
+        title: 'Estoque',
+        subtitle: 'Catálogo de produtos e itens',
+        profileName: user?.name,
+        onProfileTap: () => context.push(AppRoutes.settings),
+      ),
       body: SafeArea(
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.sm,
+              ),
+              child: _ProductsHero(totalProducts: totalProducts),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
               child: CasaSearchBar(
                 controller: _searchController,
-                hint: 'Buscar produto...',
+                hint: 'Buscar por nome, marca ou código...',
                 onChanged: (v) => setState(() => _query = v.toLowerCase()),
                 showFilter: true,
               ),
@@ -135,6 +152,26 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                                       style: AppTypography.bodySmall.copyWith(
                                           color: AppColors.neutral500),
                                     ),
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Wrap(
+                                      spacing: AppSpacing.xs,
+                                      runSpacing: AppSpacing.xs,
+                                      children: [
+                                        _MetaPill(
+                                          label: p.isPerishable
+                                              ? 'Perecível'
+                                              : 'Não perecível',
+                                          color: p.isPerishable
+                                              ? AppColors.warning600
+                                              : AppColors.success600,
+                                        ),
+                                        if ((p.barcode ?? '').isNotEmpty)
+                                          _MetaPill(
+                                            label: 'Código disponível',
+                                            color: AppColors.brandPrimary600,
+                                          ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),
@@ -176,6 +213,92 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
       ),
       floatingActionButton: CasaFabScan(
         onPressed: () => context.push(AppRoutes.scanner),
+      ),
+    );
+  }
+}
+
+class _ProductsHero extends StatelessWidget {
+  final int totalProducts;
+
+  const _ProductsHero({required this.totalProducts});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x140B3C74),
+            blurRadius: 18,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary100,
+              borderRadius: BorderRadius.circular(AppRadius.card),
+            ),
+            child: const Icon(
+              Icons.inventory_2_rounded,
+              color: AppColors.brandPrimary600,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Produtos em catálogo: $totalProducts',
+                  style: AppTypography.headingSmall.copyWith(
+                    color: AppColors.neutral900,
+                  ),
+                ),
+                Text(
+                  'Use a busca para achar itens rapidamente e abrir detalhes.',
+                  style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.neutral500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetaPill extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _MetaPill({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.labelSmall.copyWith(color: color),
       ),
     );
   }
