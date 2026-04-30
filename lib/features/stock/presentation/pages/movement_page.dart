@@ -122,7 +122,11 @@ class _MovementPageState extends ConsumerState<MovementPage> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Movimentação de Estoque')),
+      appBar: const ModernProfileAppBar(
+        title: 'Movimentação de Estoque',
+        subtitle: 'Registro de entrada e saída',
+        showBackButton: true,
+      ),
       body: SafeArea(
         child: batchesAsync.when(
           data: (batches) {
