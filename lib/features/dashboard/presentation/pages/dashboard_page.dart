@@ -18,29 +18,15 @@ class DashboardPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'EducaStock',
-              style: AppTypography.headingMedium
-                  .copyWith(color: AppColors.neutral900),
-            ),
-            Text(
-              'Olá, ${user?.name.split(' ').first ?? 'Usuário'}',
-              style: AppTypography.bodySmall.copyWith(color: AppColors.neutral500),
-            ),
-          ],
-        ),
+      appBar: ModernProfileAppBar(
+        title: 'EducaStock',
+        subtitle: 'Painel operacional',
+        profileName: user?.name,
+        onProfileTap: () => context.push(AppRoutes.settings),
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () => context.push(AppRoutes.alerts),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.push(AppRoutes.settings),
           ),
         ],
       ),
@@ -49,6 +35,8 @@ class DashboardPage extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
           children: [
             // KPIs
+            const CasaSectionHeader(title: 'Visão Geral de Hoje'),
+            const SizedBox(height: AppSpacing.sm),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: GridView(
