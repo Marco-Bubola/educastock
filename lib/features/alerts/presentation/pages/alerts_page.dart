@@ -1,52 +1,104 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
+import '../../../../core/router/app_router.dart';
+import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../settings/presentation/controllers/system_settings_provider.dart';
 
 class AlertsPage extends ConsumerWidget {
   const AlertsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final critical = ref.watch(expiringBatchesProvider(7));
-    final warning = ref.watch(expiringBatchesProvider(30));
+    final user = ref.watch(currentUserProvider);
+    final alertsConfig = ref.watch(alertsConfigProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Alertas de Vencimento')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-          children: [
-            // Críticos
-            critical.when(
-              data: (batches) => _AlertSection(
-                title: 'Críticos (≤ 7 dias)',
-                batches: batches,
-                status: StockStatus.critico,
+    return alertsConfig.when(
+      data: (config) {
+        if (!config.expiryEnabled) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: ModernProfileAppBar(
+              title: 'Alertas de vencimento',
+              subtitle: 'Priorize lotes criticos e de atencao',
+              profileName: user?.name,
+              onProfileTap: () => context.push(AppRoutes.settings),
+            ),
+            body: const SafeArea(
+              child: CasaEmptyState(
+                icon: Icons.notifications_off_outlined,
+                title: 'Alertas de vencimento desativados',
+                description:
+                    'Ative novamente em Configuracoes de Alertas para visualizar esta tela.',
               ),
-              loading: () => const CasaCardSkeleton(),
-              error: (_, __) => const SizedBox.shrink(),
             ),
+          );
+        }
 
-            // Atenção
-            warning.when(
-              data: (batches) {
-                // Remove os que já aparecem como críticos
-                final filtered = batches
-                    .where((b) => b.daysToExpiry > 7)
-                    .toList();
-                return _AlertSection(
-                  title: 'Atenção (8–30 dias)',
-                  batches: filtered,
-                  status: StockStatus.atencao,
-                );
-              },
-              loading: () => const CasaCardSkeleton(),
-              error: (_, __) => const SizedBox.shrink(),
+        final critical = ref.watch(expiringBatchesProvider(config.criticalDays));
+        final warning = ref.watch(expiringBatchesProvider(config.warningDays));
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: ModernProfileAppBar(
+            title: 'Alertas de vencimento',
+            subtitle: 'Priorize lotes criticos e de atencao',
+            profileName: user?.name,
+            onProfileTap: () => context.push(AppRoutes.settings),
+          ),
+          body: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+              children: [
+                critical.when(
+                  data: (batches) => _AlertSection(
+                    title: 'Criticos (<= ${config.criticalDays} dias)',
+                    batches: batches,
+                    status: StockStatus.critico,
+                    criticalDays: config.criticalDays,
+                  ),
+                  loading: () => const CasaCardSkeleton(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+                warning.when(
+                  data: (batches) {
+                    final filtered = batches
+                        .where((b) => b.daysToExpiry > config.criticalDays)
+                        .toList();
+                    return _AlertSection(
+                      title:
+                          'Atencao (${config.criticalDays + 1}-${config.warningDays} dias)',
+                      batches: filtered,
+                      status: StockStatus.atencao,
+                      criticalDays: config.criticalDays,
+                    );
+                  },
+                  loading: () => const CasaCardSkeleton(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+              ],
             ),
-          ],
+          ),
+        );
+      },
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => Scaffold(
+        appBar: const ModernProfileAppBar(
+          title: 'Alertas',
+          subtitle: 'Erro ao carregar',
+          showBackButton: true,
+        ),
+        body: const SafeArea(
+          child: CasaEmptyState(
+            icon: Icons.error_outline_rounded,
+            title: 'Erro ao carregar configuracoes',
+            description: 'Nao foi possivel carregar as configuracoes de alertas.',
+          ),
         ),
       ),
     );
@@ -57,11 +109,13 @@ class _AlertSection extends StatelessWidget {
   final String title;
   final List<dynamic> batches;
   final StockStatus status;
+  final int criticalDays;
 
   const _AlertSection({
     required this.title,
     required this.batches,
     required this.status,
+    required this.criticalDays,
   });
 
   @override
