@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/open_food_facts_datasource.dart';
-import '../../data/datasources/open_food_facts_datasource.dart' show ProductApiResult;
 
 final openFoodFactsProvider = Provider<OpenFoodFactsDatasource>(
   (_) => OpenFoodFactsDatasource(),
