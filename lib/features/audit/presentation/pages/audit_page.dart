@@ -17,7 +17,11 @@ class AuditPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Auditoria')),
+      appBar: const ModernProfileAppBar(
+        title: 'Auditoria',
+        subtitle: 'Histórico de alterações críticas',
+        showBackButton: true,
+      ),
       body: SafeArea(
         child: logsAsync.when(
           data: (logs) {
