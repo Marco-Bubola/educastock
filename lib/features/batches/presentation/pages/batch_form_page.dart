@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../locations/presentation/controllers/locations_provider.dart';
 import '../../domain/entities/batch.dart';
 import '../controllers/batches_provider.dart';
 
@@ -23,10 +25,12 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
   final _notesController = TextEditingController();
 
   DateTime? _expiryDate;
-  DateTime _entryDate = DateTime.now();
+  final DateTime _entryDate = DateTime.now();
   bool _noExpiry = false;
   String _origin = 'doacao';
-  bool _isPerishableProduct = true;
+  final bool _isPerishableProduct = true;
+  bool _manualLocation = false;
+  String? _selectedLocationLabel;
 
   final List<String> _origins = [
     'doacao',
@@ -92,8 +96,27 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       if (confirm != true) return;
     }
 
+    if (!mounted) return;
     final user = ref.read(currentUserProvider);
     if (user == null) return;
+
+    String? shelfLocation;
+    if (_manualLocation) {
+      shelfLocation = _locationController.text.trim().isEmpty
+          ? null
+          : _locationController.text.trim();
+    } else {
+      shelfLocation = _selectedLocationLabel;
+    }
+
+    if (shelfLocation == null || shelfLocation.isEmpty) {
+      showCasaSnackbar(
+        context,
+        message: 'Selecione uma localizacao ou preencha manualmente.',
+        isError: true,
+      );
+      return;
+    }
 
     final qty = int.tryParse(_quantityController.text) ?? 0;
 
@@ -110,9 +133,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       donor: _donorController.text.trim().isEmpty
           ? null
           : _donorController.text.trim(),
-      shelfLocation: _locationController.text.trim().isEmpty
-          ? null
-          : _locationController.text.trim(),
+        shelfLocation: shelfLocation,
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
@@ -141,11 +162,16 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd/MM/yyyy');
     final formState = ref.watch(batchFormProvider);
+    final locationsState = ref.watch(activeLocationsProvider);
     final isLoading = formState is AsyncLoading;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Cadastrar Lote')),
+      appBar: const ModernProfileAppBar(
+        title: 'Cadastrar Lote',
+        subtitle: 'Novo lote de produto',
+        showBackButton: true,
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -252,6 +278,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
 
               // Origem
               DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use
                 value: _origin,
                 decoration: const InputDecoration(
                   labelText: 'Origem *',
@@ -275,14 +302,112 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
               ),
               const SizedBox(height: AppSpacing.md),
 
-              CasaTextField(
-                label: 'Localização (Sala/Prateleira/Nível)',
-                controller: _locationController,
-                prefixIcon:
-                    const Icon(Icons.location_on_outlined, size: 20),
-                hint: 'Ex: Dep-A / P3 / N2',
+              locationsState.when(
+                data: (locations) {
+                  final items = locations
+                      .map((l) => DropdownMenuItem<String>(
+                            value: l.label,
+                            child: Text(l.label),
+                          ))
+                      .toList();
+
+                  return Column(
+                    children: [
+                      if (locations.isNotEmpty)
+                        DropdownButtonFormField<String>(
+                          // ignore: deprecated_member_use
+                          value: _manualLocation ? null : _selectedLocationLabel,
+                          decoration: const InputDecoration(
+                            labelText: 'Localizacao estruturada',
+                            prefixIcon:
+                                Icon(Icons.inventory_2_outlined, size: 20),
+                          ),
+                          items: items,
+                          onChanged: (v) {
+                            setState(() {
+                              _selectedLocationLabel = v;
+                              _manualLocation = false;
+                            });
+                          },
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning600.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(AppRadius.card),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline_rounded,
+                                  color: AppColors.warning600, size: 18),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  'Nenhuma localizacao cadastrada.',
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: AppColors.warning600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.sm,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _manualLocation = !_manualLocation;
+                                  if (_manualLocation) {
+                                    _selectedLocationLabel = null;
+                                  }
+                                });
+                              },
+                              icon: Icon(
+                                _manualLocation
+                                    ? Icons.check_circle_rounded
+                                    : Icons.edit_location_alt_outlined,
+                                size: 18,
+                              ),
+                              label: Text(
+                                _manualLocation
+                                    ? 'Usando preenchimento manual'
+                                    : 'Preencher localizacao manualmente',
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => context.push(AppRoutes.locations),
+                              icon: const Icon(Icons.settings_outlined, size: 18),
+                              label: const Text('Gerenciar localizacoes'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+                loading: () => const CasaCardSkeleton(),
+                error: (_, __) => const SizedBox.shrink(),
               ),
+
               const SizedBox(height: AppSpacing.md),
+
+              if (_manualLocation) ...[
+                CasaTextField(
+                  label: 'Localizacao manual (Sala/Prateleira/Nivel)',
+                  controller: _locationController,
+                  prefixIcon:
+                      const Icon(Icons.location_on_outlined, size: 20),
+                  hint: 'Ex: Dep-A / P3 / N2',
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
 
               CasaTextField(
                 label: 'Observações (opcional)',
