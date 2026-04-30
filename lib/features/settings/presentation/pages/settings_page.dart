@@ -14,7 +14,12 @@ class SettingsPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Configurações')),
+      appBar: ModernProfileAppBar(
+        title: 'Configuracoes',
+        subtitle: 'Preferencias e conta',
+        profileName: user?.name,
+        onProfileTap: () {},
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -72,22 +77,22 @@ class SettingsPage extends ConsumerWidget {
             _SettingsTile(
               icon: Icons.people_outline_rounded,
               label: 'Gerenciar Usuários',
-              onTap: () {},
+              onTap: () => context.push(AppRoutes.usersManagement),
             ),
             _SettingsTile(
               icon: Icons.category_outlined,
               label: 'Categorias',
-              onTap: () {},
+              onTap: () => context.push(AppRoutes.categoriesSettings),
             ),
             _SettingsTile(
               icon: Icons.location_on_outlined,
               label: 'Localizações / Prateleiras',
-              onTap: () {},
+              onTap: () => context.push(AppRoutes.locations),
             ),
             _SettingsTile(
               icon: Icons.notifications_outlined,
               label: 'Configurações de Alertas',
-              onTap: () {},
+              onTap: () => context.push(AppRoutes.alertsSettings),
             ),
             const SizedBox(height: AppSpacing.lg),
 
