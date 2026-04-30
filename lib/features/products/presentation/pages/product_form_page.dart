@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../domain/entities/product.dart';
 import '../controllers/products_provider.dart';
 
@@ -37,6 +38,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
   String _unit = 'un';
   bool _isPerishable = true;
   int _minimumStock = 0;
+  DateTime? _originalCreatedAt;
+  String? _originalCreatedBy;
 
   final List<String> _units = ['un', 'kg', 'g', 'L', 'mL', 'cx', 'pct', 'frd'];
 
@@ -55,6 +58,27 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
           (c) => c.name == widget.prefillCategory,
         );
       } catch (_) {}
+    }
+    // Carregar produto existente para editar
+    if (widget.productId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final product = await ref
+            .read(productsDatasourceProvider)
+            .getProductById(widget.productId!);
+        if (product != null && mounted) {
+          setState(() {
+            _nameController.text = product.name;
+            _brandController.text = product.brand ?? '';
+            _descController.text = product.description ?? '';
+            _category = product.category;
+            _unit = product.unit;
+            _isPerishable = product.isPerishable;
+            _minimumStock = product.minimumStock;
+            _originalCreatedAt = product.createdAt;
+            _originalCreatedBy = product.createdBy;
+          });
+        }
+      });
     }
   }
 
@@ -85,8 +109,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
           : _descController.text.trim(),
       isPerishable: _isPerishable,
       minimumStock: _minimumStock,
-      createdAt: DateTime.now(),
-      createdBy: user.id,
+      createdAt: _originalCreatedAt ?? DateTime.now(),
+      createdBy: _originalCreatedBy ?? user.id,
     );
 
     await ref.read(productFormProvider.notifier).saveProduct(product);
@@ -98,7 +122,13 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
         if (id != null) {
           showCasaSnackbar(context,
               message: 'Produto salvo!', isSuccess: true);
-          context.push('${AppRoutes.batchForm}?productId=$id');
+          if (widget.productId != null) {
+            // Edição: apenas volta
+            context.pop();
+          } else {
+            // Criação: vai para cadastro de lote
+            context.push('${AppRoutes.batchForm}?productId=$id');
+          }
         }
       },
       error: (e, _) => showCasaSnackbar(context,
@@ -110,12 +140,18 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
   @override
   Widget build(BuildContext context) {
     final formState = ref.watch(productFormProvider);
+    final activeCategories = ref.watch(activeProductCategoriesProvider);
+    if (!activeCategories.contains(_category)) {
+      _category = activeCategories.first;
+    }
     final isLoading = formState is AsyncLoading;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(widget.productId != null ? 'Editar Produto' : 'Novo Produto'),
+      appBar: ModernProfileAppBar(
+        title: widget.productId != null ? 'Editar Produto' : 'Novo Produto',
+        subtitle: 'Cadastro de produto',
+        showBackButton: true,
       ),
       body: SafeArea(
         child: Form(
@@ -163,12 +199,13 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
 
               // Categoria
               DropdownButtonFormField<ProductCategory>(
+                // ignore: deprecated_member_use
                 value: _category,
                 decoration: const InputDecoration(
                   labelText: 'Categoria *',
                   prefixIcon: Icon(Icons.category_outlined, size: 20),
                 ),
-                items: ProductCategory.values
+                items: activeCategories
                     .map((c) => DropdownMenuItem(
                           value: c,
                           child: Text(Product(
@@ -184,6 +221,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
 
               // Unidade
               DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use
                 value: _unit,
                 decoration: const InputDecoration(
                   labelText: 'Unidade de Medida *',
@@ -224,7 +262,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                   ),
                   value: _isPerishable,
                   onChanged: (v) => setState(() => _isPerishable = v),
-                  activeColor: AppColors.brandPrimary600,
+                  activeThumbColor: AppColors.brandPrimary600,
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
