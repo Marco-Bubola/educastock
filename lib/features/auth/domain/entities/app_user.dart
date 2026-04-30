@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum UserRole { admin, estoquista, voluntario, consulta }
 
 class AppUser {
@@ -27,6 +29,13 @@ class AppUser {
   bool get canApproveAdjustments => role == UserRole.admin;
 
   factory AppUser.fromMap(Map<String, dynamic> map, String id) {
+    final createdRaw = map['createdAt'];
+    final createdAt = createdRaw is String
+        ? DateTime.tryParse(createdRaw) ?? DateTime.now()
+        : createdRaw is Timestamp
+            ? createdRaw.toDate()
+            : DateTime.now();
+
     return AppUser(
       id: id,
       name: map['name'] as String,
@@ -36,7 +45,7 @@ class AppUser {
         orElse: () => UserRole.consulta,
       ),
       isActive: map['isActive'] as bool? ?? true,
-      createdAt: DateTime.parse(map['createdAt'] as String),
+      createdAt: createdAt,
     );
   }
 
