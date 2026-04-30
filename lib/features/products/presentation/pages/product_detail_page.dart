@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../controllers/products_provider.dart';
 
 class ProductDetailPage extends ConsumerWidget {
   final String productId;
@@ -13,11 +14,16 @@ class ProductDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final batchesAsync = ref.watch(batchesByProductProvider(productId));
+    final productAsync = ref.watch(productByIdProvider(productId));
+    final productName = productAsync.valueOrNull?.name ?? 'Produto';
+    final productUnit = productAsync.valueOrNull?.unit ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Detalhes do Produto'),
+      appBar: ModernProfileAppBar(
+        title: productName,
+        subtitle: productUnit.isNotEmpty ? 'Unidade: $productUnit' : 'Lotes e histórico',
+        showBackButton: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_outlined),
