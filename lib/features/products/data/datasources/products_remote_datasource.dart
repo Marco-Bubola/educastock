@@ -30,6 +30,12 @@ class ProductsRemoteDatasource {
     return Product.fromMap(d.data() as Map<String, dynamic>, d.id);
   }
 
+  Future<Product?> getProductById(String id) async {
+    final doc = await _col.doc(id).get();
+    if (!doc.exists) return null;
+    return Product.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+  }
+
   Future<String> saveProduct(Product product) async {
     if (product.id.isEmpty) {
       final ref = await _col.add(product.toMap());
