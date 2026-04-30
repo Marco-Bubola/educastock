@@ -18,8 +18,10 @@ class ProductReviewPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Revisão de Dados'),
+      appBar: const ModernProfileAppBar(
+        title: 'Revisão de Dados',
+        subtitle: 'Confirme as informações do produto',
+        showBackButton: true,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
