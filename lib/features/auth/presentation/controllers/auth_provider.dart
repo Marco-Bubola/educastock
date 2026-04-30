@@ -25,7 +25,7 @@ final currentUserProvider = Provider<AppUser?>((ref) {
 class AuthNotifier extends Notifier<AsyncValue<AppUser?>> {
   @override
   AsyncValue<AppUser?> build() {
-    return const AsyncValue.loading();
+    return const AsyncValue.data(null);
   }
 
   Future<void> signIn(String email, String password) async {
@@ -34,6 +34,36 @@ class AuthNotifier extends Notifier<AsyncValue<AppUser?>> {
       final ds = ref.read(authDatasourceProvider);
       return ds.signIn(email: email, password: password);
     });
+  }
+
+  Future<void> signInWithGoogle() async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      final ds = ref.read(authDatasourceProvider);
+      return ds.signInWithGoogle();
+    });
+  }
+
+  Future<void> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      final ds = ref.read(authDatasourceProvider);
+      return ds.createUser(
+        email: email,
+        password: password,
+        name: name,
+        role: UserRole.consulta,
+      );
+    });
+  }
+
+  Future<void> sendPasswordReset(String email) async {
+    final ds = ref.read(authDatasourceProvider);
+    await ds.sendPasswordReset(email);
   }
 
   Future<void> signOut() async {
