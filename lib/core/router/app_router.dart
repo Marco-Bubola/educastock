@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/auth/presentation/controllers/auth_provider.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/scanner/presentation/pages/scanner_page.dart';
 import '../../features/scanner/presentation/pages/product_review_page.dart';
@@ -14,9 +15,14 @@ import '../../features/alerts/presentation/pages/alerts_page.dart';
 import '../../features/audit/presentation/pages/audit_page.dart';
 import '../../features/reports/presentation/pages/reports_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
+import '../../features/locations/presentation/pages/locations_page.dart';
+import '../../features/settings/presentation/pages/users_management_page.dart';
+import '../../features/settings/presentation/pages/categories_settings_page.dart';
+import '../../features/settings/presentation/pages/alerts_settings_page.dart';
 
 abstract class AppRoutes {
   static const login = '/login';
+  static const register = '/register';
   static const dashboard = '/dashboard';
   static const scanner = '/scanner';
   static const productReview = '/scanner/review';
@@ -29,6 +35,10 @@ abstract class AppRoutes {
   static const audit = '/audit';
   static const reports = '/reports';
   static const settings = '/settings';
+  static const locations = '/locations';
+  static const usersManagement = '/settings/users';
+  static const categoriesSettings = '/settings/categories';
+  static const alertsSettings = '/settings/alerts';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -38,16 +48,23 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: AppRoutes.login,
     redirect: (context, state) {
       final isLoggedIn = auth.valueOrNull != null;
-      final isLoginRoute = state.matchedLocation == AppRoutes.login;
+      final isPublicRoute = {
+        AppRoutes.login,
+        AppRoutes.register,
+      }.contains(state.matchedLocation);
 
-      if (!isLoggedIn && !isLoginRoute) return AppRoutes.login;
-      if (isLoggedIn && isLoginRoute) return AppRoutes.dashboard;
+      if (!isLoggedIn && !isPublicRoute) return AppRoutes.login;
+      if (isLoggedIn && isPublicRoute) return AppRoutes.dashboard;
       return null;
     },
     routes: [
       GoRoute(
         path: AppRoutes.login,
         builder: (_, __) => const LoginPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.register,
+        builder: (_, __) => const RegisterPage(),
       ),
       GoRoute(
         path: AppRoutes.dashboard,
@@ -111,6 +128,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.settings,
         builder: (_, __) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.locations,
+        builder: (_, __) => const LocationsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.usersManagement,
+        builder: (_, __) => const UsersManagementPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.categoriesSettings,
+        builder: (_, __) => const CategoriesSettingsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.alertsSettings,
+        builder: (_, __) => const AlertsSettingsPage(),
       ),
     ],
   );
