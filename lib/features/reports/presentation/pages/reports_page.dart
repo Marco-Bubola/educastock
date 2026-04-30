@@ -15,8 +15,10 @@ class ReportsPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Relatórios'),
+      appBar: ModernProfileAppBar(
+        title: 'Relatórios',
+        subtitle: 'Visão geral do estoque',
+        showBackButton: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_outlined),
@@ -161,7 +163,7 @@ class ReportsPage extends ConsumerWidget {
                                 Text(
                                   '${b.daysToExpiry}d',
                                   style: AppTypography.numberSmall.copyWith(
-                                    color: (b.daysToExpiry ?? 0) <= 7
+                                    color: b.daysToExpiry <= 7
                                         ? AppColors.danger600
                                         : AppColors.warning600,
                                   ),
