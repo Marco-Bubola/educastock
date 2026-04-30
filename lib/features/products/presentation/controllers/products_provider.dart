@@ -15,6 +15,11 @@ final productByBarcodeProvider =
   return ref.watch(productsDatasourceProvider).getProductByBarcode(barcode);
 });
 
+final productByIdProvider =
+    FutureProvider.family<Product?, String>((ref, id) async {
+  return ref.watch(productsDatasourceProvider).getProductById(id);
+});
+
 // Form notifier para criação/edição de produto
 class ProductFormNotifier extends Notifier<AsyncValue<String?>> {
   @override
