@@ -1,0 +1,108 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── helpers ────────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && userDoc().role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isEstoquista() {
+      return hasRole('estoquista');
+    }
+
+    function isVoluntario() {
+      return hasRole('voluntario');
+    }
+
+    function isActiveUser() {
+      return isSignedIn() && userDoc().isActive == true;
+    }
+
+    function canWrite() {
+      // admin e estoquista podem escrever; voluntário e consulta só leem
+      return isActiveUser() && (isAdmin() || isEstoquista());
+    }
+
+    // ─── users ──────────────────────────────────────────────────────────────
+    // Qualquer usuário autenticado e ativo pode ler seu próprio perfil.
+    // Apenas admin pode ler todos os perfis ou alterar role/isActive.
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+      // Criação de conta própria (registro)
+      allow create: if isSignedIn() && request.auth.uid == userId;
+
+      // Usuário pode atualizar apenas campos não-sensíveis do próprio perfil
+      allow update: if isSignedIn() && request.auth.uid == userId
+                    && !('role' in request.resource.data.diff(resource.data).affectedKeys())
+                    && !('isActive' in request.resource.data.diff(resource.data).affectedKeys());
+
+      // Admin pode atualizar qualquer campo (incluindo role e isActive)
+      allow update: if isAdmin();
+
+      allow delete: if false; // nunca deletar usuários via cliente
+    }
+
+    // ─── products ───────────────────────────────────────────────────────────
+    match /products/{productId} {
+      allow read: if isActiveUser();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ─── batches ────────────────────────────────────────────────────────────
+    match /batches/{batchId} {
+      allow read: if isActiveUser();
+      allow create, update: if canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ─── stock_movements ────────────────────────────────────────────────────
+    match /stock_movements/{movementId} {
+      allow read: if isActiveUser();
+      allow create: if canWrite();
+      allow update, delete: if false; // imutável após criação
+    }
+
+    // ─── audit_logs ─────────────────────────────────────────────────────────
+    match /audit_logs/{logId} {
+      allow read: if isAdmin() || isEstoquista();
+      allow create: if canWrite();
+      allow update, delete: if false; // imutável
+    }
+
+    // ─── storage_locations ──────────────────────────────────────────────────
+    match /storage_locations/{locationId} {
+      allow read: if isActiveUser();
+      allow create, update: if isAdmin();
+      allow delete: if false; // soft-delete via isActive
+    }
+
+    // ─── settings ───────────────────────────────────────────────────────────
+    match /settings/{docId} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin();
+    }
+
+    // ─── settings_categories ────────────────────────────────────────────────
+    match /settings_categories/{categoryId} {
+      allow read: if isActiveUser();
+      allow create, update: if isAdmin();
+      allow delete: if false; // soft-delete via isActive
+    }
+  }
+}
