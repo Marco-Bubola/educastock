@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../controllers/scanner_provider.dart';
 
 class ScannerPage extends ConsumerStatefulWidget {
@@ -41,13 +42,16 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider);
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
+      appBar: ModernProfileAppBar(
+        title: 'Escanear produto',
+        subtitle: 'Leitor de codigo de barras',
+        profileName: user?.name,
+        onProfileTap: () => context.push(AppRoutes.settings),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Escanear Produto',
-            style: TextStyle(color: Colors.white)),
         actions: [
           IconButton(
             icon: ValueListenableBuilder(
