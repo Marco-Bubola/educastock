@@ -1,0 +1,9 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "flutter": {"platforms":{"android":{"default":{"projectId":"educastock-20a98","appId":"1:929079196105:android:6afb49225825334d135018","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"educastock-20a98","configurations":{"android":"1:929079196105:android:6afb49225825334d135018","ios":"1:929079196105:ios:047cc7c1ac675980135018","web":"1:929079196105:web:621eed3d4e4701e3135018"}}}}}}
