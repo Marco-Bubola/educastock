@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/batches_remote_datasource.dart';
 import '../../domain/entities/batch.dart';
@@ -28,11 +29,11 @@ class BatchFormNotifier extends Notifier<AsyncValue<String?>> {
   @override
   AsyncValue<String?> build() => const AsyncValue.data(null);
 
-  Future<void> saveBatch(Batch batch) async {
+  Future<void> saveBatch(Batch batch, {File? imageFile}) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       final ds = ref.read(batchesDatasourceProvider);
-      return ds.saveBatch(batch);
+      return ds.saveBatch(batch, imageFile: imageFile);
     });
   }
 }
