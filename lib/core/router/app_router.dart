@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/auth/presentation/controllers/auth_provider.dart';
+import 'app_navigation_shell.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
@@ -21,6 +22,7 @@ import '../../features/settings/presentation/pages/users_management_page.dart';
 import '../../features/settings/presentation/pages/categories_settings_page.dart';
 import '../../features/settings/presentation/pages/alerts_settings_page.dart';
 import '../../features/ml/presentation/pages/ml_insights_page.dart';
+import '../../features/recipes/presentation/pages/recipes_page.dart';
 
 abstract class AppRoutes {
   static const login = '/login';
@@ -43,6 +45,7 @@ abstract class AppRoutes {
   static const categoriesSettings = '/settings/categories';
   static const alertsSettings = '/settings/alerts';
   static const mlInsights = '/ml/insights';
+  static const recipes = '/recipes';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -72,96 +75,116 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.register,
         builder: (_, __) => const RegisterPage(),
       ),
-      GoRoute(
-        path: AppRoutes.dashboard,
-        builder: (_, __) => const DashboardPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.scanner,
-        builder: (_, __) => const ScannerPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.productReview,
-        builder: (_, state) {
-          final barcode = state.uri.queryParameters['barcode'] ?? '';
-          return ProductReviewPage(barcode: barcode);
+      ShellRoute(
+        builder: (context, state, child) {
+          return AppNavigationShell(
+            location: state.matchedLocation,
+            child: child,
+          );
         },
-      ),
-      GoRoute(
-        path: AppRoutes.productList,
-        builder: (_, __) => const ProductListPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.productDetail,
-        builder: (_, state) {
-          final id = state.pathParameters['id'] ?? '';
-          return ProductDetailPage(productId: id);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.productForm,
-        builder: (_, state) {
-          final productId = state.uri.queryParameters['id'];
-          return ProductFormPage(productId: productId);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.batchForm,
-        builder: (_, state) {
-          final productId = state.uri.queryParameters['productId'] ?? '';
-          return BatchFormPage(productId: productId);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.movement,
-        builder: (_, state) {
-          final batchId = state.uri.queryParameters['batchId'] ?? '';
-          return MovementPage(batchId: batchId);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.adjustmentApprovals,
-        builder: (_, __) => const AdjustmentApprovalsPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.alerts,
-        builder: (_, __) => const AlertsPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.audit,
-        builder: (_, __) => const AuditPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.reports,
-        builder: (_, __) => const ReportsPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.settings,
-        builder: (_, __) => const SettingsPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.locations,
-        builder: (_, __) => const LocationsPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.usersManagement,
-        builder: (_, __) => const UsersManagementPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.categoriesSettings,
-        builder: (_, __) => const CategoriesSettingsPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.alertsSettings,
-        builder: (_, __) => const AlertsSettingsPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.mlInsights,
-        builder: (_, __) => const MlInsightsPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.mlInsights,
-        builder: (_, __) => const MlInsightsPage(),
+        routes: [
+          GoRoute(
+            path: AppRoutes.dashboard,
+            builder: (_, __) => const DashboardPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.scanner,
+            builder: (_, __) => const ScannerPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.productReview,
+            builder: (_, state) {
+              final barcode = state.uri.queryParameters['barcode'] ?? '';
+              return ProductReviewPage(barcode: barcode);
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.productList,
+            builder: (_, __) => const ProductListPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.productDetail,
+            builder: (_, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return ProductDetailPage(productId: id);
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.productForm,
+            builder: (_, state) {
+              final productId = state.uri.queryParameters['id'];
+              final barcode = state.uri.queryParameters['barcode'];
+              final prefillName = state.uri.queryParameters['name'];
+              final prefillBrand = state.uri.queryParameters['brand'];
+              final prefillCategory = state.uri.queryParameters['category'];
+              return ProductFormPage(
+                productId: productId,
+                barcode: barcode,
+                prefillName: prefillName,
+                prefillBrand: prefillBrand,
+                prefillCategory: prefillCategory,
+              );
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.batchForm,
+            builder: (_, state) {
+              final productId = state.uri.queryParameters['productId'] ?? '';
+              return BatchFormPage(productId: productId);
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.movement,
+            builder: (_, state) {
+              final batchId = state.uri.queryParameters['batchId'] ?? '';
+              return MovementPage(batchId: batchId);
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.adjustmentApprovals,
+            builder: (_, __) => const AdjustmentApprovalsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.alerts,
+            builder: (_, __) => const AlertsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.audit,
+            builder: (_, __) => const AuditPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.reports,
+            builder: (_, __) => const ReportsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.settings,
+            builder: (_, __) => const SettingsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.locations,
+            builder: (_, __) => const LocationsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.usersManagement,
+            builder: (_, __) => const UsersManagementPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.categoriesSettings,
+            builder: (_, __) => const CategoriesSettingsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.alertsSettings,
+            builder: (_, __) => const AlertsSettingsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.mlInsights,
+            builder: (_, __) => const MlInsightsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.recipes,
+            builder: (_, __) => const RecipesPage(),
+          ),
+        ],
       ),
     ],
   );
