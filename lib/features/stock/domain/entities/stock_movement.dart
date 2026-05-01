@@ -6,6 +6,16 @@ enum MovementType {
   descarte,
 }
 
+enum MovementReasonCode {
+  uso,
+  validade,
+  avaria,
+  receita,
+  ajusteInventario,
+  doacao,
+  outro,
+}
+
 class StockMovement {
   final String id;
   final String productId;
@@ -13,6 +23,7 @@ class StockMovement {
   final String batchId;
   final MovementType type;
   final int quantity;
+  final String? reasonCode;
   final String? reason;
   final String? activity;
   final String performedBy;
@@ -29,6 +40,7 @@ class StockMovement {
     required this.batchId,
     required this.type,
     required this.quantity,
+    this.reasonCode,
     this.reason,
     this.activity,
     required this.performedBy,
@@ -61,6 +73,7 @@ class StockMovement {
         orElse: () => MovementType.saida,
       ),
       quantity: map['quantity'] as int,
+      reasonCode: map['reasonCode'] as String?,
       reason: map['reason'] as String?,
       activity: map['activity'] as String?,
       performedBy: map['performedBy'] as String,
@@ -78,6 +91,7 @@ class StockMovement {
         'batchId': batchId,
         'type': type.name,
         'quantity': quantity,
+        'reasonCode': reasonCode,
         'reason': reason,
         'activity': activity,
         'performedBy': performedBy,
