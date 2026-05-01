@@ -29,7 +29,37 @@ class _MovementPageState extends ConsumerState<MovementPage> {
   final _activityController = TextEditingController();
 
   MovementType _type = MovementType.saida;
+  String _reasonCode = MovementReasonCode.uso.name;
   bool _isLoading = false;
+
+  static const _reasonLabels = {
+    'uso': 'Uso/Distribuição',
+    'validade': 'Vencimento',
+    'avaria': 'Avaria/Perda',
+    'receita': 'Receita',
+    'ajusteInventario': 'Diferença de inventário',
+    'doacao': 'Doação externa',
+    'outro': 'Outro',
+  };
+
+  List<String> _allowedReasonCodesForType(MovementType type) {
+    return switch (type) {
+      MovementType.entrada => [MovementReasonCode.outro.name],
+      MovementType.saida => [
+          MovementReasonCode.uso.name,
+          MovementReasonCode.receita.name,
+          MovementReasonCode.doacao.name,
+          MovementReasonCode.outro.name,
+        ],
+      MovementType.ajustePositivo => [MovementReasonCode.ajusteInventario.name],
+      MovementType.ajusteNegativo => [MovementReasonCode.ajusteInventario.name],
+      MovementType.descarte => [
+          MovementReasonCode.validade.name,
+          MovementReasonCode.avaria.name,
+          MovementReasonCode.outro.name,
+        ],
+    };
+  }
 
   @override
   void dispose() {
@@ -89,6 +119,10 @@ class _MovementPageState extends ConsumerState<MovementPage> {
 
     final stockRules = ref.read(stockRulesConfigProvider).valueOrNull;
     final approvalLimit = stockRules?.negativeAdjustmentApprovalLimit ?? 50;
+    final allowedReasons = _allowedReasonCodesForType(_type);
+    if (!allowedReasons.contains(_reasonCode)) {
+      _reasonCode = allowedReasons.first;
+    }
 
     final isOutbound = _type == MovementType.saida ||
         _type == MovementType.ajusteNegativo ||
@@ -164,7 +198,17 @@ class _MovementPageState extends ConsumerState<MovementPage> {
     }
 
     final newQty = isOutbound ? batch.quantity - qty : batch.quantity + qty;
-    final shouldDistribute = newQty <= 0;
+    String? nextStatus;
+    if (newQty <= 0) {
+      if (_type == MovementType.descarte &&
+          _reasonCode == MovementReasonCode.validade.name) {
+        nextStatus = BatchStatus.vencido.name;
+      } else if (_type == MovementType.descarte) {
+        nextStatus = BatchStatus.descartado.name;
+      } else {
+        nextStatus = BatchStatus.distribuido.name;
+      }
+    }
 
     final movement = StockMovement(
       id: '',
@@ -173,8 +217,9 @@ class _MovementPageState extends ConsumerState<MovementPage> {
       batchId: batch.id,
       type: _type,
       quantity: qty,
+        reasonCode: _reasonCode,
       reason: _reasonController.text.trim().isEmpty
-          ? null
+          ? _reasonLabels[_reasonCode]
           : _reasonController.text.trim(),
       activity: _activityController.text.trim().isEmpty
           ? null
@@ -185,11 +230,10 @@ class _MovementPageState extends ConsumerState<MovementPage> {
       auditBefore: {'quantity': batch.quantity, 'status': batch.status.name},
       auditAfter: {
         'quantity': newQty,
-        'status': shouldDistribute
-            ? BatchStatus.distribuido.name
-            : batch.status.name,
+        'status': nextStatus ?? batch.status.name,
         'fefoRecommendedBatchId': fefoRecommended?.id,
         'fefoOverride': isFefoViolation,
+        'reasonCode': _reasonCode,
       },
     );
 
@@ -200,7 +244,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
             batchId: batch.id,
             previousQuantity: batch.quantity,
             newQuantity: newQty,
-            shouldUpdateStatus: shouldDistribute,
+        nextStatus: nextStatus,
           );
       ref.read(analyticsServiceProvider).logStockMovement(
             type: _type.name,
@@ -366,9 +410,41 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                   color: isSelected ? color : AppColors.neutral700,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                 ),
-                onSelected: (_) => setState(() => _type = t),
+                onSelected: (_) => setState(() {
+                  _type = t;
+                  final allowed = _allowedReasonCodesForType(t);
+                  if (!allowed.contains(_reasonCode)) {
+                    _reasonCode = allowed.first;
+                  }
+                }),
               );
             }).toList(),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: _allowedReasonCodesForType(_type).map((code) {
+              final selected = _reasonCode == code;
+              return ChoiceChip(
+                label: Text(_reasonLabels[code] ?? code),
+                selected: selected,
+                selectedColor: AppColors.brandPrimary100,
+                labelStyle: AppTypography.labelSmall.copyWith(
+                  color: selected ? AppColors.brandPrimary700 : AppColors.neutral700,
+                ),
+                onSelected: (_) => setState(() => _reasonCode = code),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => context.push(AppRoutes.recipes),
+              icon: const Icon(Icons.menu_book_rounded, size: 18),
+              label: const Text('Aplicar receita'),
+            ),
           ),
           const SizedBox(height: AppSpacing.lg),
           CasaTextField(
@@ -385,9 +461,8 @@ class _MovementPageState extends ConsumerState<MovementPage> {
           ),
           const SizedBox(height: AppSpacing.md),
           CasaTextField(
-            label: _type == MovementType.saida ? 'Atividade / Projeto' : 'Motivo',
-            controller:
-                _type == MovementType.saida ? _activityController : _reasonController,
+            label: _type == MovementType.saida ? 'Atividade / Projeto' : 'Observação',
+            controller: _type == MovementType.saida ? _activityController : _reasonController,
             maxLines: 2,
           ),
           const SizedBox(height: AppSpacing.xxl),
