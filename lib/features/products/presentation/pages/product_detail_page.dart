@@ -87,6 +87,7 @@ class _BatchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd/MM/yyyy');
+    final currencyFmt = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final urgency = batch.expiryUrgency as int;
     final statusMap = {
       0: StockStatus.vencido,
@@ -135,12 +136,43 @@ class _BatchCard extends StatelessWidget {
               label: 'Validade',
               value: fmt.format(batch.expiryDate as DateTime),
             ),
+          if ((batch.batchNumber as String?) != null)
+            _InfoRow(
+              icon: Icons.tag_rounded,
+              label: 'Nº Lote',
+              value: batch.batchNumber as String,
+            ),
+          if ((batch.unitPrice as num?) != null) ...[
+            _InfoRow(
+              icon: Icons.attach_money_rounded,
+              label: 'Preço unitário',
+              value: currencyFmt.format((batch.unitPrice as num).toDouble()),
+            ),
+            _InfoRow(
+              icon: Icons.calculate_outlined,
+              label: 'Total estimado',
+              value: currencyFmt.format((batch.unitPrice as num).toDouble() * (batch.quantity as int)),
+            ),
+          ],
           if (batch.shelfLocation != null)
             _InfoRow(
               icon: Icons.location_on_outlined,
               label: 'Localização',
               value: batch.shelfLocation as String,
             ),
+          if ((batch.imageUrl as String?) != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              child: Image.network(
+                batch.imageUrl as String,
+                height: 120,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
