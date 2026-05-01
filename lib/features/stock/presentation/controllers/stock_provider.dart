@@ -54,7 +54,7 @@ class StockNotifier extends AsyncNotifier<void> {
       batchId: batchId,
       previousQuantity: previousQuantity,
       newQuantity: newQuantity,
-      shouldUpdateStatus: newQuantity == 0,
+      nextStatus: newQuantity == 0 ? 'distribuido' : null,
     );
   }
 }
