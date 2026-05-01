@@ -9,9 +9,12 @@ class Batch {
   final DateTime? expiryDate;
   final bool noExpiry;
   final DateTime entryDate;
-  final String origin; // doacao, compra, parceiro
+  final String origin; // doacao, compra, parceiro, transferencia
   final String? donor;
   final String? supplier;
+  final double? unitPrice;
+  final String? batchNumber; // número do lote impresso na embalagem
+  final String? imageUrl;    // URL da foto do lote (Firebase Storage)
   final String? shelfLocation;
   final String? notes;
   final BatchStatus status;
@@ -30,6 +33,9 @@ class Batch {
     required this.origin,
     this.donor,
     this.supplier,
+    this.unitPrice,
+    this.batchNumber,
+    this.imageUrl,
     this.shelfLocation,
     this.notes,
     this.status = BatchStatus.disponivel,
@@ -73,6 +79,9 @@ class Batch {
       origin: map['origin'] as String,
       donor: map['donor'] as String?,
       supplier: map['supplier'] as String?,
+      unitPrice: (map['unitPrice'] as num?)?.toDouble(),
+      batchNumber: map['batchNumber'] as String?,
+      imageUrl: map['imageUrl'] as String?,
       shelfLocation: map['shelfLocation'] as String?,
       notes: map['notes'] as String?,
       status: BatchStatus.values.firstWhere(
@@ -95,6 +104,9 @@ class Batch {
         'origin': origin,
         'donor': donor,
         'supplier': supplier,
+        'unitPrice': unitPrice,
+        'batchNumber': batchNumber,
+        'imageUrl': imageUrl,
         'shelfLocation': shelfLocation,
         'notes': notes,
         'status': status.name,
@@ -107,6 +119,9 @@ class Batch {
     BatchStatus? status,
     String? notes,
     String? shelfLocation,
+    String? batchNumber,
+    String? imageUrl,
+    double? unitPrice,
   }) =>
       Batch(
         id: id,
@@ -120,6 +135,9 @@ class Batch {
         origin: origin,
         donor: donor,
         supplier: supplier,
+        unitPrice: unitPrice ?? this.unitPrice,
+        batchNumber: batchNumber ?? this.batchNumber,
+        imageUrl: imageUrl ?? this.imageUrl,
         shelfLocation: shelfLocation ?? this.shelfLocation,
         notes: notes ?? this.notes,
         status: status ?? this.status,
