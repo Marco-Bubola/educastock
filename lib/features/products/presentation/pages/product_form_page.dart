@@ -141,66 +141,116 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
   Widget build(BuildContext context) {
     final formState = ref.watch(productFormProvider);
     final activeCategories = ref.watch(activeProductCategoriesProvider);
+    final categoryLabelMap = ref.watch(categoryLabelMapProvider);
     if (!activeCategories.contains(_category)) {
       _category = activeCategories.first;
     }
     final isLoading = formState is AsyncLoading;
+    final isEditing = widget.productId != null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: ModernProfileAppBar(
-        title: widget.productId != null ? 'Editar Produto' : 'Novo Produto',
-        subtitle: 'Cadastro de produto',
+        title: isEditing ? 'Editar Produto' : 'Novo Produto',
+        subtitle: isEditing ? 'Atualize os dados do produto' : 'Preencha as informações do produto',
         showBackButton: true,
       ),
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxl),
             children: [
+              // Banner do código de barras
               if (widget.barcode != null) ...[
                 Container(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
-                    color: AppColors.brandPrimary100,
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.brandPrimary600.withValues(alpha: 0.08),
+                        AppColors.brandPrimary600.withValues(alpha: 0.04),
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(AppRadius.card),
+                    border: Border.all(color: AppColors.brandPrimary100),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.qr_code_rounded,
-                          color: AppColors.brandPrimary600, size: 16),
-                      const SizedBox(width: AppSpacing.sm),
-                      Text(
-                        'Código: ${widget.barcode}',
-                        style: AppTypography.labelMedium.copyWith(
-                          color: AppColors.brandPrimary700,
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.brandPrimary100,
+                          borderRadius: BorderRadius.circular(AppRadius.small),
+                        ),
+                        child: const Icon(Icons.qr_code_rounded,
+                            color: AppColors.brandPrimary600, size: 20),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Código de barras detectado',
+                              style: AppTypography.labelSmall.copyWith(
+                                color: AppColors.brandPrimary600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              widget.barcode!,
+                              style: AppTypography.bodySmall.copyWith(
+                                color: AppColors.brandPrimary700,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.xl),
               ],
+
+              // ── Seção: Identificação ──────────────────────────────
+              _SectionLabel(
+                icon: Icons.inventory_2_rounded,
+                label: 'IDENTIFICAÇÃO',
+                color: AppColors.brandPrimary600,
+              ),
+              const SizedBox(height: AppSpacing.sm),
               CasaTextField(
                 label: 'Nome do Produto *',
+                hint: 'Ex: Arroz Integral, Sabonete Líquido...',
                 controller: _nameController,
                 textInputAction: TextInputAction.next,
+                prefixIcon: const Icon(Icons.label_rounded, size: 20),
                 validator: (v) =>
                     v == null || v.isEmpty ? 'Nome obrigatório' : null,
               ),
               const SizedBox(height: AppSpacing.md),
               CasaTextField(
                 label: 'Marca',
+                hint: 'Ex: Camil, Unilever...',
                 controller: _brandController,
                 textInputAction: TextInputAction.next,
+                prefixIcon: const Icon(Icons.branding_watermark_rounded, size: 20),
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.xl),
 
-              // Categoria
+              // ── Seção: Classificação ──────────────────────────────
+              _SectionLabel(
+                icon: Icons.category_rounded,
+                label: 'CLASSIFICAÇÃO',
+                color: AppColors.secondaryBlue600,
+              ),
+              const SizedBox(height: AppSpacing.sm),
               DropdownButtonFormField<ProductCategory>(
-                // ignore: deprecated_member_use
-                value: _category,
+                initialValue: _category,
                 decoration: const InputDecoration(
                   labelText: 'Categoria *',
                   prefixIcon: Icon(Icons.category_outlined, size: 20),
@@ -208,46 +258,68 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                 items: activeCategories
                     .map((c) => DropdownMenuItem(
                           value: c,
-                          child: Text(Product(
-                            id: '', name: '', category: c, unit: '',
-                            isPerishable: true, createdAt: DateTime.now(),
-                            createdBy: '',
-                          ).categoryLabel),
+                          child: Text(
+                            categoryLabelMap[c.name] ?? defaultCategoryLabel(c),
+                          ),
                         ))
                     .toList(),
                 onChanged: (v) => setState(() => _category = v!),
               ),
               const SizedBox(height: AppSpacing.md),
-
-              // Unidade
               DropdownButtonFormField<String>(
-                // ignore: deprecated_member_use
-                value: _unit,
+                initialValue: _unit,
                 decoration: const InputDecoration(
                   labelText: 'Unidade de Medida *',
                   prefixIcon: Icon(Icons.straighten_outlined, size: 20),
                 ),
                 items: _units
-                    .map((u) =>
-                        DropdownMenuItem(value: u, child: Text(u)))
+                    .map((u) => DropdownMenuItem(value: u, child: Text(u)))
                     .toList(),
                 onChanged: (v) => setState(() => _unit = v!),
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.xl),
+
+              // ── Seção: Configurações ──────────────────────────────
+              _SectionLabel(
+                icon: Icons.settings_rounded,
+                label: 'CONFIGURAÇÕES',
+                color: AppColors.success600,
+              ),
+              const SizedBox(height: AppSpacing.sm),
 
               // Perecível
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.lg,
-                  vertical: AppSpacing.sm,
-                ),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(color: AppColors.neutral100),
+                  border: Border.all(
+                    color: _isPerishable
+                        ? AppColors.warning600.withValues(alpha: 0.4)
+                        : AppColors.neutral100,
+                  ),
                 ),
                 child: SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.xs,
+                  ),
+                  secondary: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: _isPerishable
+                          ? AppColors.warning600.withValues(alpha: 0.1)
+                          : AppColors.neutral100,
+                      borderRadius: BorderRadius.circular(AppRadius.small),
+                    ),
+                    child: Icon(
+                      Icons.schedule_rounded,
+                      size: 20,
+                      color: _isPerishable
+                          ? AppColors.warning600
+                          : AppColors.neutral500,
+                    ),
+                  ),
                   title: Text(
                     'Produto Perecível',
                     style: AppTypography.labelLarge
@@ -256,36 +328,180 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                   subtitle: Text(
                     _isPerishable
                         ? 'Validade obrigatória nos lotes'
-                        : 'Sem obrigatoriedade de validade',
-                    style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.neutral500),
+                        : 'Sem controle de validade',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: _isPerishable
+                          ? AppColors.warning600
+                          : AppColors.neutral500,
+                    ),
                   ),
                   value: _isPerishable,
                   onChanged: (v) => setState(() => _isPerishable = v),
-                  activeThumbColor: AppColors.brandPrimary600,
+                  activeThumbColor: AppColors.warning600,
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
 
+              // Estoque mínimo
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(color: AppColors.neutral100),
+                ),
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: AppColors.danger600.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(AppRadius.small),
+                      ),
+                      child: const Icon(Icons.warning_amber_rounded,
+                          size: 20, color: AppColors.danger600),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Estoque Mínimo',
+                            style: AppTypography.labelLarge
+                                .copyWith(color: AppColors.neutral900),
+                          ),
+                          Text(
+                            'Alerta quando quantidade ficar abaixo deste valor',
+                            style: AppTypography.bodySmall
+                                .copyWith(color: AppColors.neutral500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(
+                      width: 72,
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              if (_minimumStock > 0) {
+                                setState(() => _minimumStock--);
+                              }
+                            },
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: AppColors.neutral100,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.remove_rounded,
+                                  size: 16, color: AppColors.neutral700),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              '$_minimumStock',
+                              textAlign: TextAlign.center,
+                              style: AppTypography.headingSmall.copyWith(
+                                color: AppColors.neutral900,
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => setState(() => _minimumStock++),
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: AppColors.brandPrimary100,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.add_rounded,
+                                  size: 16, color: AppColors.brandPrimary600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+
+              // ── Seção: Observações ──────────────────────────────
+              _SectionLabel(
+                icon: Icons.notes_rounded,
+                label: 'OBSERVAÇÕES',
+                color: AppColors.neutral500,
+              ),
+              const SizedBox(height: AppSpacing.sm),
               CasaTextField(
                 label: 'Descrição (opcional)',
+                hint: 'Informações adicionais sobre o produto...',
                 controller: _descController,
                 maxLines: 3,
+                prefixIcon: const Icon(Icons.notes_rounded, size: 20),
               ),
               const SizedBox(height: AppSpacing.xxl),
 
               CasaButton(
-                label: widget.productId != null
-                    ? 'Salvar Alterações'
-                    : 'Salvar e Cadastrar Lote',
+                label: isEditing ? 'Salvar Alterações' : 'Salvar e Cadastrar Lote',
                 onPressed: isLoading ? null : _submit,
                 isLoading: isLoading,
-                icon: Icons.save_rounded,
+                icon: isEditing ? Icons.save_rounded : Icons.arrow_forward_rounded,
               ),
+              if (!isEditing) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Center(
+                  child: Text(
+                    'Após salvar o produto, você será redirecionado\npara cadastrar o primeiro lote.',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.neutral500,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _SectionLabel({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: AppTypography.labelSmall.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(child: Divider(color: color.withValues(alpha: 0.25), height: 1)),
+      ],
     );
   }
 }
