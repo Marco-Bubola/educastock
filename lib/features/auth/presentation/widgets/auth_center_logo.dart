@@ -47,7 +47,7 @@ class AuthCenterLogo extends StatelessWidget {
         Text(
           title,
           style: AppTypography.headingLarge.copyWith(
-            color: AppColors.neutral900,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
           textAlign: TextAlign.center,
         ),
@@ -55,7 +55,7 @@ class AuthCenterLogo extends StatelessWidget {
         Text(
           subtitle,
           style: AppTypography.bodySmall.copyWith(
-            color: AppColors.neutral500,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
           textAlign: TextAlign.center,
         ),
