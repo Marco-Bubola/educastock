@@ -30,11 +30,14 @@ class CasaButton extends StatelessWidget {
     return SizedBox(
       width: fullWidth ? double.infinity : null,
       height: height ?? 52,
-      child: _buildButton(),
+      child: _buildButton(context),
     );
   }
 
-  Widget _buildButton() {
+  Widget _buildButton(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final disabledBg = cs.surfaceContainerHighest;
+    final disabledFg = cs.onSurfaceVariant.withValues(alpha: 0.5);
     final isDisabled = onPressed == null || isLoading;
     final child = isLoading
         ? SizedBox(
@@ -43,8 +46,8 @@ class CasaButton extends StatelessWidget {
             child: CircularProgressIndicator(
               strokeWidth: 2,
               color: variant == CasaButtonVariant.primary
-                  ? AppColors.surface
-                  : AppColors.brandPrimary600,
+                  ? Colors.white
+                  : cs.primary,
             ),
           )
         : Row(
@@ -64,10 +67,10 @@ class CasaButton extends StatelessWidget {
         return ElevatedButton(
           onPressed: isDisabled ? null : onPressed,
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.brandPrimary600,
-            foregroundColor: AppColors.surface,
-            disabledBackgroundColor: AppColors.neutral100,
-            disabledForegroundColor: AppColors.neutral500,
+            backgroundColor: cs.primary,
+            foregroundColor: cs.onPrimary,
+            disabledBackgroundColor: disabledBg,
+            disabledForegroundColor: disabledFg,
           ),
           child: child,
         );
@@ -90,8 +93,8 @@ class CasaButton extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.danger600,
             foregroundColor: AppColors.surface,
-            disabledBackgroundColor: AppColors.neutral100,
-            disabledForegroundColor: AppColors.neutral500,
+            disabledBackgroundColor: disabledBg,
+            disabledForegroundColor: disabledFg,
           ),
           child: child,
         );
