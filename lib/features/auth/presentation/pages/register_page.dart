@@ -134,7 +134,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             Text(
               'Crie seu acesso',
               style: AppTypography.headingSmall.copyWith(
-                color: AppColors.neutral900,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -225,7 +225,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
               decoration: BoxDecoration(
-                color: AppColors.neutral100.withValues(alpha: 0.6),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(AppRadius.card),
               ),
               child: InkWell(
@@ -269,7 +269,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   child: Text(
                     'ou',
                     style: AppTypography.labelMedium.copyWith(
-                      color: AppColors.neutral500,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
