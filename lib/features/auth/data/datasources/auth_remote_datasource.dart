@@ -123,14 +123,27 @@ class AuthRemoteDatasource {
   }
 
   Future<AppUser?> _fetchUser(String uid) async {
-    try {
-      final doc = await _firestore.collection('users').doc(uid).get();
-      if (!doc.exists || doc.data() == null) return null;
-      return AppUser.fromMap(doc.data()!, doc.id);
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') return null;
-      rethrow;
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final doc = await _firestore.collection('users').doc(uid).get();
+        if (!doc.exists || doc.data() == null) return null;
+        return AppUser.fromMap(doc.data()!, doc.id);
+      } on FirebaseException catch (e) {
+        if (e.code == 'permission-denied') return null;
+
+        final isTransient = e.code == 'unavailable' || e.code == 'deadline-exceeded';
+        final isLastAttempt = attempt == maxAttempts;
+        if (!isTransient || isLastAttempt) {
+          if (isTransient) return null;
+          rethrow;
+        }
+
+        await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
+      }
     }
+
+    return null;
   }
 
   Future<AppUser?> createUser({
