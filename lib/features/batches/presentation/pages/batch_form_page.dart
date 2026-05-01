@@ -9,7 +9,9 @@ import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../locations/presentation/controllers/locations_provider.dart';
+import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/controllers/products_provider.dart';
+import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../domain/entities/batch.dart';
 import '../controllers/batches_provider.dart';
 
@@ -227,8 +229,12 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final isPerishable =
-        ref.read(productByIdProvider(widget.productId)).valueOrNull?.isPerishable ?? true;
+    final existingProductId = widget.productId.trim();
+    Product? linkedProduct;
+    if (existingProductId.isNotEmpty) {
+      linkedProduct = await ref.read(productsDatasourceProvider).getProductById(existingProductId);
+    }
+    final isPerishable = linkedProduct?.isPerishable ?? !_noExpiry;
 
     // Validação crítica: perecível exige validade ou flag noExpiry
     if (isPerishable && !_noExpiry && _expiryDate == null) {
@@ -309,9 +315,31 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       return;
     }
 
+    var effectiveProductId = existingProductId;
+    if (linkedProduct == null) {
+      final activeCategories = ref.read(activeProductCategoriesProvider);
+      final fallbackCategory = activeCategories.contains(ProductCategory.outro)
+          ? ProductCategory.outro
+          : activeCategories.first;
+
+      final created = Product(
+        id: '',
+        name: productName,
+        brand: null,
+        category: fallbackCategory,
+        unit: 'un',
+        isPerishable: !_noExpiry,
+        minimumStock: 0,
+        createdAt: DateTime.now(),
+        createdBy: user.id,
+      );
+      effectiveProductId =
+          await ref.read(productsDatasourceProvider).saveProduct(created);
+    }
+
     final batch = Batch(
       id: '',
-      productId: widget.productId,
+      productId: effectiveProductId,
       productName: productName,
       quantity: qty,
       initialQuantity: qty,
@@ -343,7 +371,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       data: (id) {
         if (id != null) {
           showCasaSnackbar(context, message: 'Produto adicionado ao estoque!', isSuccess: true);
-          context.go('/products/${widget.productId}');
+          context.go('/products/$effectiveProductId');
         }
       },
       error: (e, _) => showCasaSnackbar(context,
