@@ -311,6 +311,39 @@ final activeProductCategoriesProvider = Provider<List<ProductCategory>>((ref) {
   );
 });
 
+String defaultCategoryLabel(ProductCategory category) {
+  return switch (category) {
+    ProductCategory.alimento => 'Alimento',
+    ProductCategory.bebida => 'Bebida',
+    ProductCategory.limpeza => 'Limpeza',
+    ProductCategory.higienePessoal => 'Higiene Pessoal',
+    ProductCategory.escolar => 'Material Escolar',
+    ProductCategory.roupas => 'Roupas',
+    ProductCategory.outro => 'Outro',
+  };
+}
+
+final categoryLabelMapProvider = Provider<Map<String, String>>((ref) {
+  final asyncItems = ref.watch(categorySettingsProvider);
+  return asyncItems.maybeWhen(
+    data: (items) {
+      final map = <String, String>{};
+      for (final c in ProductCategory.values) {
+        map[c.name] = defaultCategoryLabel(c);
+      }
+      for (final item in items) {
+        map[item.key] = item.label;
+      }
+      return map;
+    },
+    orElse: () {
+      return {
+        for (final c in ProductCategory.values) c.name: defaultCategoryLabel(c),
+      };
+    },
+  );
+});
+
 final alertsSettingsDatasourceProvider = Provider<AlertsSettingsDatasource>(
   (_) => AlertsSettingsDatasource(),
 );
