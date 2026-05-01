@@ -69,7 +69,9 @@ class CasaTextField extends StatelessWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       enabled: enabled,
-      style: AppTypography.bodyLarge.copyWith(color: AppColors.neutral900),
+      style: AppTypography.bodyLarge.copyWith(
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
