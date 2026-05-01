@@ -32,9 +32,10 @@ class ModernProfileAppBar extends StatelessWidget implements PreferredSizeWidget
   Widget build(BuildContext context) {
     final bg = backgroundColor ?? AppColors.surface;
     final fg = foregroundColor ?? AppColors.neutral900;
-    final initial = (profileName ?? 'U').trim().isEmpty
-        ? 'U'
-        : (profileName!.trim().substring(0, 1).toUpperCase());
+    final normalizedName = profileName?.trim();
+    final initial = (normalizedName == null || normalizedName.isEmpty)
+      ? 'U'
+      : normalizedName.substring(0, 1).toUpperCase();
 
     return AppBar(
       backgroundColor: bg,
