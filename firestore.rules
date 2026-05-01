@@ -88,7 +88,7 @@ service cloud.firestore {
     // ─── storage_locations ──────────────────────────────────────────────────
     match /storage_locations/{locationId} {
       allow read: if isActiveUser();
-      allow create, update: if isAdmin();
+      allow create, update: if canWrite(); // admin ou estoquista
       allow delete: if false; // soft-delete via isActive
     }
 
@@ -125,6 +125,20 @@ service cloud.firestore {
       allow create: if isActiveUser() && (isEstoquista() || isVoluntario());
       allow update: if isAdmin();
       allow delete: if false;
+    }
+
+    // ─── recipes ────────────────────────────────────────────────────────────
+    match /recipes/{recipeId} {
+      allow read: if isActiveUser();
+      allow create, update: if canWrite();
+      allow delete: if false;
+    }
+
+    // ─── recipe_runs ────────────────────────────────────────────────────────
+    match /recipe_runs/{runId} {
+      allow read: if isActiveUser();
+      allow create: if canWrite();
+      allow update, delete: if false;
     }
   }
 }
