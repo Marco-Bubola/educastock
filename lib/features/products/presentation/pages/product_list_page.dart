@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../controllers/products_provider.dart';
 
 class ProductListPage extends ConsumerStatefulWidget {
@@ -27,6 +28,7 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
     final user = ref.watch(currentUserProvider);
+    final categoryLabelMap = ref.watch(categoryLabelMapProvider);
     final totalProducts = productsAsync.valueOrNull?.length ?? 0;
 
     return Scaffold(
@@ -36,6 +38,13 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
         subtitle: 'Catálogo de produtos e itens',
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.home_outlined),
+            onPressed: () => context.go(AppRoutes.dashboard),
+            tooltip: 'Ir para inicio',
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -148,7 +157,7 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     Text(
-                                      '${p.categoryLabel} • ${p.unit}${p.brand != null ? ' • ${p.brand}' : ''}',
+                                      '${categoryLabelMap[p.category.name] ?? defaultCategoryLabel(p.category)} • ${p.unit}${p.brand != null ? ' • ${p.brand}' : ''}',
                                       style: AppTypography.bodySmall.copyWith(
                                           color: AppColors.neutral500),
                                     ),
