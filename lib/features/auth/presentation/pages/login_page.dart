@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/observability/analytics_service.dart';
 import '../../../../core/router/app_router.dart';
-import '../../domain/entities/app_user.dart';
 import '../controllers/auth_provider.dart';
 import '../utils/auth_error_mapper.dart';
 import '../widgets/auth_center_logo.dart';
@@ -28,6 +27,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final ds = ref.read(authDatasourceProvider);
       final remember = await ds.getRememberLogin();
       final rememberedEmail = await ds.getRememberedEmail();
@@ -38,29 +38,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           _emailController.text = rememberedEmail;
         }
       });
-    });
-
-    // Listener para navegação e feedback após login
-    ref.listen<AsyncValue<AppUser?>>(authNotifierProvider, (prev, next) {
-      next.whenOrNull(
-        data: (user) {
-          if (user != null) {
-            ref.read(analyticsServiceProvider).logAuthLogin(method: 'password');
-            context.go(AppRoutes.dashboard);
-          } else if (prev?.isLoading == true) {
-            showCasaSnackbar(
-              context,
-              message: 'Nao foi possivel autenticar este usuario.',
-              isError: true,
-            );
-          }
-        },
-        error: (e, _) => showCasaSnackbar(
-          context,
-          message: mapAuthError(e, fallback: 'Falha ao entrar.'),
-          isError: true,
-        ),
-      );
     });
   }
 
@@ -77,6 +54,29 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _emailController.text.trim(),
       _passwordController.text,
       rememberLogin: _rememberLogin,
+    );
+
+    final state = ref.read(authNotifierProvider);
+    if (!mounted) return;
+    state.when(
+      data: (user) {
+        if (user != null) {
+          ref.read(analyticsServiceProvider).logAuthLogin(method: 'password');
+          context.go(AppRoutes.dashboard);
+        } else {
+          showCasaSnackbar(
+            context,
+            message: 'Nao foi possivel autenticar este usuario.',
+            isError: true,
+          );
+        }
+      },
+      error: (error, __) => showCasaSnackbar(
+        context,
+        message: mapAuthError(error, fallback: 'Falha ao entrar.'),
+        isError: true,
+      ),
+      loading: () {},
     );
   }
 
@@ -181,7 +181,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 Text(
                   'Acesse com sua conta',
                   style: AppTypography.headingSmall.copyWith(
-                    color: AppColors.neutral900,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -226,7 +226,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
                   decoration: BoxDecoration(
-                    color: AppColors.neutral100.withValues(alpha: 0.6),
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(AppRadius.card),
                   ),
                   child: Row(
@@ -280,7 +280,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       child: Text(
                         'ou',
                         style: AppTypography.labelMedium.copyWith(
-                          color: AppColors.neutral500,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -300,7 +300,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           if (isLoading)
             Positioned.fill(
               child: Container(
-                color: Colors.white.withOpacity(0.7),
+                color: Colors.white.withValues(alpha: 0.7),
                 child: const Center(
                   child: CircularProgressIndicator(),
                 ),
