@@ -58,7 +58,7 @@ class DashboardPage extends ConsumerWidget {
                       value: '${batches.length}',
                       icon: Icons.inventory_2_outlined,
                       iconColor: AppColors.brandPrimary600,
-                      onTap: () => context.push(AppRoutes.productList),
+                      onTap: () => context.go(AppRoutes.productList),
                     ),
                     loading: () => const CasaCardSkeleton(),
                     error: (_, __) => const CasaInfoCard(
@@ -78,7 +78,7 @@ class DashboardPage extends ConsumerWidget {
                       backgroundColor: batches.isNotEmpty
                           ? AppColors.danger600.withValues(alpha: 0.05)
                           : null,
-                      onTap: () => context.push(AppRoutes.alerts),
+                      onTap: () => context.go(AppRoutes.alerts),
                     ),
                     loading: () => const CasaCardSkeleton(),
                     error: (_, __) => const CasaInfoCard(
@@ -96,7 +96,7 @@ class DashboardPage extends ConsumerWidget {
                       value: '${batches.length}',
                       icon: Icons.schedule_rounded,
                       iconColor: AppColors.warning600,
-                      onTap: () => context.push(AppRoutes.alerts),
+                      onTap: () => context.go(AppRoutes.alerts),
                     ),
                     loading: () => const CasaCardSkeleton(),
                     error: (_, __) => const CasaInfoCard(
@@ -112,7 +112,7 @@ class DashboardPage extends ConsumerWidget {
                     value: 'Ver',
                     icon: Icons.bar_chart_rounded,
                     iconColor: AppColors.secondaryBlue600,
-                    onTap: () => context.push(AppRoutes.reports),
+                    onTap: () => context.go(AppRoutes.reports),
                   ),
                 ],
               ),
@@ -140,7 +140,7 @@ class DashboardPage extends ConsumerWidget {
                     label: 'Estoque',
                     subtitle: 'Ver todos os produtos e lotes',
                     color: AppColors.secondaryBlue600,
-                    onTap: () => context.push(AppRoutes.productList),
+                    onTap: () => context.go(AppRoutes.productList),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   _QuickActionTile(
@@ -153,12 +153,28 @@ class DashboardPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   _QuickActionTile(
+                    icon: Icons.menu_book_rounded,
+                    label: 'Receitas',
+                    subtitle: 'Baixa automática por receita',
+                    color: AppColors.brandPrimary600,
+                    onTap: () => context.push(AppRoutes.recipes),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  _QuickActionTile(
                     icon: Icons.history_rounded,
                     label: 'Auditoria',
                     subtitle: 'Histórico de alterações',
                     color: AppColors.neutral700,
                     onTap: () => context.push(AppRoutes.audit),
                   ),
+                   const SizedBox(height: AppSpacing.sm),
+                   _QuickActionTile(
+                     icon: Icons.add_location_alt_rounded,
+                     label: 'Localizações',
+                     subtitle: 'Gerenciar seções e prateleiras',
+                     color: AppColors.secondaryBlue600,
+                     onTap: () => context.push(AppRoutes.locations),
+                   ),
                 ],
               ),
             ),
@@ -180,7 +196,7 @@ class DashboardPage extends ConsumerWidget {
                       title: 'Alertas Críticos',
                       count: batches.length,
                       action: 'Ver todos',
-                      onAction: () => context.push(AppRoutes.alerts),
+                      onAction: () => context.go(AppRoutes.alerts),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     ...batches.take(3).map(
@@ -205,43 +221,6 @@ class DashboardPage extends ConsumerWidget {
       ),
       floatingActionButton: CasaFabScan(
         onPressed: () => context.push(AppRoutes.scanner),
-      ),
-      bottomNavigationBar: NavigationBar(
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Início',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2_rounded),
-            label: 'Estoque',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications_rounded),
-            label: 'Alertas',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart_rounded),
-            label: 'Relatórios',
-          ),
-        ],
-        selectedIndex: 0,
-        onDestinationSelected: (index) {
-          switch (index) {
-            case 0:
-              context.go(AppRoutes.dashboard);
-            case 1:
-              context.go(AppRoutes.productList);
-            case 2:
-              context.go(AppRoutes.alerts);
-            case 3:
-              context.go(AppRoutes.reports);
-          }
-        },
       ),
     );
   }
