@@ -29,14 +29,17 @@ class AuthShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: isDark ? const Color(0xFF0B1220) : AppColors.background,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFF5FAFF), Color(0xFFD9EBFF), Color(0xFFEFF6FF)],
+            colors: isDark
+                ? const [Color(0xFF0B1220), Color(0xFF0F172A), Color(0xFF0B1220)]
+                : const [Color(0xFFF5FAFF), Color(0xFFD9EBFF), Color(0xFFEFF6FF)],
           ),
         ),
         child: SafeArea(
@@ -288,17 +291,21 @@ class _AuthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF111827) : AppColors.surface;
+    final cardBorder = isDark ? const Color(0xFF374151) : AppColors.brandPrimary100;
+    final shadowColor = isDark ? const Color(0x40000000) : const Color(0x140B3C74);
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: cardBg,
         borderRadius: BorderRadius.circular(AppRadius.modal),
-        border: Border.all(color: AppColors.brandPrimary100),
-        boxShadow: const [
+        border: Border.all(color: cardBorder),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x140B3C74),
+            color: shadowColor,
             blurRadius: 30,
-            offset: Offset(0, 14),
+            offset: const Offset(0, 14),
           ),
         ],
       ),
@@ -310,7 +317,7 @@ class _AuthCard extends StatelessWidget {
             height: 5,
             margin: const EdgeInsets.only(bottom: AppSpacing.lg),
             decoration: BoxDecoration(
-              color: AppColors.brandPrimary100,
+              color: isDark ? const Color(0xFF374151) : AppColors.brandPrimary100,
               borderRadius: BorderRadius.circular(AppRadius.pill),
             ),
           ),
@@ -322,7 +329,7 @@ class _AuthCard extends StatelessWidget {
               Text(
                 footerText,
                 style: AppTypography.bodyMedium.copyWith(
-                  color: AppColors.neutral500,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               TextButton(
