@@ -255,4 +255,86 @@ class AppTheme {
           color: AppColors.brandPrimary600,
         ),
       );
+
+  static ThemeData get dark => ThemeData(
+        useMaterial3: true,
+        colorScheme: const ColorScheme(
+          brightness: Brightness.dark,
+          primary: AppColors.brandPrimary500,
+          onPrimary: AppColors.surface,
+          primaryContainer: Color(0xFF173D63),
+          onPrimaryContainer: AppColors.brandPrimary100,
+          secondary: AppColors.secondarySky500,
+          onSecondary: AppColors.neutral900,
+          secondaryContainer: Color(0xFF0F2942),
+          onSecondaryContainer: Color(0xFFBCE7FF),
+          tertiary: AppColors.secondaryBlue600,
+          onTertiary: AppColors.surface,
+          error: AppColors.danger600,
+          onError: AppColors.surface,
+          surface: Color(0xFF0F172A),
+          onSurface: Color(0xFFE5E7EB),
+          surfaceContainerHighest: Color(0xFF1F2937),
+          onSurfaceVariant: Color(0xFFD1D5DB),
+          outline: Color(0xFF4B5563),
+          outlineVariant: Color(0xFF374151),
+          shadow: Colors.black,
+          scrim: Colors.black87,
+          inverseSurface: AppColors.surface,
+          onInverseSurface: AppColors.neutral900,
+          inversePrimary: AppColors.brandPrimary800,
+        ),
+        scaffoldBackgroundColor: const Color(0xFF0B1220),
+        fontFamily: AppTypography.fontNunito,
+        appBarTheme: AppBarTheme(
+          backgroundColor: const Color(0xFF0F172A),
+          foregroundColor: const Color(0xFFE5E7EB),
+          elevation: 0,
+          centerTitle: false,
+          titleTextStyle: AppTypography.headingMedium.copyWith(
+            color: const Color(0xFFE5E7EB),
+          ),
+          iconTheme: const IconThemeData(color: Color(0xFFD1D5DB)),
+          surfaceTintColor: Colors.transparent,
+        ),
+        cardTheme: CardThemeData(
+          color: const Color(0xFF111827),
+          elevation: AppElevation.low,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFF111827),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.input),
+            borderSide: const BorderSide(color: Color(0xFF4B5563)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.input),
+            borderSide: const BorderSide(color: Color(0xFF374151), width: 1.3),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.input),
+            borderSide: const BorderSide(color: AppColors.secondarySky500, width: 2),
+          ),
+          labelStyle: AppTypography.labelLarge.copyWith(color: const Color(0xFF9CA3AF)),
+          hintStyle: AppTypography.bodyMedium.copyWith(color: const Color(0xFF9CA3AF)),
+          errorStyle: AppTypography.labelSmall.copyWith(color: AppColors.danger600),
+        ),
+        dividerTheme: const DividerThemeData(
+          color: Color(0xFF374151),
+          thickness: 1,
+          space: 0,
+        ),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: AppColors.secondarySky500,
+        ),
+      );
 }

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
+import '../../../../core/observability/analytics_service.dart';
 import '../../../../core/router/app_router.dart';
 import '../controllers/auth_provider.dart';
 import '../utils/auth_error_mapper.dart';
+import '../widgets/auth_center_logo.dart';
 import '../widgets/auth_shell.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
@@ -22,6 +24,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _rememberLogin = true;
 
   @override
   void dispose() {
@@ -38,6 +41,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
           name: _nameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
+          rememberLogin: _rememberLogin,
         );
 
     final state = ref.read(authNotifierProvider);
@@ -45,6 +49,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     state.when(
       data: (user) {
         if (user != null) {
+          ref.read(analyticsServiceProvider).logAuthRegister();
           showCasaSnackbar(
             context,
             message: 'Conta criada com sucesso.',
@@ -70,12 +75,17 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   }
 
   Future<void> _signInWithGoogle() async {
-    await ref.read(authNotifierProvider.notifier).signInWithGoogle();
+    await ref
+        .read(authNotifierProvider.notifier)
+        .signInWithGoogle(rememberLogin: _rememberLogin);
     final state = ref.read(authNotifierProvider);
     if (!mounted) return;
     state.when(
       data: (user) {
-        if (user != null) context.go(AppRoutes.dashboard);
+        if (user != null) {
+          ref.read(analyticsServiceProvider).logAuthLogin(method: 'google');
+          context.go(AppRoutes.dashboard);
+        }
         if (user == null) {
           showCasaSnackbar(
             context,
@@ -99,27 +109,35 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     final isLoading = authState.isLoading;
 
     return AuthShell(
-      eyebrow: 'Novo acesso',
-      title: 'Crie sua conta e organize o estoque com mais clareza.',
-      subtitle:
-          'Cadastre sua equipe, acompanhe entradas e saidas e mantenha a operacao da Casa da Crianca centralizada.',
+      eyebrow: 'EducaStock',
+      title: 'Criar conta',
+      subtitle: 'Configure seu acesso em poucos passos.',
       footerText: 'Ja possui conta?',
       footerActionLabel: 'Entrar',
       onFooterAction: () => context.go(AppRoutes.login),
+      showBrandPanel: false,
+      compactBrandPanel: true,
+      showFeatureBadges: false,
       child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Criar conta', style: AppTypography.headingLarge),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Comece com e-mail e senha ou use sua conta Google.',
-              style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.neutral500,
+            const Align(
+              alignment: Alignment.center,
+              child: AuthCenterLogo(
+                title: 'Criar conta',
+                subtitle: 'Rápido e seguro',
               ),
             ),
             const SizedBox(height: AppSpacing.xl),
+            Text(
+              'Crie seu acesso',
+              style: AppTypography.headingSmall.copyWith(
+                color: AppColors.neutral900,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
             CasaTextField(
               label: 'Nome completo',
               controller: _nameController,
@@ -194,11 +212,46 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 ),
               ),
               validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Confirme a senha';
+                }
                 if (value != _passwordController.text) {
                   return 'As senhas nao conferem';
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: AppColors.neutral100.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(AppRadius.card),
+              ),
+              child: InkWell(
+                onTap: isLoading
+                    ? null
+                    : () => setState(() => _rememberLogin = !_rememberLogin),
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _rememberLogin,
+                        onChanged: isLoading
+                            ? null
+                            : (value) =>
+                                setState(() => _rememberLogin = value ?? true),
+                      ),
+                      Text(
+                        'Manter login',
+                        style: AppTypography.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: AppSpacing.xl),
             CasaButton(

@@ -11,6 +11,7 @@ class AuthShell extends StatelessWidget {
   final VoidCallback onFooterAction;
   final bool compactBrandPanel;
   final bool showFeatureBadges;
+  final bool showBrandPanel;
 
   const AuthShell({
     super.key,
@@ -23,6 +24,7 @@ class AuthShell extends StatelessWidget {
     required this.onFooterAction,
     this.compactBrandPanel = false,
     this.showFeatureBadges = true,
+    this.showBrandPanel = true,
   });
 
   @override
@@ -43,10 +45,21 @@ class AuthShell extends StatelessWidget {
               final wide = constraints.maxWidth >= 980;
               return Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1180),
+                  constraints: BoxConstraints(
+                    maxWidth: showBrandPanel ? 1180 : 560,
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpacing.xl),
-                    child: wide
+                    child: !showBrandPanel
+                        ? SingleChildScrollView(
+                            child: _AuthCard(
+                              footerText: footerText,
+                              footerActionLabel: footerActionLabel,
+                              onFooterAction: onFooterAction,
+                              child: child,
+                            ),
+                          )
+                        : wide
                         ? Row(
                             children: [
                               Expanded(
@@ -280,6 +293,7 @@ class _AuthCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.modal),
+        border: Border.all(color: AppColors.brandPrimary100),
         boxShadow: const [
           BoxShadow(
             color: Color(0x140B3C74),
@@ -291,6 +305,15 @@ class _AuthCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            width: 48,
+            height: 5,
+            margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary100,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
+          ),
           child,
           const SizedBox(height: AppSpacing.lg),
           Row(

@@ -17,6 +17,8 @@ String mapAuthError(Object error, {String fallback = 'Erro inesperado.'}) {
         return 'Metodo de autenticacao desabilitado no Firebase.';
       case 'too-many-requests':
         return 'Muitas tentativas. Aguarde e tente novamente.';
+      case 'requires-recent-login':
+        return 'Por seguranca, faca login novamente e tente trocar a senha.';
       case 'network-request-failed':
         return 'Sem conexao. Verifique sua internet.';
       case 'popup-closed-by-user':

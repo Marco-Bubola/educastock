@@ -8,6 +8,7 @@ final authDatasourceProvider = Provider<AuthRemoteDatasource>(
 
 final authStateProvider = StreamProvider<AppUser?>((ref) async* {
   final ds = ref.watch(authDatasourceProvider);
+
   await for (final firebaseUser in ds.authStateChanges) {
     if (firebaseUser == null) {
       yield null;
@@ -28,19 +29,27 @@ class AuthNotifier extends Notifier<AsyncValue<AppUser?>> {
     return const AsyncValue.data(null);
   }
 
-  Future<void> signIn(String email, String password) async {
+  Future<void> signIn(
+    String email,
+    String password, {
+    bool rememberLogin = true,
+  }) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       final ds = ref.read(authDatasourceProvider);
-      return ds.signIn(email: email, password: password);
+      return ds.signIn(
+        email: email,
+        password: password,
+        rememberLogin: rememberLogin,
+      );
     });
   }
 
-  Future<void> signInWithGoogle() async {
+  Future<void> signInWithGoogle({bool rememberLogin = true}) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       final ds = ref.read(authDatasourceProvider);
-      return ds.signInWithGoogle();
+      return ds.signInWithGoogle(rememberLogin: rememberLogin);
     });
   }
 
@@ -48,6 +57,7 @@ class AuthNotifier extends Notifier<AsyncValue<AppUser?>> {
     required String name,
     required String email,
     required String password,
+    bool rememberLogin = true,
   }) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
@@ -57,8 +67,20 @@ class AuthNotifier extends Notifier<AsyncValue<AppUser?>> {
         password: password,
         name: name,
         role: UserRole.consulta,
+        rememberLogin: rememberLogin,
       );
     });
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final ds = ref.read(authDatasourceProvider);
+    await ds.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+    );
   }
 
   Future<void> sendPasswordReset(String email) async {

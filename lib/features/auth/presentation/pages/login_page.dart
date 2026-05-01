@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
+import '../../../../core/observability/analytics_service.dart';
 import '../../../../core/router/app_router.dart';
+import '../../domain/entities/app_user.dart';
 import '../controllers/auth_provider.dart';
 import '../utils/auth_error_mapper.dart';
+import '../widgets/auth_center_logo.dart';
 import '../widgets/auth_shell.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -19,6 +22,47 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberLogin = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final ds = ref.read(authDatasourceProvider);
+      final remember = await ds.getRememberLogin();
+      final rememberedEmail = await ds.getRememberedEmail();
+      if (!mounted) return;
+      setState(() {
+        _rememberLogin = remember;
+        if (rememberedEmail != null) {
+          _emailController.text = rememberedEmail;
+        }
+      });
+    });
+
+    // Listener para navegação e feedback após login
+    ref.listen<AsyncValue<AppUser?>>(authNotifierProvider, (prev, next) {
+      next.whenOrNull(
+        data: (user) {
+          if (user != null) {
+            ref.read(analyticsServiceProvider).logAuthLogin(method: 'password');
+            context.go(AppRoutes.dashboard);
+          } else if (prev?.isLoading == true) {
+            showCasaSnackbar(
+              context,
+              message: 'Nao foi possivel autenticar este usuario.',
+              isError: true,
+            );
+          }
+        },
+        error: (e, _) => showCasaSnackbar(
+          context,
+          message: mapAuthError(e, fallback: 'Falha ao entrar.'),
+          isError: true,
+        ),
+      );
+    });
+  }
 
   @override
   void dispose() {
@@ -30,38 +74,24 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     await ref.read(authNotifierProvider.notifier).signIn(
-          _emailController.text.trim(),
-          _passwordController.text,
-        );
-    final state = ref.read(authNotifierProvider);
-    if (!mounted) return;
-    state.when(
-      data: (user) {
-        if (user != null) context.go(AppRoutes.dashboard);
-        if (user == null) {
-          showCasaSnackbar(
-            context,
-            message: 'Nao foi possivel autenticar este usuario.',
-            isError: true,
-          );
-        }
-      },
-      error: (e, _) => showCasaSnackbar(
-        context,
-        message: mapAuthError(e, fallback: 'Falha ao entrar.'),
-        isError: true,
-      ),
-      loading: () {},
+      _emailController.text.trim(),
+      _passwordController.text,
+      rememberLogin: _rememberLogin,
     );
   }
 
   Future<void> _signInWithGoogle() async {
-    await ref.read(authNotifierProvider.notifier).signInWithGoogle();
+    await ref
+        .read(authNotifierProvider.notifier)
+        .signInWithGoogle(rememberLogin: _rememberLogin);
     final state = ref.read(authNotifierProvider);
     if (!mounted) return;
     state.when(
       data: (user) {
-        if (user != null) context.go(AppRoutes.dashboard);
+        if (user != null) {
+          ref.read(analyticsServiceProvider).logAuthLogin(method: 'google');
+          context.go(AppRoutes.dashboard);
+        }
         if (user == null) {
           showCasaSnackbar(
             context,
@@ -93,13 +123,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       await ref
           .read(authNotifierProvider.notifier)
           .sendPasswordReset(_emailController.text.trim());
+      ref.read(analyticsServiceProvider).logPasswordReset();
       if (!mounted) return;
       showCasaSnackbar(
         context,
         message: 'Enviamos o link de redefinicao para seu e-mail.',
         isSuccess: true,
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
+      ref.read(analyticsServiceProvider).recordHandledError(
+            error,
+            stackTrace,
+            reason: 'auth_password_reset_failed',
+          );
       if (!mounted) return;
       showCasaSnackbar(
         context,
@@ -124,123 +160,153 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       footerText: 'Ainda nao possui conta?',
       footerActionLabel: 'Criar cadastro',
       onFooterAction: () => context.go(AppRoutes.register),
+      showBrandPanel: false,
       compactBrandPanel: true,
       showFeatureBadges: false,
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Stack(
+        children: [
+          Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.brandPrimary100,
-                    borderRadius: BorderRadius.circular(AppRadius.card),
-                  ),
-                  child: const Icon(
-                    Icons.lock_person_rounded,
-                    color: AppColors.brandPrimary700,
-                    size: 22,
+                const Align(
+                  alignment: Alignment.center,
+                  child: AuthCenterLogo(
+                    title: 'Entrar',
+                    subtitle: 'Acesso rápido e seguro',
                   ),
                 ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: AppSpacing.xl),
+                Text(
+                  'Acesse com sua conta',
+                  style: AppTypography.headingSmall.copyWith(
+                    color: AppColors.neutral900,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                CasaTextField(
+                  label: 'E-mail',
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  prefixIcon: const Icon(Icons.email_outlined, size: 20),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Informe o e-mail';
+                    if (!v.contains('@')) return 'E-mail invalido';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: AppSpacing.md),
+                CasaTextField(
+                  label: 'Senha',
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _submit(),
+                  prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                      size: 20,
+                    ),
+                    onPressed: () {
+                      setState(() => _obscurePassword = !_obscurePassword);
+                    },
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Informe a senha';
+                    if (v.length < 6) return 'Senha muito curta';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.neutral100.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                  ),
+                  child: Row(
                     children: [
-                      Text('Entrar', style: AppTypography.headingLarge),
-                      Text(
-                        'Rápido e seguro',
-                        style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.neutral500,
+                      Expanded(
+                        child: InkWell(
+                          onTap: isLoading
+                              ? null
+                              : () => setState(() => _rememberLogin = !_rememberLogin),
+                          borderRadius: BorderRadius.circular(AppRadius.card),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                            child: Row(
+                              children: [
+                                Checkbox(
+                                  value: _rememberLogin,
+                                  onChanged: isLoading
+                                      ? null
+                                      : (value) =>
+                                          setState(() => _rememberLogin = value ?? true),
+                                ),
+                                Text(
+                                  'Manter login',
+                                  style: AppTypography.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
+                      ),
+                      TextButton(
+                        onPressed: isLoading ? null : _resetPassword,
+                        child: const Text('Esqueci minha senha'),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            CasaTextField(
-              label: 'E-mail',
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              prefixIcon: const Icon(Icons.email_outlined, size: 20),
-              validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'Informe o e-mail';
-                if (!v.contains('@')) return 'E-mail invalido';
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpacing.md),
-            CasaTextField(
-              label: 'Senha',
-              controller: _passwordController,
-              obscureText: _obscurePassword,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _submit(),
-              prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                  size: 20,
+                const SizedBox(height: AppSpacing.md),
+                CasaButton(
+                  label: 'Entrar',
+                  onPressed: isLoading ? null : _submit,
+                  isLoading: isLoading,
+                  icon: Icons.login_rounded,
                 ),
-                onPressed: () {
-                  setState(() => _obscurePassword = !_obscurePassword);
-                },
-              ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Informe a senha';
-                if (v.length < 6) return 'Senha muito curta';
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: isLoading ? null : _resetPassword,
-                child: const Text('Esqueci minha senha'),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            CasaButton(
-              label: 'Entrar',
-              onPressed: isLoading ? null : _submit,
-              isLoading: isLoading,
-              icon: Icons.login_rounded,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                const Expanded(child: Divider()),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                  child: Text(
-                    'ou',
-                    style: AppTypography.labelMedium.copyWith(
-                      color: AppColors.neutral500,
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    const Expanded(child: Divider()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                      child: Text(
+                        'ou',
+                        style: AppTypography.labelMedium.copyWith(
+                          color: AppColors.neutral500,
+                        ),
+                      ),
                     ),
-                  ),
+                    const Expanded(child: Divider()),
+                  ],
                 ),
-                const Expanded(child: Divider()),
+                const SizedBox(height: AppSpacing.md),
+                CasaButton(
+                  label: 'Entrar com Google',
+                  variant: CasaButtonVariant.secondary,
+                  onPressed: isLoading ? null : _signInWithGoogle,
+                  icon: Icons.g_mobiledata_rounded,
+                ),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
-            CasaButton(
-              label: 'Entrar com Google',
-              variant: CasaButtonVariant.secondary,
-              onPressed: isLoading ? null : _signInWithGoogle,
-              icon: Icons.g_mobiledata_rounded,
+          ),
+          if (isLoading)
+            Positioned.fill(
+              child: Container(
+                color: Colors.white.withOpacity(0.7),
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

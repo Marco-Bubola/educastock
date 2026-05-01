@@ -19,7 +19,12 @@ class ProductApiResult {
 }
 
 class OpenFoodFactsDatasource {
+  static const _barcodeLookupApiKey =
+      String.fromEnvironment('BARCODE_LOOKUP_API_KEY');
+
   final Dio _dio;
+  final Dio _upcDio;
+  final Dio _barcodeLookupDio;
 
   OpenFoodFactsDatasource({Dio? dio})
       : _dio = dio ??
@@ -31,9 +36,20 @@ class OpenFoodFactsDatasource {
                 'User-Agent':
                     'EducaStock/1.0 (ONG Casa da Crianca; contact@casadacrianca.org.br)',
               },
-            ));
+            )),
+        _upcDio = Dio(BaseOptions(
+          baseUrl: 'https://api.upcitemdb.com',
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        )),
+        _barcodeLookupDio = Dio(BaseOptions(
+          baseUrl: 'https://api.barcodelookup.com',
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ));
 
   Future<ProductApiResult> lookupBarcode(String barcode) async {
+    // 1) Open Food Facts (prioridade)
     try {
       final response =
           await _dio.get('/api/v0/product/$barcode.json');
@@ -66,8 +82,75 @@ class OpenFoodFactsDatasource {
         imageUrl: imageUrl,
       );
     } on DioException {
-      return ProductApiResult(barcode: barcode, found: false);
+      // continua no fallback
     }
+
+    // 2) UPCItemDB (fallback)
+    try {
+      final response = await _upcDio.get('/prod/trial/lookup', queryParameters: {
+        'upc': barcode,
+      });
+      final data = response.data as Map<String, dynamic>;
+      final items = (data['items'] as List?) ?? [];
+      if (items.isNotEmpty) {
+        final item = items.first as Map<String, dynamic>;
+        final title = item['title'] as String?;
+        final brand = item['brand'] as String?;
+        final category = _normalizeCategory(item['category'] as String?);
+        final imageUrl = item['images'] is List &&
+                (item['images'] as List).isNotEmpty
+            ? (item['images'] as List).first as String?
+            : null;
+        return ProductApiResult(
+          barcode: barcode,
+          found: title != null && title.trim().isNotEmpty,
+          name: title,
+          brand: brand,
+          category: category,
+          imageUrl: imageUrl,
+        );
+      }
+    } on DioException {
+      // continua no fallback seguinte
+    }
+
+    // 3) Barcode Lookup (fallback opcional via key)
+    if (_barcodeLookupApiKey.isNotEmpty) {
+      try {
+        final response = await _barcodeLookupDio.get(
+          '/v3/products',
+          queryParameters: {
+            'barcode': barcode,
+            'formatted': 'y',
+            'key': _barcodeLookupApiKey,
+          },
+        );
+        final data = response.data as Map<String, dynamic>;
+        final products = (data['products'] as List?) ?? [];
+        if (products.isNotEmpty) {
+          final item = products.first as Map<String, dynamic>;
+          final name = item['product_name'] as String?;
+          final brand = item['brand'] as String?;
+          final category = _normalizeCategory(item['category'] as String?);
+          final imageUrl = item['images'] is List &&
+                  (item['images'] as List).isNotEmpty
+              ? (item['images'] as List).first as String?
+              : null;
+          return ProductApiResult(
+            barcode: barcode,
+            found: name != null && name.trim().isNotEmpty,
+            name: name,
+            brand: brand,
+            category: category,
+            imageUrl: imageUrl,
+          );
+        }
+      } on DioException {
+        // sem fallback adicional
+      }
+    }
+
+    return ProductApiResult(barcode: barcode, found: false);
   }
 
   String? _firstNonEmpty(List<String?> values) {
@@ -88,6 +171,17 @@ class OpenFoodFactsDatasource {
         return 'alimento';
       }
     }
+    return null;
+  }
+
+  String? _normalizeCategory(String? raw) {
+    if (raw == null) return null;
+    final c = raw.toLowerCase();
+    if (c.contains('bebida') || c.contains('beverage')) return 'bebida';
+    if (c.contains('food') || c.contains('alimento')) return 'alimento';
+    if (c.contains('clean') || c.contains('limpeza')) return 'limpeza';
+    if (c.contains('hygiene') || c.contains('higiene')) return 'higienePessoal';
+    if (c.contains('school') || c.contains('escolar')) return 'escolar';
     return null;
   }
 }

@@ -56,6 +56,25 @@ class AlertsConfig {
       };
 }
 
+class StockRulesConfig {
+  final int negativeAdjustmentApprovalLimit;
+
+  const StockRulesConfig({
+    required this.negativeAdjustmentApprovalLimit,
+  });
+
+  factory StockRulesConfig.fromMap(Map<String, dynamic> map) {
+    return StockRulesConfig(
+      negativeAdjustmentApprovalLimit:
+          (map['negativeAdjustmentApprovalLimit'] as num?)?.toInt() ?? 50,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'negativeAdjustmentApprovalLimit': negativeAdjustmentApprovalLimit,
+      };
+}
+
 class UserAdminDatasource {
   final FirebaseFirestore _db;
 
@@ -170,6 +189,39 @@ class AlertsSettingsDatasource {
   }
 }
 
+class StockRulesSettingsDatasource {
+  final FirebaseFirestore _db;
+
+  StockRulesSettingsDatasource({FirebaseFirestore? db})
+      : _db = db ?? FirebaseFirestore.instance;
+
+  DocumentReference<Map<String, dynamic>> get _doc =>
+      _db.collection('settings').doc('stock_rules');
+
+  Future<void> ensureSeed() async {
+    final doc = await _doc.get();
+    if (!doc.exists) {
+      await _doc.set(
+        const StockRulesConfig(
+          negativeAdjustmentApprovalLimit: 50,
+        ).toMap(),
+      );
+    }
+  }
+
+  Stream<StockRulesConfig> watchConfig() {
+    return _doc.snapshots().map((d) {
+      final data = d.data();
+      if (data == null) {
+        return const StockRulesConfig(
+          negativeAdjustmentApprovalLimit: 50,
+        );
+      }
+      return StockRulesConfig.fromMap(data);
+    });
+  }
+}
+
 final userAdminDatasourceProvider = Provider<UserAdminDatasource>(
   (_) => UserAdminDatasource(),
 );
@@ -263,8 +315,17 @@ final alertsSettingsDatasourceProvider = Provider<AlertsSettingsDatasource>(
   (_) => AlertsSettingsDatasource(),
 );
 
+final stockRulesSettingsDatasourceProvider =
+    Provider<StockRulesSettingsDatasource>(
+  (_) => StockRulesSettingsDatasource(),
+);
+
 final alertsConfigProvider = StreamProvider<AlertsConfig>((ref) {
   return ref.watch(alertsSettingsDatasourceProvider).watchConfig();
+});
+
+final stockRulesConfigProvider = StreamProvider<StockRulesConfig>((ref) {
+  return ref.watch(stockRulesSettingsDatasourceProvider).watchConfig();
 });
 
 class AlertsConfigNotifier extends AsyncNotifier<void> {
@@ -283,3 +344,15 @@ class AlertsConfigNotifier extends AsyncNotifier<void> {
 
 final alertsConfigNotifierProvider =
     AsyncNotifierProvider<AlertsConfigNotifier, void>(AlertsConfigNotifier.new);
+
+class StockRulesConfigNotifier extends AsyncNotifier<void> {
+  @override
+  Future<void> build() async {
+    await ref.read(stockRulesSettingsDatasourceProvider).ensureSeed();
+  }
+}
+
+final stockRulesConfigNotifierProvider =
+    AsyncNotifierProvider<StockRulesConfigNotifier, void>(
+  StockRulesConfigNotifier.new,
+);

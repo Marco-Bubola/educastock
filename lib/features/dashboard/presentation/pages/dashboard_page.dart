@@ -5,6 +5,8 @@ import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
+import '../../../ml/presentation/widgets/risk_widgets.dart';
 
 class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
@@ -160,6 +162,11 @@ class DashboardPage extends ConsumerWidget {
                 ],
               ),
             ),
+
+            const SizedBox(height: AppSpacing.xl),
+
+            // Análise de Risco ML
+            _MlRiskSection(),
 
             const SizedBox(height: AppSpacing.xl),
 
@@ -357,6 +364,75 @@ class _AlertBatchTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Seção de Risco ML no dashboard
+// ---------------------------------------------------------------------------
+
+class _MlRiskSection extends ConsumerWidget {
+  const _MlRiskSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final countsAsync = ref.watch(riskCountsProvider);
+    final criticalAsync = ref.watch(criticalBatchPredictionsProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CasaSectionHeader(
+          title: 'Análise de Risco ML',
+          action: 'Ver detalhes',
+          onAction: () => context.push(AppRoutes.mlInsights),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+
+        // Contadores por nível
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          child: countsAsync.when(
+            data: (counts) => RiskSummaryRow(counts: counts),
+            loading: () => Row(
+              children: List.generate(
+                3,
+                (_) => const Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: CasaCardSkeleton(),
+                  ),
+                ),
+              ),
+            ),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+        ),
+
+        const SizedBox(height: AppSpacing.sm),
+
+        // Top críticos
+        criticalAsync.when(
+          data: (critical) {
+            if (critical.isEmpty) return const SizedBox.shrink();
+            return Column(
+              children: critical.take(2).map(
+                (p) => Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+                  child: RiskInsightCard(
+                    prediction: p,
+                    onTap: () => context.push(AppRoutes.mlInsights),
+                  ),
+                ),
+              ).toList(),
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 }

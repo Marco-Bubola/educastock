@@ -11,6 +11,7 @@ import '../../features/products/presentation/pages/product_detail_page.dart';
 import '../../features/products/presentation/pages/product_form_page.dart';
 import '../../features/batches/presentation/pages/batch_form_page.dart';
 import '../../features/stock/presentation/pages/movement_page.dart';
+import '../../features/stock/presentation/pages/adjustment_approvals_page.dart';
 import '../../features/alerts/presentation/pages/alerts_page.dart';
 import '../../features/audit/presentation/pages/audit_page.dart';
 import '../../features/reports/presentation/pages/reports_page.dart';
@@ -19,6 +20,7 @@ import '../../features/locations/presentation/pages/locations_page.dart';
 import '../../features/settings/presentation/pages/users_management_page.dart';
 import '../../features/settings/presentation/pages/categories_settings_page.dart';
 import '../../features/settings/presentation/pages/alerts_settings_page.dart';
+import '../../features/ml/presentation/pages/ml_insights_page.dart';
 
 abstract class AppRoutes {
   static const login = '/login';
@@ -31,6 +33,7 @@ abstract class AppRoutes {
   static const productForm = '/products/form';
   static const batchForm = '/batches/form';
   static const movement = '/movement';
+  static const adjustmentApprovals = '/movement/approvals';
   static const alerts = '/alerts';
   static const audit = '/audit';
   static const reports = '/reports';
@@ -39,6 +42,7 @@ abstract class AppRoutes {
   static const usersManagement = '/settings/users';
   static const categoriesSettings = '/settings/categories';
   static const alertsSettings = '/settings/alerts';
+  static const mlInsights = '/ml/insights';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -47,6 +51,8 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.login,
     redirect: (context, state) {
+      if (auth.isLoading) return null;
+
       final isLoggedIn = auth.valueOrNull != null;
       final isPublicRoute = {
         AppRoutes.login,
@@ -114,6 +120,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
+        path: AppRoutes.adjustmentApprovals,
+        builder: (_, __) => const AdjustmentApprovalsPage(),
+      ),
+      GoRoute(
         path: AppRoutes.alerts,
         builder: (_, __) => const AlertsPage(),
       ),
@@ -144,6 +154,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.alertsSettings,
         builder: (_, __) => const AlertsSettingsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.mlInsights,
+        builder: (_, __) => const MlInsightsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.mlInsights,
+        builder: (_, __) => const MlInsightsPage(),
       ),
     ],
   );

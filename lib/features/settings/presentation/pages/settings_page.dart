@@ -3,14 +3,178 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/theme/theme_mode_controller.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../auth/presentation/utils/auth_error_mapper.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
+  Future<void> _showChangePasswordDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final currentController = TextEditingController();
+    final newController = TextEditingController();
+    final confirmController = TextEditingController();
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+    bool loading = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Trocar senha'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CasaTextField(
+                      label: 'Senha atual',
+                      controller: currentController,
+                      obscureText: obscureCurrent,
+                      suffixIcon: IconButton(
+                        onPressed: () => setStateDialog(
+                          () => obscureCurrent = !obscureCurrent,
+                        ),
+                        icon: Icon(
+                          obscureCurrent
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    CasaTextField(
+                      label: 'Nova senha',
+                      controller: newController,
+                      obscureText: obscureNew,
+                      suffixIcon: IconButton(
+                        onPressed: () => setStateDialog(
+                          () => obscureNew = !obscureNew,
+                        ),
+                        icon: Icon(
+                          obscureNew
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    CasaTextField(
+                      label: 'Confirmar nova senha',
+                      controller: confirmController,
+                      obscureText: obscureConfirm,
+                      suffixIcon: IconButton(
+                        onPressed: () => setStateDialog(
+                          () => obscureConfirm = !obscureConfirm,
+                        ),
+                        icon: Icon(
+                          obscureConfirm
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: loading ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: loading
+                      ? null
+                      : () async {
+                          final current = currentController.text;
+                          final next = newController.text;
+                          final confirm = confirmController.text;
+
+                          if (current.isEmpty || next.isEmpty || confirm.isEmpty) {
+                            showCasaSnackbar(
+                              context,
+                              message: 'Preencha todos os campos.',
+                              isError: true,
+                            );
+                            return;
+                          }
+                          if (next.length < 6) {
+                            showCasaSnackbar(
+                              context,
+                              message: 'Nova senha deve ter pelo menos 6 caracteres.',
+                              isError: true,
+                            );
+                            return;
+                          }
+                          if (next != confirm) {
+                            showCasaSnackbar(
+                              context,
+                              message: 'As senhas nao conferem.',
+                              isError: true,
+                            );
+                            return;
+                          }
+
+                          setStateDialog(() => loading = true);
+                          try {
+                            await ref
+                                .read(authNotifierProvider.notifier)
+                                .changePassword(
+                                  currentPassword: current,
+                                  newPassword: next,
+                                );
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              showCasaSnackbar(
+                                context,
+                                message: 'Senha alterada com sucesso.',
+                                isSuccess: true,
+                              );
+                            }
+                          } catch (error) {
+                            if (context.mounted) {
+                              showCasaSnackbar(
+                                context,
+                                message: mapAuthError(
+                                  error,
+                                  fallback: 'Nao foi possivel trocar a senha.',
+                                ),
+                                isError: true,
+                              );
+                            }
+                          } finally {
+                            if (context.mounted) {
+                              setStateDialog(() => loading = false);
+                            }
+                          }
+                        },
+                  child: loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Salvar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -94,6 +258,11 @@ class SettingsPage extends ConsumerWidget {
               label: 'Configurações de Alertas',
               onTap: () => context.push(AppRoutes.alertsSettings),
             ),
+            _SettingsTile(
+              icon: Icons.approval_outlined,
+              label: 'Aprovações de Ajuste',
+              onTap: () => context.push(AppRoutes.adjustmentApprovals),
+            ),
             const SizedBox(height: AppSpacing.lg),
 
             const CasaSectionHeader(title: 'Dados'),
@@ -112,6 +281,19 @@ class SettingsPage extends ConsumerWidget {
 
             const CasaSectionHeader(title: 'Conta'),
             const SizedBox(height: AppSpacing.sm),
+            _SettingsSwitchTile(
+              icon: Icons.dark_mode_outlined,
+              label: 'Tema escuro',
+              value: isDark,
+              onChanged: (v) async {
+                await ref.read(themeModeProvider.notifier).toggleDark(v);
+              },
+            ),
+            _SettingsTile(
+              icon: Icons.password_rounded,
+              label: 'Trocar senha',
+              onTap: () => _showChangePasswordDialog(context, ref),
+            ),
             _SettingsTile(
               icon: Icons.logout_rounded,
               label: 'Sair',
@@ -195,6 +377,52 @@ class _SettingsTile extends StatelessWidget {
                   color: AppColors.neutral500, size: 18),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsSwitchTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SettingsSwitchTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.neutral700, size: 22),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(
+                label,
+                style: AppTypography.bodyLarge.copyWith(
+                  color: AppColors.neutral700,
+                ),
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+            ),
+          ],
         ),
       ),
     );

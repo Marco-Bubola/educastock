@@ -2,9 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/entities/app_user.dart';
 
 class AuthRemoteDatasource {
+  static const _rememberLoginKey = 'remember_login';
+  static const _rememberedEmailKey = 'remembered_email';
+
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
   final GoogleSignIn? _googleSignIn;
@@ -19,10 +23,53 @@ class AuthRemoteDatasource {
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
+  Future<void> _configurePersistence(bool rememberLogin) async {
+    if (!kIsWeb) return;
+    await _auth.setPersistence(
+      rememberLogin ? Persistence.LOCAL : Persistence.SESSION,
+    );
+  }
+
+  Future<void> setRememberLogin(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_rememberLoginKey, value);
+  }
+
+  Future<bool> getRememberLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_rememberLoginKey) ?? true;
+  }
+
+  Future<void> setRememberedEmail(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_rememberedEmailKey, email);
+  }
+
+  Future<String?> getRememberedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString(_rememberedEmailKey)?.trim();
+    if (email == null || email.isEmpty) return null;
+    return email;
+  }
+
+  Future<void> clearRememberedEmail() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_rememberedEmailKey);
+  }
+
   Future<AppUser?> signIn({
     required String email,
     required String password,
+    bool rememberLogin = true,
   }) async {
+    await _configurePersistence(rememberLogin);
+    await setRememberLogin(rememberLogin);
+    if (rememberLogin) {
+      await setRememberedEmail(email);
+    } else {
+      await clearRememberedEmail();
+    }
+
     final credential = await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
@@ -32,7 +79,10 @@ class AuthRemoteDatasource {
     return profile ?? _fromFirebaseUser(credential.user!);
   }
 
-  Future<AppUser?> signInWithGoogle() async {
+  Future<AppUser?> signInWithGoogle({bool rememberLogin = true}) async {
+    await _configurePersistence(rememberLogin);
+    await setRememberLogin(rememberLogin);
+
     UserCredential credential;
 
     if (kIsWeb) {
@@ -52,6 +102,11 @@ class AuthRemoteDatasource {
 
     final firebaseUser = credential.user;
     if (firebaseUser == null) return null;
+    if (rememberLogin) {
+      await setRememberedEmail(firebaseUser.email ?? '');
+    } else {
+      await clearRememberedEmail();
+    }
     return _ensureUserDocument(firebaseUser);
   }
 
@@ -83,7 +138,16 @@ class AuthRemoteDatasource {
     required String password,
     required String name,
     required UserRole role,
+    bool rememberLogin = true,
   }) async {
+    await _configurePersistence(rememberLogin);
+    await setRememberLogin(rememberLogin);
+    if (rememberLogin) {
+      await setRememberedEmail(email);
+    } else {
+      await clearRememberedEmail();
+    }
+
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
@@ -111,6 +175,26 @@ class AuthRemoteDatasource {
 
   Future<void> sendPasswordReset(String email) =>
       _auth.sendPasswordResetEmail(email: email);
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || user.email == null || user.email!.trim().isEmpty) {
+      throw FirebaseAuthException(
+        code: 'user-not-found',
+        message: 'Sessao invalida para trocar senha.',
+      );
+    }
+
+    final credential = EmailAuthProvider.credential(
+      email: user.email!,
+      password: currentPassword,
+    );
+    await user.reauthenticateWithCredential(credential);
+    await user.updatePassword(newPassword);
+  }
 
   Future<AppUser> _ensureUserDocument(User firebaseUser) async {
     final existing = await _fetchUser(firebaseUser.uid);

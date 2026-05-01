@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
@@ -44,6 +46,66 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     'parceiro': 'Parceiro',
     'transferencia': 'Transferência',
   };
+
+  DateTime? _tryParseDateFromText(String text) {
+    final regex = RegExp(r'(\d{2})[\/-](\d{2})[\/-](\d{2,4})');
+    final match = regex.firstMatch(text);
+    if (match == null) return null;
+
+    final day = int.tryParse(match.group(1)!);
+    final month = int.tryParse(match.group(2)!);
+    var year = int.tryParse(match.group(3)!);
+    if (day == null || month == null || year == null) return null;
+    if (year < 100) year += 2000;
+
+    try {
+      return DateTime(year, month, day);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _scanExpiryDateWithOcr() async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: ImageSource.camera);
+    if (file == null) return;
+
+    final inputImage = InputImage.fromFilePath(file.path);
+    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    try {
+      final result = await recognizer.processImage(inputImage);
+      final parsed = _tryParseDateFromText(result.text);
+
+      if (parsed == null) {
+        if (!mounted) return;
+        showCasaSnackbar(
+          context,
+          message: 'Nao foi possivel identificar uma data valida.',
+          isError: true,
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      final fmt = DateFormat('dd/MM/yyyy');
+      final confirm = await CasaDialogConfirmacao.show(
+        context: context,
+        title: 'Confirmar validade',
+        message: 'Data sugerida pelo OCR: ${fmt.format(parsed)}',
+        confirmLabel: 'Usar data',
+        cancelLabel: 'Cancelar',
+      );
+
+      if (confirm == true && mounted) {
+        setState(() {
+          _expiryDate = parsed;
+          _noExpiry = false;
+        });
+      }
+    } finally {
+      await recognizer.close();
+    }
+  }
 
   @override
   void dispose() {
@@ -241,6 +303,15 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                             : AppColors.neutral500,
                       ),
                     ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _scanExpiryDateWithOcr,
+                    icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                    label: const Text('Ler validade pela câmera (OCR)'),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
