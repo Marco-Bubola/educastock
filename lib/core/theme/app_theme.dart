@@ -336,5 +336,161 @@ class AppTheme {
         progressIndicatorTheme: const ProgressIndicatorThemeData(
           color: AppColors.secondarySky500,
         ),
+
+        // ElevatedButton
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.brandPrimary500,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: const Color(0xFF1F2937),
+            disabledForegroundColor: const Color(0xFF6B7280),
+            elevation: 0,
+            minimumSize: const Size(double.infinity, 52),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xl,
+              vertical: AppSpacing.md,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.button),
+            ),
+            textStyle: AppTypography.buttonLarge,
+          ),
+        ),
+
+        // OutlinedButton
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.secondarySky500,
+            minimumSize: const Size(double.infinity, 52),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xl,
+              vertical: AppSpacing.md,
+            ),
+            side: const BorderSide(color: AppColors.secondarySky500, width: 1.5),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.button),
+            ),
+            textStyle: AppTypography.buttonLarge,
+          ),
+        ),
+
+        // TextButton
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.secondarySky500,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.sm,
+            ),
+            textStyle: AppTypography.buttonMedium,
+          ),
+        ),
+
+        // Chips
+        chipTheme: ChipThemeData(
+          backgroundColor: const Color(0xFF1F2937),
+          selectedColor: const Color(0xFF173D63),
+          side: BorderSide.none,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+          labelStyle: AppTypography.labelMedium.copyWith(
+            color: const Color(0xFFE5E7EB),
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.xs,
+          ),
+        ),
+
+        // BottomNavigation
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xFF0F172A),
+          indicatorColor: const Color(0xFF173D63),
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const IconThemeData(color: AppColors.secondarySky500, size: 24);
+            }
+            return const IconThemeData(color: Color(0xFF6B7280), size: 24);
+          }),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppTypography.labelSmall.copyWith(
+                color: AppColors.secondarySky500,
+                fontWeight: FontWeight.w600,
+              );
+            }
+            return AppTypography.labelSmall.copyWith(
+              color: const Color(0xFF6B7280),
+            );
+          }),
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
+
+        // FAB
+        floatingActionButtonTheme: FloatingActionButtonThemeData(
+          backgroundColor: AppColors.brandPrimary500,
+          foregroundColor: Colors.white,
+          elevation: AppElevation.medium,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+        ),
+
+        // SnackBar
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: const Color(0xFF1F2937),
+          contentTextStyle: AppTypography.bodyMedium.copyWith(
+            color: const Color(0xFFE5E7EB),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
+        ),
+
+        // Dialog
+        dialogTheme: DialogThemeData(
+          backgroundColor: const Color(0xFF111827),
+          elevation: AppElevation.high,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.modal),
+          ),
+          titleTextStyle: AppTypography.headingMedium.copyWith(
+            color: const Color(0xFFE5E7EB),
+          ),
+          contentTextStyle: AppTypography.bodyMedium.copyWith(
+            color: const Color(0xFFD1D5DB),
+          ),
+        ),
+
+        // BottomSheet
+        bottomSheetTheme: const BottomSheetThemeData(
+          backgroundColor: Color(0xFF111827),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.modal),
+            ),
+          ),
+          elevation: AppElevation.high,
+        ),
+
+        // ListTile
+        listTileTheme: ListTileThemeData(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.xs,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
+          titleTextStyle: AppTypography.bodyLarge.copyWith(
+            color: const Color(0xFFE5E7EB),
+          ),
+          subtitleTextStyle: AppTypography.bodySmall.copyWith(
+            color: const Color(0xFF9CA3AF),
+          ),
+        ),
       );
 }
