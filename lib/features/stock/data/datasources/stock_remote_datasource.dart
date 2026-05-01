@@ -19,7 +19,7 @@ class StockRemoteDatasource {
     required String batchId,
     required int previousQuantity,
     required int newQuantity,
-    required bool shouldUpdateStatus,
+    String? nextStatus,
   }) async {
     await _db.runTransaction((tx) async {
       final movRef = _movements.doc();
@@ -28,7 +28,7 @@ class StockRemoteDatasource {
       final batchRef = _db.collection('batches').doc(batchId);
       tx.update(batchRef, {
         'quantity': newQuantity,
-        if (shouldUpdateStatus) 'status': 'distribuido',
+        if (nextStatus != null) 'status': nextStatus,
       });
 
       final auditRef = _auditLogs.doc();
