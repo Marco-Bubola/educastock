@@ -19,7 +19,7 @@ class DashboardPage extends ConsumerWidget {
     final allBatches = ref.watch(allAvailableBatchesProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: ModernProfileAppBar(
         title: 'EducaStock',
         subtitle: 'Painel operacional',
@@ -41,80 +41,69 @@ class DashboardPage extends ConsumerWidget {
             const SizedBox(height: AppSpacing.sm),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: GridView(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: AppSpacing.md,
-                  crossAxisSpacing: AppSpacing.md,
-                  childAspectRatio: 1.2,
+              child: SizedBox(
+                height: 116,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: allBatches.when(
+                        data: (batches) => _KpiCard(
+                          label: 'Lotes',
+                          value: '${batches.length}',
+                          icon: Icons.inventory_2_rounded,
+                          gradientColors: const [Color(0xFF1D5FA8), Color(0xFF2F74C0)],
+                          onTap: () => context.go(AppRoutes.productList),
+                        ),
+                        loading: () => const _KpiCardSkeleton(),
+                        error: (_, __) => const _KpiCard(
+                          label: 'Lotes',
+                          value: '-',
+                          icon: Icons.inventory_2_rounded,
+                          gradientColors: [Color(0xFF1D5FA8), Color(0xFF2F74C0)],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: expiringCritical.when(
+                        data: (batches) => _KpiCard(
+                          label: 'Vencem 7d',
+                          value: '${batches.length}',
+                          icon: Icons.warning_rounded,
+                          gradientColors: const [Color(0xFFC53030), Color(0xFFE53E3E)],
+                          badge: batches.isNotEmpty ? '${batches.length}' : null,
+                          onTap: () => context.go(AppRoutes.alerts),
+                        ),
+                        loading: () => const _KpiCardSkeleton(),
+                        error: (_, __) => const _KpiCard(
+                          label: 'Vencem 7d',
+                          value: '-',
+                          icon: Icons.warning_rounded,
+                          gradientColors: [Color(0xFFC53030), Color(0xFFE53E3E)],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: expiringWarning.when(
+                        data: (batches) => _KpiCard(
+                          label: 'Atenção 30d',
+                          value: '${batches.length}',
+                          icon: Icons.schedule_rounded,
+                          gradientColors: const [Color(0xFFB7791F), Color(0xFFD69E2E)],
+                          onTap: () => context.go(AppRoutes.alerts),
+                        ),
+                        loading: () => const _KpiCardSkeleton(),
+                        error: (_, __) => const _KpiCard(
+                          label: 'Atenção 30d',
+                          value: '-',
+                          icon: Icons.schedule_rounded,
+                          gradientColors: [Color(0xFFB7791F), Color(0xFFD69E2E)],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  // Total lotes disponíveis
-                  allBatches.when(
-                    data: (batches) => CasaInfoCard(
-                      title: 'Lotes Disponíveis',
-                      value: '${batches.length}',
-                      icon: Icons.inventory_2_outlined,
-                      iconColor: AppColors.brandPrimary600,
-                      onTap: () => context.go(AppRoutes.productList),
-                    ),
-                    loading: () => const CasaCardSkeleton(),
-                    error: (_, __) => const CasaInfoCard(
-                      title: 'Lotes Disponíveis',
-                      value: '-',
-                      icon: Icons.inventory_2_outlined,
-                    ),
-                  ),
-
-                  // Críticos (vence em 7 dias)
-                  expiringCritical.when(
-                    data: (batches) => CasaInfoCard(
-                      title: 'Vencem em 7 dias',
-                      value: '${batches.length}',
-                      icon: Icons.warning_rounded,
-                      iconColor: AppColors.danger600,
-                      backgroundColor: batches.isNotEmpty
-                          ? AppColors.danger600.withValues(alpha: 0.05)
-                          : null,
-                      onTap: () => context.go(AppRoutes.alerts),
-                    ),
-                    loading: () => const CasaCardSkeleton(),
-                    error: (_, __) => const CasaInfoCard(
-                      title: 'Vencem em 7 dias',
-                      value: '-',
-                      icon: Icons.warning_rounded,
-                      iconColor: AppColors.danger600,
-                    ),
-                  ),
-
-                  // Atenção (30 dias)
-                  expiringWarning.when(
-                    data: (batches) => CasaInfoCard(
-                      title: 'Vencem em 30 dias',
-                      value: '${batches.length}',
-                      icon: Icons.schedule_rounded,
-                      iconColor: AppColors.warning600,
-                      onTap: () => context.go(AppRoutes.alerts),
-                    ),
-                    loading: () => const CasaCardSkeleton(),
-                    error: (_, __) => const CasaInfoCard(
-                      title: 'Vencem em 30 dias',
-                      value: '-',
-                      icon: Icons.schedule_rounded,
-                      iconColor: AppColors.warning600,
-                    ),
-                  ),
-
-                  CasaInfoCard(
-                    title: 'Relatórios',
-                    value: 'Ver',
-                    icon: Icons.bar_chart_rounded,
-                    iconColor: AppColors.secondaryBlue600,
-                    onTap: () => context.go(AppRoutes.reports),
-                  ),
-                ],
               ),
             ),
 
@@ -125,57 +114,84 @@ class DashboardPage extends ConsumerWidget {
             const SizedBox(height: AppSpacing.sm),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: Column(
-                children: [
-                  _QuickActionTile(
-                    icon: Icons.qr_code_scanner_rounded,
-                    label: 'Escanear Produto',
-                    subtitle: 'Cadastrar entrada por código de barras',
-                    color: AppColors.brandPrimary600,
-                    onTap: () => context.push(AppRoutes.scanner),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _QuickActionTile(
-                    icon: Icons.list_alt_rounded,
-                    label: 'Estoque',
-                    subtitle: 'Ver todos os produtos e lotes',
-                    color: AppColors.secondaryBlue600,
-                    onTap: () => context.go(AppRoutes.productList),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _QuickActionTile(
-                    icon: Icons.swap_horiz_rounded,
-                    label: 'Movimentação',
-                    subtitle: 'Registrar entrada, saída ou ajuste',
-                    color: AppColors.success600,
-                    onTap: () => context.push(
-                        '${AppRoutes.movement}?batchId='),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _QuickActionTile(
-                    icon: Icons.menu_book_rounded,
-                    label: 'Receitas',
-                    subtitle: 'Baixa automática por receita',
-                    color: AppColors.brandPrimary600,
-                    onTap: () => context.push(AppRoutes.recipes),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _QuickActionTile(
-                    icon: Icons.history_rounded,
-                    label: 'Auditoria',
-                    subtitle: 'Histórico de alterações',
-                    color: AppColors.neutral700,
-                    onTap: () => context.push(AppRoutes.audit),
-                  ),
-                   const SizedBox(height: AppSpacing.sm),
-                   _QuickActionTile(
-                     icon: Icons.add_location_alt_rounded,
-                     label: 'Localizações',
-                     subtitle: 'Gerenciar seções e prateleiras',
-                     color: AppColors.secondaryBlue600,
-                     onTap: () => context.push(AppRoutes.locations),
-                   ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final cross = constraints.maxWidth >= 900
+                      ? 4
+                      : constraints.maxWidth >= 620
+                          ? 3
+                          : 2;
+                  return GridView.count(
+                    crossAxisCount: cross,
+                    mainAxisSpacing: AppSpacing.sm,
+                    crossAxisSpacing: AppSpacing.sm,
+                    childAspectRatio: 1.72,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      _AnimatedQuickAction(
+                        delayMs: 0,
+                        child: _QuickActionTile(
+                          icon: Icons.qr_code_scanner_rounded,
+                          label: 'Escanear',
+                          subtitle: 'Entrada por código',
+                          color: AppColors.brandPrimary600,
+                          onTap: () => context.push(AppRoutes.scanner),
+                        ),
+                      ),
+                      _AnimatedQuickAction(
+                        delayMs: 60,
+                        child: _QuickActionTile(
+                          icon: Icons.list_alt_rounded,
+                          label: 'Estoque',
+                          subtitle: 'Produtos e lotes',
+                          color: AppColors.secondaryBlue600,
+                          onTap: () => context.go(AppRoutes.productList),
+                        ),
+                      ),
+                      _AnimatedQuickAction(
+                        delayMs: 120,
+                        child: _QuickActionTile(
+                          icon: Icons.outbound_rounded,
+                          label: 'Saída',
+                          subtitle: 'Baixa de estoque',
+                          color: AppColors.danger600,
+                          onTap: () => context.push('${AppRoutes.movement}?batchId='),
+                        ),
+                      ),
+                      _AnimatedQuickAction(
+                        delayMs: 180,
+                        child: _QuickActionTile(
+                          icon: Icons.menu_book_rounded,
+                          label: 'Receitas',
+                          subtitle: 'Saída automática',
+                          color: AppColors.brandPrimary600,
+                          onTap: () => context.push(AppRoutes.recipes),
+                        ),
+                      ),
+                      _AnimatedQuickAction(
+                        delayMs: 240,
+                        child: _QuickActionTile(
+                          icon: Icons.notifications_active_rounded,
+                          label: 'Alertas',
+                          subtitle: 'Prazos e riscos',
+                          color: AppColors.warning600,
+                          onTap: () => context.go(AppRoutes.alerts),
+                        ),
+                      ),
+                      _AnimatedQuickAction(
+                        delayMs: 300,
+                        child: _QuickActionTile(
+                          icon: Icons.add_location_alt_rounded,
+                          label: 'Localizações',
+                          subtitle: 'Estrutura física',
+                          color: AppColors.secondaryBlue600,
+                          onTap: () => context.push(AppRoutes.locations),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
 
@@ -243,59 +259,108 @@ class _QuickActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(AppRadius.card),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 1),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: isDark ? 0.16 : 0.09),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: color.withValues(alpha: isDark ? 0.35 : 0.22),
+              width: 1.5,
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.small),
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: AppTypography.labelLarge.copyWith(
-                      color: AppColors.neutral900,
-                      fontWeight: FontWeight.w600,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [color, color.withValues(alpha: 0.75)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.4),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
-                  Text(
-                    subtitle,
-                    style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.neutral500,
+                  child: Icon(icon, color: Colors.white, size: 18),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.labelMedium.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: AppColors.neutral500, size: 20),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _AnimatedQuickAction extends StatelessWidget {
+  final int delayMs;
+  final Widget child;
+
+  const _AnimatedQuickAction({
+    required this.delayMs,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 350 + delayMs),
+      curve: Curves.easeOutCubic,
+      builder: (_, value, c) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 16 * (1 - value)),
+            child: c,
+          ),
+        );
+      },
+      child: child,
     );
   }
 }
@@ -306,6 +371,7 @@ class _AlertBatchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
@@ -327,7 +393,7 @@ class _AlertBatchTile extends StatelessWidget {
                 Text(
                   batch.productName as String,
                   style: AppTypography.labelLarge.copyWith(
-                    color: AppColors.neutral900,
+                    color: onSurface,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -342,6 +408,125 @@ class _AlertBatchTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// KPI card colorido (linha horizontal)
+// ---------------------------------------------------------------------------
+
+class _KpiCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final List<Color> gradientColors;
+  final String? badge;
+  final VoidCallback? onTap;
+
+  const _KpiCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.gradientColors,
+    this.badge,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors.first.withValues(alpha: 0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 22),
+                const SizedBox(height: 6),
+                Text(
+                  value,
+                  style: AppTypography.numberMedium.copyWith(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.labelSmall.copyWith(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+            if (badge != null)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 4,
+                          offset: const Offset(0, 1)),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      badge!,
+                      style: TextStyle(
+                        color: gradientColors.first,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KpiCardSkeleton extends StatelessWidget {
+  const _KpiCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
     );
   }
