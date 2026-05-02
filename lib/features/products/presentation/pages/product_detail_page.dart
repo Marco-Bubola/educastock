@@ -20,41 +20,235 @@ class ProductDetailPage extends ConsumerWidget {
     final batchesAsync = ref.watch(batchesByProductProvider(productId));
     final productAsync = ref.watch(productByIdProvider(productId));
 
-    return Scaffold(
-      backgroundColor: cs.surface,
-      body: productAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erro: $e')),
-        data: (p) {
-          if (p == null) {
-            return const Center(child: Text('Produto não encontrado'));
-          }
-          return CustomScrollView(
-            slivers: [
-              // ─── SliverAppBar com gradiente
-              SliverAppBar(
-                expandedHeight: 200,
-                pinned: true,
-                backgroundColor: AppColors.brandPrimary600,
-                foregroundColor: Colors.white,
-                leading: IconButton(
-                  icon: Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.arrow_back_rounded,
-                        color: Colors.white, size: 18),
-                  ),
-                  onPressed: () => context.pop(),
+    return productAsync.when(
+      loading: () => Scaffold(
+        backgroundColor: cs.surface,
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Scaffold(
+        backgroundColor: cs.surface,
+        body: Center(child: Text('Erro: $e')),
+      ),
+      data: (p) {
+        if (p == null) {
+          return Scaffold(
+            backgroundColor: cs.surface,
+            appBar: AppBar(backgroundColor: cs.surface),
+            body: const Center(child: Text('Produto não encontrado')),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: cs.surface,
+          // ─── AppBar: voltar | nome | editar na mesma linha
+          appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(100),
+            child: _ProductAppBar(
+              product: p,
+              productId: productId,
+              context: context,
+            ),
+          ),
+          body: SafeArea(
+            child: batchesAsync.when(
+              loading: () => ListView.builder(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                itemCount: 4,
+                itemBuilder: (_, __) => const Padding(
+                  padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: CasaCardSkeleton(),
                 ),
-                actions: [
+              ),
+              error: (e, _) => Center(child: Text('Erro: $e')),
+              data: (batches) {
+                final totalQty =
+                    batches.fold<int>(0, (s, b) => s + b.quantity);
+                final totalValue = batches.fold<double>(
+                    0, (s, b) => s + ((b.unitPrice ?? 0) * b.quantity));
+                final critical = batches
+                    .where((b) => !b.noExpiry && b.daysToExpiry <= 7 && !b.isExpired)
+                    .length;
+                final expired =
+                    batches.where((b) => b.isExpired).length;
+
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                      AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
+                  children: [
+                    // ─── Stats row
+                    _StatsRow(
+                      totalBatches: batches.length,
+                      totalQty: totalQty,
+                      totalValue: totalValue,
+                      critical: critical,
+                      expired: expired,
+                      cs: cs,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ─── Informações do produto
+                    CasaSectionHeader(
+                      title: 'Informações',
+                      action: 'Editar',
+                      onAction: () => context.push(
+                          '${AppRoutes.productForm}?id=$productId'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _ProductInfoCard(
+                        product: p, cs: cs, isDark: isDark),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ─── Lotes
+                    CasaSectionHeader(
+                      title: 'Lotes',
+                      count: batches.length,
+                      action: 'Novo Lote',
+                      onAction: () => context.push(
+                          '${AppRoutes.batchForm}?productId=$productId'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+
+                    if (batches.isEmpty)
+                      CasaEmptyState(
+                        icon: Icons.inbox_outlined,
+                        title: 'Nenhum lote cadastrado',
+                        description:
+                            'Cadastre o primeiro lote para controlar a validade.',
+                        ctaLabel: 'Cadastrar Lote',
+                        onCta: () => context.push(
+                            '${AppRoutes.batchForm}?productId=$productId'),
+                      )
+                    else
+                      ...batches.map((b) => Padding(
+                            padding: const EdgeInsets.only(
+                                bottom: AppSpacing.md),
+                            child: _BatchCard(
+                              batch: b,
+                              cs: cs,
+                              isDark: isDark,
+                              onMovement: () => context.push(
+                                  '${AppRoutes.movement}?batchId=${b.id}'),
+                              onEdit: () => context.push(
+                                  '${AppRoutes.batchForm}?id=${b.id}&productId=$productId'),
+                            ),
+                          )),
+                  ],
+                );
+              },
+            ),
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => context
+                .push('${AppRoutes.batchForm}?productId=$productId'),
+            backgroundColor: AppColors.brandPrimary600,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Novo Lote'),
+            elevation: 6,
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── AppBar personalizada ─────────────────────────────────────────────────
+
+class _ProductAppBar extends StatelessWidget {
+  final Product product;
+  final String productId;
+  final BuildContext context;
+  const _ProductAppBar(
+      {required this.product,
+      required this.productId,
+      required this.context});
+
+  @override
+  Widget build(BuildContext buildContext) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.brandPrimary600, AppColors.secondaryBlue600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // ─── Linha principal: ← | ícone + nome | ✏️
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+              child: Row(
+                children: [
+                  // Botão voltar
                   IconButton(
                     icon: Container(
-                      width: 34,
-                      height: 34,
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.arrow_back_rounded,
+                          color: Colors.white, size: 18),
+                    ),
+                    onPressed: () => context.pop(),
+                  ),
+                  // Ícone do produto
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.25)),
+                    ),
+                    child: product.imageUrl != null &&
+                            (product.imageUrl!).isNotEmpty
+                        ? ClipRRect(
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.card),
+                            child: Image.network(product.imageUrl!,
+                                fit: BoxFit.cover),
+                          )
+                        : const Icon(Icons.inventory_2_rounded,
+                            color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  // Nome + marca
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          product.name,
+                          style: AppTypography.headingSmall
+                              .copyWith(color: Colors.white, fontSize: 16),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if ((product.brand ?? '').isNotEmpty)
+                          Text(
+                            product.brand!,
+                            style: AppTypography.bodySmall.copyWith(
+                                color:
+                                    Colors.white.withValues(alpha: 0.75)),
+                            maxLines: 1,
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Botão editar
+                  IconButton(
+                    icon: Container(
+                      width: 36,
+                      height: 36,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
@@ -66,197 +260,30 @@ class ProductDetailPage extends ConsumerWidget {
                         .push('${AppRoutes.productForm}?id=$productId'),
                   ),
                 ],
-                flexibleSpace: FlexibleSpaceBar(
-                  background: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColors.brandPrimary600,
-                          AppColors.secondaryBlue600,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                            AppSpacing.lg, 56, AppSpacing.lg, AppSpacing.lg),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 70,
-                              height: 70,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.card),
-                                border: Border.all(
-                                    color:
-                                        Colors.white.withValues(alpha: 0.3)),
-                              ),
-                              child: const Icon(Icons.inventory_2_rounded,
-                                  color: Colors.white, size: 36),
-                            ),
-                            const SizedBox(width: AppSpacing.md),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    p.name,
-                                    style: AppTypography.headingMedium
-                                        .copyWith(color: Colors.white),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  if ((p.brand ?? '').isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      p.brand!,
-                                      style: AppTypography.bodyMedium
-                                          .copyWith(
-                                              color: Colors.white
-                                                  .withValues(alpha: 0.8)),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 6),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
-                                    children: [
-                                      _HeaderChip(p.unit),
-                                  if (p.isPerishable)
-                                        _HeaderChip('Perecível',
-                                            icon: Icons.schedule_rounded,
-                                            color: const Color(0xFFFFD580)),
-                                      if ((p.barcode ?? '').isNotEmpty)
-                                        _HeaderChip('Cód. barras',
-                                            icon: Icons.qr_code_rounded),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
               ),
-
-              // ─── Conteúdo
-              SliverToBoxAdapter(
-                child: batchesAsync.when(
-                  loading: () => ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(AppSpacing.lg),
-                    itemCount: 3,
-                    itemBuilder: (_, __) => const Padding(
-                      padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: CasaCardSkeleton(),
-                    ),
-                  ),
-                  error: (e, _) =>
-                      Center(child: Text('Erro ao carregar lotes: $e')),
-                  data: (batches) {
-                    final totalQty = batches.fold<int>(
-                        0, (sum, b) => sum + b.quantity);
-                    final totalValue = batches.fold<double>(
-                        0,
-                        (sum, b) =>
-                            sum +
-                            ((b.unitPrice ?? 0) * b.quantity));
-                    final expiring7 = batches
-                        .where((b) => !b.noExpiry && b.daysToExpiry <= 7)
-                        .length;
-                    final expired = batches
-                        .where((b) => b.isExpired)
-                        .length;
-
-                    return Padding(
-                      padding: const EdgeInsets.all(AppSpacing.lg),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // ─── Painel de estatísticas rápidas
-                          _StatsRow(
-                            totalBatches: batches.length,
-                            totalQty: totalQty,
-                            totalValue: totalValue,
-                            expiring7: expiring7,
-                            expired: expired,
-                            isDark: isDark,
-                            cs: cs,
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-
-                          // ─── Seção de informações do produto
-                          CasaSectionHeader(
-                            title: 'Informações',
-                            action: 'Editar',
-                            onAction: () => context.push(
-                                '${AppRoutes.productForm}?id=$productId'),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          _ProductInfoCard(product: p, cs: cs, isDark: isDark),
-                          const SizedBox(height: AppSpacing.lg),
-
-                          // ─── Seção de lotes
-                          CasaSectionHeader(
-                            title: 'Lotes',
-                            count: batches.length,
-                            action: 'Novo Lote',
-                            onAction: () => context.push(
-                                '${AppRoutes.batchForm}?productId=$productId'),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-
-                          if (batches.isEmpty)
-                            CasaEmptyState(
-                              icon: Icons.inbox_outlined,
-                              title: 'Nenhum lote cadastrado',
-                              description:
-                                  'Cadastre o primeiro lote para controlar a validade.',
-                              ctaLabel: 'Cadastrar Lote',
-                              onCta: () => context.push(
-                                  '${AppRoutes.batchForm}?productId=$productId'),
-                            )
-                          else
-                            ...batches.map((b) => Padding(
-                                  padding: const EdgeInsets.only(
-                                      bottom: AppSpacing.sm),
-                                  child: _BatchCard(
-                                    batch: b,
-                                    cs: cs,
-                                    isDark: isDark,
-                                    onMovement: () => context.push(
-                                        '${AppRoutes.movement}?batchId=${b.id}'),
-                                    onEdit: () => context.push(
-                                        '${AppRoutes.batchForm}?id=${b.id}&productId=$productId'),
-                                  ),
-                                )),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+            ),
+            // ─── Chips de atributos
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, 0, AppSpacing.lg, 10),
+              child: Row(
+                children: [
+                  _HeaderChip(product.unit),
+                  const SizedBox(width: 6),
+                  if (product.isPerishable)
+                    _HeaderChip('Perecível',
+                        icon: Icons.schedule_rounded,
+                        color: const Color(0xFFFFD580)),
+                  if ((product.barcode ?? '').isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    _HeaderChip('Cód. barras',
+                        icon: Icons.qr_code_rounded),
+                  ],
+                ],
               ),
-            ],
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () =>
-            context.push('${AppRoutes.batchForm}?productId=$productId'),
-        backgroundColor: AppColors.brandPrimary600,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Novo Lote'),
-        elevation: 6,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -301,23 +328,29 @@ class _StatsRow extends StatelessWidget {
   final int totalBatches;
   final int totalQty;
   final double totalValue;
-  final int expiring7;
+  final int critical;
   final int expired;
-  final bool isDark;
   final ColorScheme cs;
   const _StatsRow(
       {required this.totalBatches,
       required this.totalQty,
       required this.totalValue,
-      required this.expiring7,
+      required this.critical,
       required this.expired,
-      required this.isDark,
       required this.cs});
 
   @override
   Widget build(BuildContext context) {
-    final currFmt =
-        NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$', decimalDigits: 0);
+    final currFmt = NumberFormat.currency(
+        locale: 'pt_BR', symbol: 'R\$', decimalDigits: 0);
+    final alertCount = expired > 0 ? expired : critical;
+    final alertLabel = expired > 0 ? 'Vencidos' : 'Críticos';
+    final alertColor =
+        expired > 0 ? AppColors.danger600 : AppColors.warning600;
+    final alertIcon = expired > 0
+        ? Icons.cancel_outlined
+        : Icons.warning_amber_rounded;
+
     return Row(
       children: [
         _StatCard(
@@ -326,7 +359,6 @@ class _StatsRow extends StatelessWidget {
           icon: Icons.layers_rounded,
           color: AppColors.brandPrimary600,
           cs: cs,
-          isDark: isDark,
         ),
         const SizedBox(width: AppSpacing.sm),
         _StatCard(
@@ -335,7 +367,6 @@ class _StatsRow extends StatelessWidget {
           icon: Icons.widgets_outlined,
           color: AppColors.secondaryBlue600,
           cs: cs,
-          isDark: isDark,
         ),
         const SizedBox(width: AppSpacing.sm),
         _StatCard(
@@ -344,19 +375,15 @@ class _StatsRow extends StatelessWidget {
           icon: Icons.attach_money_rounded,
           color: AppColors.success600,
           cs: cs,
-          isDark: isDark,
           flex: 2,
         ),
         const SizedBox(width: AppSpacing.sm),
         _StatCard(
-          label: expired > 0 ? 'Vencidos' : 'Críticos',
-          value: expired > 0 ? '$expired' : '$expiring7',
-          icon: expired > 0
-              ? Icons.cancel_outlined
-              : Icons.warning_amber_rounded,
-          color: expired > 0 ? AppColors.danger600 : AppColors.warning600,
+          label: alertLabel,
+          value: '$alertCount',
+          icon: alertIcon,
+          color: alertColor,
           cs: cs,
-          isDark: isDark,
         ),
       ],
     );
@@ -369,7 +396,6 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final ColorScheme cs;
-  final bool isDark;
   final int flex;
   const _StatCard(
       {required this.label,
@@ -377,7 +403,6 @@ class _StatCard extends StatelessWidget {
       required this.icon,
       required this.color,
       required this.cs,
-      required this.isDark,
       this.flex = 1});
 
   @override
@@ -390,13 +415,10 @@ class _StatCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(
-              color: color.withValues(alpha: 0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 4,
-            )
+                color: Colors.black.withValues(alpha: 0.03), blurRadius: 4)
           ],
         ),
         child: Column(
@@ -407,18 +429,15 @@ class _StatCard extends StatelessWidget {
             Text(
               value,
               style: AppTypography.headingSmall.copyWith(
-                color: cs.onSurface,
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-              ),
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            Text(
-              label,
-              style: AppTypography.labelSmall.copyWith(
-                  color: cs.onSurfaceVariant, fontSize: 10),
-            ),
+            Text(label,
+                style: AppTypography.labelSmall
+                    .copyWith(color: cs.onSurfaceVariant, fontSize: 10)),
           ],
         ),
       ),
@@ -443,22 +462,28 @@ class _ProductInfoCard extends StatelessWidget {
       _InfoDef(Icons.category_outlined, 'Categoria', product.category.name),
       _InfoDef(Icons.straighten_rounded, 'Unidade', product.unit),
       if ((product.barcode ?? '').isNotEmpty)
-        _InfoDef(Icons.qr_code_rounded, 'Código de Barras', product.barcode!),
+        _InfoDef(
+            Icons.qr_code_rounded, 'Código de Barras', product.barcode!),
       _InfoDef(
-        product.isPerishable ? Icons.schedule_rounded : Icons.shield_outlined,
+        product.isPerishable
+            ? Icons.schedule_rounded
+            : Icons.shield_outlined,
         'Tipo',
         product.isPerishable ? 'Perecível' : 'Não perecível',
       ),
       if (product.minimumStock > 0)
         _InfoDef(Icons.warning_amber_rounded, 'Estoque mínimo',
             '${product.minimumStock}'),
+      if ((product.description ?? '').isNotEmpty)
+        _InfoDef(Icons.notes_rounded, 'Descrição', product.description!),
     ];
 
     return Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+        border:
+            Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
@@ -546,8 +571,8 @@ class _BatchCard extends StatelessWidget {
 
   Color _statusColor() {
     if (batch.noExpiry) return AppColors.success600;
+    if (batch.isExpired) return AppColors.danger600;
     final u = batch.daysToExpiry;
-    if (u < 0) return AppColors.danger600;
     if (u <= 7) return AppColors.danger600;
     if (u <= 30) return AppColors.warning600;
     return AppColors.success600;
@@ -555,8 +580,8 @@ class _BatchCard extends StatelessWidget {
 
   String _statusLabel() {
     if (batch.noExpiry) return 'Sem validade';
+    if (batch.isExpired) return 'Vencido';
     final u = batch.daysToExpiry;
-    if (u < 0) return 'Vencido';
     if (u <= 7) return 'Crítico';
     if (u <= 30) return 'Atenção';
     return 'OK';
@@ -564,12 +589,20 @@ class _BatchCard extends StatelessWidget {
 
   IconData _statusIcon() {
     if (batch.noExpiry) return Icons.all_inclusive_rounded;
+    if (batch.isExpired) return Icons.cancel_outlined;
     final u = batch.daysToExpiry;
-    if (u < 0) return Icons.cancel_outlined;
     if (u <= 7) return Icons.warning_rounded;
     if (u <= 30) return Icons.schedule_rounded;
     return Icons.check_circle_outline_rounded;
   }
+
+  String _originLabel() => switch (batch.origin) {
+        'doacao' => 'Doação',
+        'compra' => 'Compra',
+        'parceiro' => 'Parceiro',
+        'transferencia' => 'Transferência',
+        _ => batch.origin,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -584,7 +617,7 @@ class _BatchCard extends StatelessWidget {
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border(
-          left: BorderSide(color: statusColor, width: 3),
+          left: BorderSide(color: statusColor, width: 4),
           top: BorderSide(
               color: cs.outlineVariant.withValues(alpha: 0.35)),
           right: BorderSide(
@@ -594,14 +627,15 @@ class _BatchCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 6,
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── Cabeçalho do lote
+          // ─── Cabeçalho: status + dias + ações
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.md, AppSpacing.sm, AppSpacing.sm, 0),
@@ -609,36 +643,40 @@ class _BatchCard extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
+                      horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border: Border.all(
+                        color: statusColor.withValues(alpha: 0.3),
+                        width: 1),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(_statusIcon(), size: 12, color: statusColor),
-                      const SizedBox(width: 4),
+                      Icon(_statusIcon(), size: 13, color: statusColor),
+                      const SizedBox(width: 5),
                       Text(
                         _statusLabel(),
                         style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 12,
                             color: statusColor,
                             fontWeight: FontWeight.w700),
                       ),
+                      if (!batch.noExpiry && !batch.isExpired) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          '· ${days}d',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: statusColor.withValues(alpha: 0.8),
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                if (!batch.noExpiry && days >= 0) ...[
-                  const SizedBox(width: AppSpacing.xs),
-                  Text(
-                    '${days}d',
-                    style: AppTypography.numberSmall.copyWith(
-                        color: statusColor, fontWeight: FontWeight.w800),
-                  ),
-                ],
                 const Spacer(),
-                // Ações rápidas
                 _ActionBtn(
                   icon: Icons.swap_horiz_rounded,
                   label: 'Movimentar',
@@ -655,66 +693,204 @@ class _BatchCard extends StatelessWidget {
               ],
             ),
           ),
-          // ─── Grade de informações (2 colunas)
+
+          // ─── Destaque de vencimento / sem validade
+          if (!batch.noExpiry) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.event_rounded,
+                        size: 16, color: statusColor),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      batch.isExpired
+                          ? 'Vencido em ${batch.expiryDate != null ? fmt.format(batch.expiryDate!) : '?'}'
+                          : batch.expiryDate != null
+                              ? 'Vence em ${fmt.format(batch.expiryDate!)}  •  $days dia${days == 1 ? '' : 's'} restante${days == 1 ? '' : 's'}'
+                              : 'Sem data de vencimento',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: statusColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          // ─── Informações principais
           Padding(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            child: GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 4.5,
-              mainAxisSpacing: AppSpacing.xs,
-              crossAxisSpacing: AppSpacing.sm,
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
+            child: Column(
               children: [
-                _BatchInfoCell(
-                  icon: Icons.widgets_outlined,
-                  label: 'Quantidade',
-                  value: '${batch.quantity}',
-                  cs: cs,
+                // Quantidade + Localização (linha de destaque)
+                Row(
+                  children: [
+                    _InfoChip(
+                      icon: Icons.widgets_outlined,
+                      label: '${batch.quantity} ${_unitSuffix()}',
+                      color: AppColors.brandPrimary600,
+                      cs: cs,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    if ((batch.shelfLocation ?? '').isNotEmpty)
+                      Expanded(
+                        child: _InfoChip(
+                          icon: Icons.location_on_rounded,
+                          label: batch.shelfLocation!,
+                          color: AppColors.secondaryBlue600,
+                          cs: cs,
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: _InfoChip(
+                          icon: Icons.location_off_outlined,
+                          label: 'Sem localização',
+                          color: cs.onSurfaceVariant,
+                          cs: cs,
+                          muted: true,
+                        ),
+                      ),
+                  ],
                 ),
-                if (batch.expiryDate != null && !batch.noExpiry)
-                  _BatchInfoCell(
-                    icon: Icons.event_rounded,
-                    label: 'Validade',
-                    value: fmt.format(batch.expiryDate!),
-                    cs: cs,
-                  ),
-                if ((batch.batchNumber ?? '').isNotEmpty)
-                  _BatchInfoCell(
-                    icon: Icons.tag_rounded,
-                    label: 'Nº Lote',
-                    value: batch.batchNumber!,
-                    cs: cs,
-                  ),
-                if (batch.unitPrice != null)
-                  _BatchInfoCell(
-                    icon: Icons.attach_money_rounded,
-                    label: 'Preço unit.',
-                    value: currFmt.format(batch.unitPrice!),
-                    cs: cs,
-                  ),
-                if (batch.unitPrice != null)
-                  _BatchInfoCell(
-                    icon: Icons.calculate_outlined,
-                    label: 'Total est.',
-                    value:
-                        currFmt.format(batch.unitPrice! * batch.quantity),
-                    cs: cs,
-                  ),
-                if ((batch.shelfLocation ?? '').isNotEmpty)
-                  _BatchInfoCell(
-                    icon: Icons.location_on_outlined,
-                    label: 'Localização',
-                    value: batch.shelfLocation!,
-                    cs: cs,
-                  ),
-                _BatchInfoCell(
-                  icon: Icons.local_shipping_outlined,
-                  label: 'Origem',
-                  value: batch.origin,
-                  cs: cs,
+                const SizedBox(height: AppSpacing.sm),
+                // Linha 2: origem + nº lote
+                Row(
+                  children: [
+                    _InfoChip(
+                      icon: Icons.local_shipping_outlined,
+                      label: _originLabel(),
+                      color: AppColors.neutral500,
+                      cs: cs,
+                      muted: true,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    if ((batch.batchNumber ?? '').isNotEmpty)
+                      _InfoChip(
+                        icon: Icons.tag_rounded,
+                        label: 'Lote ${batch.batchNumber!}',
+                        color: AppColors.neutral500,
+                        cs: cs,
+                        muted: true,
+                      ),
+                  ],
                 ),
+                // Linha 3: preço (se houver)
+                if (batch.unitPrice != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      _InfoChip(
+                        icon: Icons.attach_money_rounded,
+                        label:
+                            '${currFmt.format(batch.unitPrice!)}/un',
+                        color: AppColors.success600,
+                        cs: cs,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      _InfoChip(
+                        icon: Icons.calculate_outlined,
+                        label:
+                            'Total: ${currFmt.format(batch.unitPrice! * batch.quantity)}',
+                        color: AppColors.success600,
+                        cs: cs,
+                      ),
+                    ],
+                  ),
+                ],
+                // Notas
+                if ((batch.notes ?? '').isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainer,
+                      borderRadius: BorderRadius.circular(AppRadius.small),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.notes_rounded,
+                            size: 13, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            batch.notes!,
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: cs.onSurfaceVariant,
+                                fontStyle: FontStyle.italic),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _unitSuffix() => '';
+}
+
+// ─── Info chip inline ─────────────────────────────────────────────────────
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final ColorScheme cs;
+  final bool muted;
+  const _InfoChip(
+      {required this.icon,
+      required this.label,
+      required this.color,
+      required this.cs,
+      this.muted = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: muted
+            ? cs.surfaceContainer
+            : color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.small),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon,
+              size: 13, color: muted ? cs.onSurfaceVariant : color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: muted ? cs.onSurfaceVariant : color,
+              fontWeight: muted ? FontWeight.w500 : FontWeight.w700,
             ),
           ),
         ],
@@ -723,49 +899,7 @@ class _BatchCard extends StatelessWidget {
   }
 }
 
-class _BatchInfoCell extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final ColorScheme cs;
-  const _BatchInfoCell(
-      {required this.icon,
-      required this.label,
-      required this.value,
-      required this.cs});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 12, color: cs.onSurfaceVariant),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(label,
-                  style: TextStyle(
-                      fontSize: 9,
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w500)),
-              Text(
-                value,
-                style: TextStyle(
-                    fontSize: 11,
-                    color: cs.onSurface,
-                    fontWeight: FontWeight.w700),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
+// ─── Action button ────────────────────────────────────────────────────────
 
 class _ActionBtn extends StatelessWidget {
   final IconData icon;
@@ -783,7 +917,8 @@ class _ActionBtn extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -804,3 +939,5 @@ class _ActionBtn extends StatelessWidget {
     );
   }
 }
+
+
