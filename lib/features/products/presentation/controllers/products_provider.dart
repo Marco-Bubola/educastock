@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/products_remote_datasource.dart';
 import '../../domain/entities/product.dart';
@@ -25,11 +26,11 @@ class ProductFormNotifier extends Notifier<AsyncValue<String?>> {
   @override
   AsyncValue<String?> build() => const AsyncValue.data(null);
 
-  Future<void> saveProduct(Product product) async {
+  Future<void> saveProduct(Product product, {File? imageFile}) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       final ds = ref.read(productsDatasourceProvider);
-      return ds.saveProduct(product);
+      return ds.saveProduct(product, imageFile: imageFile);
     });
   }
 }
