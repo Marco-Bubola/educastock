@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
@@ -399,7 +401,7 @@ class _ApiSearchView extends StatelessWidget {
 
 // ─── Ações para produto não encontrado ───────────────────────────────────
 
-class _NotFoundActions extends StatelessWidget {
+class _NotFoundActions extends StatefulWidget {
   final String barcode;
   final ColorScheme cs;
   final bool isError;
@@ -407,7 +409,71 @@ class _NotFoundActions extends StatelessWidget {
       {required this.barcode, required this.cs, this.isError = false});
 
   @override
+  State<_NotFoundActions> createState() => _NotFoundActionsState();
+}
+
+class _NotFoundActionsState extends State<_NotFoundActions> {
+  final _imagePicker = ImagePicker();
+  bool _isOcrLoading = false;
+
+  Future<void> _scanPackagingWithOcr() async {
+    final file = await _imagePicker.pickImage(source: ImageSource.camera);
+    if (file == null) return;
+
+    setState(() => _isOcrLoading = true);
+    String? productName;
+    try {
+      final inputImage = InputImage.fromFilePath(file.path);
+      final recognizer =
+          TextRecognizer(script: TextRecognitionScript.latin);
+      try {
+        final result = await recognizer.processImage(inputImage);
+        productName = _tryExtractProductName(result.text);
+      } finally {
+        await recognizer.close();
+      }
+    } catch (_) {
+      // ignora erro de OCR, abre form sem nome
+    } finally {
+      if (mounted) setState(() => _isOcrLoading = false);
+    }
+
+    if (!mounted) return;
+    final uri = Uri(
+      path: AppRoutes.productForm,
+      queryParameters: {
+        'barcode': widget.barcode,
+        if (productName != null) 'name': productName,
+      },
+    );
+    context.push(uri.toString());
+  }
+
+  String? _tryExtractProductName(String text) {
+    final lines = text
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.length >= 3 && e.length <= 50)
+        .toList();
+    for (final line in lines) {
+      final lower = line.toLowerCase();
+      if (lower.contains('lote') ||
+          lower.contains('valid') ||
+          lower.contains('ingrediente') ||
+          RegExp(r'\d{2}[\/\-]\d{2}[\/\-]\d{2,4}').hasMatch(lower)) {
+        continue;
+      }
+      if (RegExp(r'[a-zA-Z]{3,}').hasMatch(line)) return line;
+    }
+    return null;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cs = widget.cs;
+    final barcode = widget.barcode;
+    final isError = widget.isError;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -457,9 +523,35 @@ class _NotFoundActions extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: AppSpacing.md),
+        // Botão OCR — lê embalagem para preencher nome automaticamente
+        OutlinedButton.icon(
+          onPressed: _isOcrLoading ? null : _scanPackagingWithOcr,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 44),
+            side: BorderSide(
+                color: AppColors.brandPrimary600.withValues(alpha: 0.5)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.button)),
+          ),
+          icon: _isOcrLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.document_scanner_outlined, size: 18,
+                  color: AppColors.brandPrimary600),
+          label: Text(
+            _isOcrLoading
+                ? 'Lendo embalagem...'
+                : 'Ler embalagem (OCR) para preencher nome',
+            style: AppTypography.labelMedium
+                .copyWith(color: AppColors.brandPrimary600),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
         CasaButton(
-          label: 'Cadastrar Produto Novo',
+          label: 'Cadastrar Produto Manualmente',
           icon: Icons.inventory_2_outlined,
           onPressed: () =>
               context.push('${AppRoutes.productForm}?barcode=$barcode'),
