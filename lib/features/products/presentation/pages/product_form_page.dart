@@ -206,12 +206,18 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
         subtitle: isEditing ? 'Atualize os dados do produto' : 'Preencha as informações do produto',
         showBackButton: true,
       ),
+      floatingActionButton: _SaveFab(
+        isEditing: isEditing,
+        isLoading: isLoading,
+        onSave: _submit,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxl),
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
             children: [
               // Banner do código de barras
               if (widget.barcode != null) ...[
@@ -599,27 +605,76 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                   _existingImageUrl = null;
                 }),
               ),
-              const SizedBox(height: AppSpacing.xxl),
-
-              CasaButton(
-                label: isEditing ? 'Salvar Alterações' : 'Salvar e Cadastrar Lote',
-                onPressed: isLoading ? null : _submit,
-                isLoading: isLoading,
-                icon: isEditing ? Icons.save_rounded : Icons.arrow_forward_rounded,
-              ),
-              if (!isEditing) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Center(
-                  child: Text(
-                    'Após salvar o produto, você será redirecionado\npara cadastrar o primeiro lote.',
-                    textAlign: TextAlign.center,
-                    style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.neutral500,
-                    ),
-                  ),
-                ),
-              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── FAB de salvar ────────────────────────────────────────────────────────
+
+class _SaveFab extends StatelessWidget {
+  final bool isEditing;
+  final bool isLoading;
+  final VoidCallback onSave;
+  const _SaveFab(
+      {required this.isEditing,
+      required this.isLoading,
+      required this.onSave});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: isLoading
+                ? null
+                : const LinearGradient(
+                    colors: [
+                      AppColors.brandPrimary600,
+                      AppColors.secondaryBlue600
+                    ],
+                  ),
+            color: isLoading ? AppColors.neutral500 : null,
+            borderRadius: BorderRadius.circular(AppRadius.button),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.brandPrimary600.withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          child: ElevatedButton.icon(
+            onPressed: isLoading ? null : onSave,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.button)),
+            ),
+            icon: isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : Icon(
+                    isEditing ? Icons.save_rounded : Icons.arrow_forward_rounded,
+                    size: 20),
+            label: Text(
+              isEditing ? 'Salvar Alterações' : 'Salvar e Cadastrar Lote',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15),
+            ),
           ),
         ),
       ),
