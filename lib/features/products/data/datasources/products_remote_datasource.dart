@@ -1,11 +1,15 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../domain/entities/product.dart';
 
 class ProductsRemoteDatasource {
   final FirebaseFirestore _db;
+  final FirebaseStorage _storage;
 
-  ProductsRemoteDatasource({FirebaseFirestore? db})
-      : _db = db ?? FirebaseFirestore.instance;
+  ProductsRemoteDatasource({FirebaseFirestore? db, FirebaseStorage? storage})
+      : _db = db ?? FirebaseFirestore.instance,
+        _storage = storage ?? FirebaseStorage.instance;
 
   CollectionReference get _col => _db.collection('products');
 
@@ -36,12 +40,34 @@ class ProductsRemoteDatasource {
     return Product.fromMap(doc.data() as Map<String, dynamic>, doc.id);
   }
 
-  Future<String> saveProduct(Product product) async {
-    if (product.id.isEmpty) {
-      final ref = await _col.add(product.toMap());
-      return ref.id;
+  Future<String> saveProduct(Product product, {File? imageFile}) async {
+    String? imageUrl = product.imageUrl;
+
+    if (imageFile != null) {
+      final ext = imageFile.path.split('.').last;
+      final tmpId = product.id.isNotEmpty
+          ? product.id
+          : 'tmp_${DateTime.now().millisecondsSinceEpoch}';
+      final ref = _storage.ref('products/$tmpId/foto.$ext');
+      final task = await ref.putFile(imageFile);
+      imageUrl = await task.ref.getDownloadURL();
     }
-    await _col.doc(product.id).set(product.toMap());
+
+    final p = imageUrl != null ? product.copyWith(imageUrl: imageUrl) : product;
+
+    if (product.id.isEmpty) {
+      final docRef = await _col.add(p.toMap());
+      // Se a imagem foi enviada com id temporário, re-sobe com id real
+      if (imageFile != null) {
+        final ext = imageFile.path.split('.').last;
+        final newRef = _storage.ref('products/${docRef.id}/foto.$ext');
+        final task = await newRef.putFile(imageFile);
+        final finalUrl = await task.ref.getDownloadURL();
+        await docRef.update({'imageUrl': finalUrl});
+      }
+      return docRef.id;
+    }
+    await _col.doc(product.id).set(p.toMap());
     return product.id;
   }
 
