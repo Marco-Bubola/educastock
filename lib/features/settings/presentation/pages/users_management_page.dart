@@ -28,8 +28,9 @@ class UsersManagementPage extends ConsumerWidget {
       );
     }
 
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: cs.surface,
       appBar: ModernProfileAppBar(
         title: 'Gerenciar usuarias',
         subtitle: 'Controle de perfis e acessos',
@@ -45,11 +46,19 @@ class UsersManagementPage extends ConsumerWidget {
             separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (_, i) {
               final user = users[i];
+              final cs = Theme.of(context).colorScheme;
               return Container(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(
+                      color: cs.outlineVariant.withValues(alpha: 0.35)),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 6),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,9 +67,17 @@ class UsersManagementPage extends ConsumerWidget {
                       children: [
                         CircleAvatar(
                           backgroundColor: user.isActive
-                              ? AppColors.brandPrimary100
-                              : AppColors.neutral100,
-                          child: Text(user.name.substring(0, 1).toUpperCase()),
+                              ? AppColors.brandPrimary600.withValues(alpha: 0.15)
+                              : cs.surfaceContainer,
+                          child: Text(
+                            user.name.substring(0, 1).toUpperCase(),
+                            style: TextStyle(
+                              color: user.isActive
+                                  ? AppColors.brandPrimary600
+                                  : cs.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                         const SizedBox(width: AppSpacing.md),
                         Expanded(
@@ -69,10 +86,10 @@ class UsersManagementPage extends ConsumerWidget {
                             children: [
                               Text(user.name,
                                   style: AppTypography.labelLarge.copyWith(
-                                      color: AppColors.neutral900)),
+                                      color: cs.onSurface)),
                               Text(user.email,
                                   style: AppTypography.bodySmall.copyWith(
-                                      color: AppColors.neutral500)),
+                                      color: cs.onSurfaceVariant)),
                             ],
                           ),
                         ),
