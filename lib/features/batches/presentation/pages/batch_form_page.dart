@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -40,7 +39,6 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
   String _origin = 'doacao';
   bool _manualLocation = false;
   String? _selectedLocationLabel;
-  File? _imageFile;
   bool _prefilledProductName = false;
   int _quantity = 1;
   final _imagePicker = ImagePicker();
@@ -181,22 +179,10 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
           if (parsedName != null && _productNameController.text.trim().isEmpty) {
             _productNameController.text = parsedName;
           }
-          _imageFile = File(file.path);
         });
       }
     } finally {
       await recognizer.close();
-    }
-  }
-
-  Future<void> _pickImage(ImageSource source) async {
-    final picked = await _imagePicker.pickImage(
-      source: source,
-      imageQuality: 80,
-      maxWidth: 1280,
-    );
-    if (picked != null) {
-      setState(() => _imageFile = File(picked.path));
     }
   }
 
@@ -365,7 +351,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       createdAt: DateTime.now(),
     );
 
-    await ref.read(batchFormProvider.notifier).saveBatch(batch, imageFile: _imageFile);
+    await ref.read(batchFormProvider.notifier).saveBatch(batch);
 
     final state = ref.read(batchFormProvider);
     if (!mounted) return;
@@ -384,6 +370,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final fmt = DateFormat('dd/MM/yyyy');
     final formState = ref.watch(batchFormProvider);
     final locationsState = ref.watch(activeLocationsProvider);
@@ -396,9 +383,9 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: cs.surface,
       appBar: ModernProfileAppBar(
-        title: 'Cadastrar Produto',
+        title: 'Cadastrar Lote',
         subtitle: productName != null ? 'Produto: $productName' : 'Adicionar ao estoque',
         showBackButton: true,
       ),
@@ -413,6 +400,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                 decoration: BoxDecoration(
                   color: AppColors.info600.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(color: AppColors.info600.withValues(alpha: 0.25)),
                 ),
                 child: Row(
                   children: [
@@ -439,19 +427,25 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
               Container(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(color: AppColors.neutral100),
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Dados principais do produto',
-                      style: AppTypography.labelLarge.copyWith(
-                        color: AppColors.neutral900,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      children: [
+                        const Icon(Icons.inventory_2_rounded, size: 16, color: AppColors.brandPrimary600),
+                        const SizedBox(width: AppSpacing.xs),
+                        Text(
+                          'Dados do Lote',
+                          style: AppTypography.labelLarge.copyWith(
+                            color: cs.onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: AppSpacing.md),
                     CasaTextField(
@@ -532,18 +526,18 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
 
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(color: AppColors.neutral100),
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
                 ),
                 child: CheckboxListTile(
                   title: Text(
                     'Sem validade definida',
-                    style: AppTypography.labelLarge.copyWith(color: AppColors.neutral900),
+                    style: AppTypography.labelLarge.copyWith(color: cs.onSurface),
                   ),
                   subtitle: Text(
                     'Marque para itens não perecíveis',
-                    style: AppTypography.bodySmall.copyWith(color: AppColors.neutral500),
+                    style: AppTypography.bodySmall.copyWith(color: cs.onSurfaceVariant),
                   ),
                   value: _noExpiry,
                   onChanged: (v) => setState(() => _noExpiry = v ?? false),
@@ -572,7 +566,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                     child: Text(
                       _expiryDate != null ? fmt.format(_expiryDate!) : 'Toque para selecionar',
                       style: AppTypography.bodyLarge.copyWith(
-                        color: _expiryDate != null ? AppColors.neutral900 : AppColors.neutral500,
+                        color: _expiryDate != null ? cs.onSurface : cs.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -657,19 +651,10 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                 controller: _notesController,
                 maxLines: 3,
               ),
-              const SizedBox(height: AppSpacing.md),
-
-              // --- Foto da embalagem ---
-              _ImagePickerSection(
-                imageFile: _imageFile,
-                onPickCamera: () => _pickImage(ImageSource.camera),
-                onPickGallery: () => _pickImage(ImageSource.gallery),
-                onRemove: () => setState(() => _imageFile = null),
-              ),
               const SizedBox(height: AppSpacing.xxl),
 
               CasaButton(
-                label: 'Adicionar Produto ao Estoque',
+                label: 'Adicionar ao Estoque',
                 onPressed: isLoading ? null : _submit,
                 isLoading: isLoading,
                 icon: Icons.add_box_rounded,
@@ -685,86 +670,6 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
 // ---------------------------------------------------------------------------
 // Widget de seleção/visualização de imagem do lote
 // ---------------------------------------------------------------------------
-
-class _ImagePickerSection extends StatelessWidget {
-  final File? imageFile;
-  final VoidCallback onPickCamera;
-  final VoidCallback onPickGallery;
-  final VoidCallback onRemove;
-
-  const _ImagePickerSection({
-    required this.imageFile,
-    required this.onPickCamera,
-    required this.onPickGallery,
-    required this.onRemove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Foto da Embalagem (opcional)',
-          style: AppTypography.labelLarge.copyWith(color: AppColors.neutral700),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        if (imageFile != null) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            child: Image.file(
-              imageFile!,
-              height: 180,
-              width: double.infinity,
-              fit: BoxFit.cover,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          TextButton.icon(
-            onPressed: onRemove,
-            icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.danger600),
-            label: Text(
-              'Remover foto',
-              style: AppTypography.labelMedium.copyWith(color: AppColors.danger600),
-            ),
-          ),
-        ] else ...[
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPickCamera,
-                  icon: const Icon(Icons.photo_camera_rounded, size: 20),
-                  label: const Text('Câmera'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.button),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPickGallery,
-                  icon: const Icon(Icons.photo_library_outlined, size: 20),
-                  label: const Text('Galeria'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.button),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Seletor de localização estruturado: Seção → Prateleira → Nível c/ capacidade
