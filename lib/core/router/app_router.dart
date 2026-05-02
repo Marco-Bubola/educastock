@@ -105,13 +105,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const ProductListPage(),
           ),
           GoRoute(
-            path: AppRoutes.productDetail,
-            builder: (_, state) {
-              final id = state.pathParameters['id'] ?? '';
-              return ProductDetailPage(productId: id);
-            },
-          ),
-          GoRoute(
             path: AppRoutes.productForm,
             builder: (_, state) {
               final productId = state.uri.queryParameters['id'];
@@ -126,6 +119,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                 prefillBrand: prefillBrand,
                 prefillCategory: prefillCategory,
               );
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.productDetail,
+            builder: (_, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return ProductDetailPage(productId: id);
             },
           ),
           GoRoute(
