@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../domain/entities/product.dart';
 import '../controllers/products_provider.dart';
@@ -19,41 +21,136 @@ class ProductListPage extends ConsumerStatefulWidget {
   ConsumerState<ProductListPage> createState() => _ProductListPageState();
 }
 
-class _ProductListPageState extends ConsumerState<ProductListPage>
-    with SingleTickerProviderStateMixin {
+class _ProductListPageState extends ConsumerState<ProductListPage> {
   final _searchCtrl = TextEditingController();
   String _query = '';
   bool _filterPerishable = false;
   bool _filterNonPerishable = false;
   String? _filterCategory;
   _SortMode _sortMode = _SortMode.name;
-  bool _showFilters = false;
-  late AnimationController _filterAnimCtrl;
-  late Animation<double> _filterAnim;
 
   @override
   void initState() {
     super.initState();
-    _filterAnimCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 250));
-    _filterAnim =
-        CurvedAnimation(parent: _filterAnimCtrl, curve: Curves.easeInOut);
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
-    _filterAnimCtrl.dispose();
     super.dispose();
   }
 
-  void _toggleFilters() {
-    setState(() => _showFilters = !_showFilters);
-    if (_showFilters) {
-      _filterAnimCtrl.forward();
-    } else {
-      _filterAnimCtrl.reverse();
-    }
+  void _openFilterModal(
+      List<String> categories, Map<String, String> categoryLabelMap) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _FilterModal(
+        filterPerishable: _filterPerishable,
+        filterNonPerishable: _filterNonPerishable,
+        filterCategory: _filterCategory,
+        sortMode: _sortMode,
+        categories: categories,
+        categoryLabelMap: categoryLabelMap,
+        onTogglePerishable: () =>
+            setState(() => _filterPerishable = !_filterPerishable),
+        onToggleNonPerishable: () =>
+            setState(() => _filterNonPerishable = !_filterNonPerishable),
+        onCategoryChanged: (v) => setState(() => _filterCategory = v),
+        onSortChanged: (v) => setState(() => _sortMode = v),
+        onClearAll: () => setState(() {
+          _filterPerishable = false;
+          _filterNonPerishable = false;
+          _filterCategory = null;
+          _sortMode = _SortMode.name;
+        }),
+      ),
+    );
+  }
+
+  void _showManualBarcodeInput() {
+    final ctrl = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return Padding(
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppRadius.modal)),
+            ),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: cs.outlineVariant,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                  ),
+                ),
+                Text('Código de barras manual',
+                    style: AppTypography.headingSmall.copyWith(
+                        color: cs.onSurface, fontWeight: FontWeight.w700)),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                    'Digite o código para verificar se o produto já existe.',
+                    style: AppTypography.bodySmall
+                        .copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: AppSpacing.lg),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: 'Ex: 7891234567890',
+                    prefixIcon: const Icon(Icons.qr_code_rounded),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.input)),
+                    labelText: 'Código de barras',
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () {
+                      final barcode = ctrl.text.trim();
+                      if (barcode.isEmpty) return;
+                      Navigator.of(ctx).pop();
+                      context.push(
+                          '${AppRoutes.productReview}?barcode=$barcode');
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary600,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.button)),
+                    ),
+                    child: const Text('Buscar produto'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   List<Product> _applyFilters(List<Product> products) {
@@ -102,6 +199,11 @@ class _ProductListPageState extends ConsumerState<ProductListPage>
     final productsAsync = ref.watch(productsProvider);
     final user = ref.watch(currentUserProvider);
     final categoryLabelMap = ref.watch(categoryLabelMapProvider);
+    final availableCategories = productsAsync.valueOrNull
+            ?.map((p) => p.category.name)
+            .toSet()
+            .toList() ??
+        [];
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -138,49 +240,14 @@ class _ProductListPageState extends ConsumerState<ProductListPage>
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   _FilterButton(
-                    active: _showFilters || _activeFilterCount > 0,
+                    active: _activeFilterCount > 0,
                     badge: _activeFilterCount,
-                    onTap: _toggleFilters,
+                    onTap: () =>
+                        _openFilterModal(availableCategories, categoryLabelMap),
                     cs: cs,
                     isDark: isDark,
                   ),
                 ],
-              ),
-            ),
-
-            // ─── Painel de filtros colapsável
-            SizeTransition(
-              sizeFactor: _filterAnim,
-              axisAlignment: -1,
-              child: FadeTransition(
-                opacity: _filterAnim,
-                child: _FilterPanel(
-                  filterPerishable: _filterPerishable,
-                  filterNonPerishable: _filterNonPerishable,
-                  filterCategory: _filterCategory,
-                  sortMode: _sortMode,
-                  categories: productsAsync.valueOrNull
-                          ?.map((p) => p.category.name)
-                          .toSet()
-                          .toList() ??
-                      [],
-                  categoryLabelMap: categoryLabelMap,
-                  onTogglePerishable: () =>
-                      setState(() => _filterPerishable = !_filterPerishable),
-                  onToggleNonPerishable: () => setState(
-                      () => _filterNonPerishable = !_filterNonPerishable),
-                  onCategoryChanged: (v) =>
-                      setState(() => _filterCategory = v),
-                  onSortChanged: (v) => setState(() => _sortMode = v),
-                  onClearAll: () => setState(() {
-                    _filterPerishable = false;
-                    _filterNonPerishable = false;
-                    _filterCategory = null;
-                    _sortMode = _SortMode.name;
-                  }),
-                  cs: cs,
-                  isDark: isDark,
-                ),
               ),
             ),
 
@@ -213,10 +280,10 @@ class _ProductListPageState extends ConsumerState<ProductListPage>
                         AppSpacing.xs, AppSpacing.lg, AppSpacing.xxxl),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
+                      crossAxisCount: 2,
                       mainAxisSpacing: AppSpacing.sm,
                       crossAxisSpacing: AppSpacing.sm,
-                      childAspectRatio: 0.72,
+                      childAspectRatio: 0.75,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
@@ -236,10 +303,10 @@ class _ProductListPageState extends ConsumerState<ProductListPage>
                   padding: const EdgeInsets.all(AppSpacing.lg),
                   gridDelegate:
                       const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
+                    crossAxisCount: 2,
                     mainAxisSpacing: AppSpacing.sm,
                     crossAxisSpacing: AppSpacing.sm,
-                    childAspectRatio: 0.72,
+                    childAspectRatio: 0.75,
                   ),
                   itemCount: 8,
                   itemBuilder: (_, __) => const CasaCardSkeleton(),
@@ -254,8 +321,24 @@ class _ProductListPageState extends ConsumerState<ProductListPage>
           ],
         ),
       ),
-      floatingActionButton: CasaFabScan(
-        onPressed: () => context.push(AppRoutes.scanner),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'manual_entry_fab',
+            onPressed: _showManualBarcodeInput,
+            backgroundColor: cs.surfaceContainerHigh,
+            foregroundColor: AppColors.brandPrimary600,
+            elevation: 4,
+            tooltip: 'Cadastro manual',
+            child: const Icon(Icons.keyboard_rounded, size: 20),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          CasaFabScan(
+            onPressed: () => context.push(AppRoutes.scanner),
+          ),
+        ],
       ),
     );
   }
@@ -406,9 +489,9 @@ class _FilterButton extends StatelessWidget {
   }
 }
 
-// ─── Painel de filtros ────────────────────────────────────────────────────
+// ─── Modal de filtros ────────────────────────────────────────────────────
 
-class _FilterPanel extends StatelessWidget {
+class _FilterModal extends StatefulWidget {
   final bool filterPerishable;
   final bool filterNonPerishable;
   final String? filterCategory;
@@ -420,10 +503,8 @@ class _FilterPanel extends StatelessWidget {
   final ValueChanged<String?> onCategoryChanged;
   final ValueChanged<_SortMode> onSortChanged;
   final VoidCallback onClearAll;
-  final ColorScheme cs;
-  final bool isDark;
 
-  const _FilterPanel({
+  const _FilterModal({
     required this.filterPerishable,
     required this.filterNonPerishable,
     required this.filterCategory,
@@ -435,44 +516,81 @@ class _FilterPanel extends StatelessWidget {
     required this.onCategoryChanged,
     required this.onSortChanged,
     required this.onClearAll,
-    required this.cs,
-    required this.isDark,
   });
 
   @override
+  State<_FilterModal> createState() => _FilterModalState();
+}
+
+class _FilterModalState extends State<_FilterModal> {
+  late bool _filterPerishable;
+  late bool _filterNonPerishable;
+  late String? _filterCategory;
+  late _SortMode _sortMode;
+
+  @override
+  void initState() {
+    super.initState();
+    _filterPerishable = widget.filterPerishable;
+    _filterNonPerishable = widget.filterNonPerishable;
+    _filterCategory = widget.filterCategory;
+    _sortMode = widget.sortMode;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(
-          AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
-      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: isDark ? cs.surfaceContainer : cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(
-            color: AppColors.brandPrimary600.withValues(alpha: 0.25)),
+        color: cs.surfaceContainerLow,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
       ),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: AppSpacing.md),
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+            ),
+          ),
           Row(
             children: [
               Text('Filtros',
-                  style: AppTypography.labelMedium.copyWith(
-                      color: AppColors.brandPrimary600,
-                      fontWeight: FontWeight.w700)),
+                  style: AppTypography.headingSmall.copyWith(
+                      color: cs.onSurface, fontWeight: FontWeight.w700)),
               const Spacer(),
               TextButton(
-                onPressed: onClearAll,
-                style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 0),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                child: Text('Limpar',
+                onPressed: () {
+                  setState(() {
+                    _filterPerishable = false;
+                    _filterNonPerishable = false;
+                    _filterCategory = null;
+                    _sortMode = _SortMode.name;
+                  });
+                  widget.onClearAll();
+                },
+                child: Text('Limpar tudo',
                     style: AppTypography.labelSmall
                         .copyWith(color: AppColors.danger600)),
               ),
             ],
           ),
+          const SizedBox(height: AppSpacing.md),
+          Text('Tipo',
+              style: AppTypography.labelMedium.copyWith(
+                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
           const SizedBox(height: AppSpacing.xs),
           Wrap(
             spacing: AppSpacing.xs,
@@ -481,55 +599,100 @@ class _FilterPanel extends StatelessWidget {
               _FilterChip(
                 label: 'Perecível',
                 icon: Icons.schedule_rounded,
-                selected: filterPerishable,
+                selected: _filterPerishable,
                 color: AppColors.warning600,
-                onTap: onTogglePerishable,
+                onTap: () {
+                  setState(() => _filterPerishable = !_filterPerishable);
+                  widget.onTogglePerishable();
+                },
               ),
               _FilterChip(
                 label: 'Não perecível',
                 icon: Icons.shield_outlined,
-                selected: filterNonPerishable,
+                selected: _filterNonPerishable,
                 color: AppColors.success600,
-                onTap: onToggleNonPerishable,
+                onTap: () {
+                  setState(
+                      () => _filterNonPerishable = !_filterNonPerishable);
+                  widget.onToggleNonPerishable();
+                },
               ),
-              ...categories.map((cat) {
-                final label = categoryLabelMap[cat] ?? cat;
+            ],
+          ),
+          if (widget.categories.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text('Categoria',
+                style: AppTypography.labelMedium.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: AppSpacing.xs),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: widget.categories.map((cat) {
+                final label = widget.categoryLabelMap[cat] ?? cat;
                 return _FilterChip(
                   label: label,
                   icon: Icons.category_outlined,
-                  selected: filterCategory == cat,
+                  selected: _filterCategory == cat,
                   color: AppColors.secondaryBlue600,
-                  onTap: () =>
-                      onCategoryChanged(filterCategory == cat ? null : cat),
+                  onTap: () {
+                    final next = _filterCategory == cat ? null : cat;
+                    setState(() => _filterCategory = next);
+                    widget.onCategoryChanged(next);
+                  },
                 );
-              }),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          Text('Ordenar por',
+              style: AppTypography.labelMedium.copyWith(
+                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
             children: [
-              Text('Ordenar:',
-                  style: AppTypography.labelSmall
-                      .copyWith(color: cs.onSurfaceVariant)),
-              const SizedBox(width: AppSpacing.sm),
               _SortChip(
                 label: 'A–Z',
-                selected: sortMode == _SortMode.name,
-                onTap: () => onSortChanged(_SortMode.name),
+                selected: _sortMode == _SortMode.name,
+                onTap: () {
+                  setState(() => _sortMode = _SortMode.name);
+                  widget.onSortChanged(_SortMode.name);
+                },
               ),
-              const SizedBox(width: AppSpacing.xs),
               _SortChip(
                 label: 'Categoria',
-                selected: sortMode == _SortMode.category,
-                onTap: () => onSortChanged(_SortMode.category),
+                selected: _sortMode == _SortMode.category,
+                onTap: () {
+                  setState(() => _sortMode = _SortMode.category);
+                  widget.onSortChanged(_SortMode.category);
+                },
               ),
-              const SizedBox(width: AppSpacing.xs),
               _SortChip(
                 label: 'Perecíveis primeiro',
-                selected: sortMode == _SortMode.perishable,
-                onTap: () => onSortChanged(_SortMode.perishable),
+                selected: _sortMode == _SortMode.perishable,
+                onTap: () {
+                  setState(() => _sortMode = _SortMode.perishable);
+                  widget.onSortChanged(_SortMode.perishable);
+                },
               ),
             ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.brandPrimary600,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.button)),
+              ),
+              child: const Text('Aplicar filtros'),
+            ),
           ),
         ],
       ),
@@ -628,7 +791,7 @@ class _SortChip extends StatelessWidget {
 
 // ─── Card do grid ─────────────────────────────────────────────────────────
 
-class _ProductGridCard extends StatelessWidget {
+class _ProductGridCard extends ConsumerWidget {
   final Product product;
   final String catLabel;
   final int index;
@@ -656,9 +819,22 @@ class _ProductGridCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final accent = _accent();
+    final dateFmt = DateFormat('dd/MM/yy');
+
+    // Lotes mais próximos ao vencimento
+    final nearBatches = ref.watch(batchesByProductProvider(product.id)).whenOrNull(
+          data: (batches) {
+            final withExpiry = batches
+                .where((b) => !b.noExpiry)
+                .toList()
+              ..sort((a, b) => a.daysToExpiry.compareTo(b.daysToExpiry));
+            return withExpiry.take(2).toList();
+          },
+        ) ??
+        [];
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
@@ -687,73 +863,133 @@ class _ProductGridCard extends StatelessWidget {
               ],
             ),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ─── Cabeçalho colorido com ícone
                 Container(
-                  width: 40,
-                  height: 40,
+                  height: 56,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [accent, accent.withValues(alpha: 0.7)],
+                      colors: [accent, accent.withValues(alpha: 0.72)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: BorderRadius.circular(AppRadius.small),
-                    boxShadow: [
-                      BoxShadow(
-                        color: accent.withValues(alpha: 0.3),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(AppRadius.card)),
                   ),
-                  child: const Icon(Icons.inventory_2_rounded,
-                      color: Colors.white, size: 20),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-                  child: Text(
-                    product.name,
-                    style: AppTypography.labelSmall.copyWith(
-                      color: cs.onSurface,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 10,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
+                  child: Center(
+                    child: product.imageUrl != null &&
+                            product.imageUrl!.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(AppRadius.card)),
+                            child: Image.network(product.imageUrl!,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: 56),
+                          )
+                        : const Icon(Icons.inventory_2_rounded,
+                            color: Colors.white, size: 26),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  catLabel,
-                  style: AppTypography.labelSmall.copyWith(
-                    color: cs.onSurfaceVariant,
-                    fontSize: 9,
+                // ─── Informações
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product.name,
+                          style: AppTypography.labelSmall.copyWith(
+                            color: cs.onSurface,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          catLabel,
+                          style: AppTypography.labelSmall.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 9,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (product.isPerishable) ...[
+                          const SizedBox(height: 3),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.warning600.withValues(alpha: 0.12),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.pill),
+                            ),
+                            child: const Text(
+                              'Perecível',
+                              style: TextStyle(
+                                  fontSize: 8,
+                                  color: AppColors.warning600,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                        // ─── Lotes mais próximos ao vencimento
+                        if (nearBatches.isNotEmpty) ...[
+                          const SizedBox(height: 5),
+                          Divider(
+                              height: 1,
+                              thickness: 0.5,
+                              color: cs.outlineVariant
+                                  .withValues(alpha: 0.4)),
+                          const SizedBox(height: 4),
+                          ...nearBatches.map((b) {
+                            final statusColor = b.isExpired
+                                ? AppColors.danger600
+                                : b.daysToExpiry <= 7
+                                    ? AppColors.danger600
+                                    : b.daysToExpiry <= 30
+                                        ? AppColors.warning600
+                                        : AppColors.success600;
+                            final dateStr = b.expiryDate != null
+                                ? dateFmt.format(b.expiryDate!)
+                                : '—';
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 2),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.event_rounded,
+                                      size: 10, color: statusColor),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    dateStr,
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        color: statusColor,
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    '(${b.daysToExpiry}d)',
+                                    style: TextStyle(
+                                        fontSize: 8,
+                                        color: statusColor
+                                            .withValues(alpha: 0.75)),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ],
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 3),
-                if (product.isPerishable)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning600.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: const Text(
-                      'Perecível',
-                      style: TextStyle(
-                          fontSize: 8,
-                          color: AppColors.warning600,
-                          fontWeight: FontWeight.w700),
-                    ),
-                  ),
               ],
             ),
           ),
