@@ -42,7 +42,7 @@ class ProductDetailPage extends ConsumerWidget {
           backgroundColor: cs.surface,
           // ─── AppBar: voltar | nome | editar na mesma linha
           appBar: PreferredSize(
-            preferredSize: const Size.fromHeight(100),
+            preferredSize: const Size.fromHeight(130),
             child: _ProductAppBar(
               product: p,
               productId: productId,
@@ -265,7 +265,7 @@ class _ProductAppBar extends StatelessWidget {
             // ─── Chips de atributos
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, 0, AppSpacing.lg, 10),
+                  AppSpacing.lg, 0, AppSpacing.lg, 6),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -295,6 +295,69 @@ class _ProductAppBar extends StatelessWidget {
                 ),
               ),
             ),
+            // ─── Linha de info compacta: marca | cod barras | estoque min
+            if ((product.brand ?? '').isNotEmpty ||
+                (product.barcode ?? '').isNotEmpty ||
+                product.minimumStock > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md, 0, AppSpacing.md, 10),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                  ),
+                  child: Row(
+                    children: [
+                      if ((product.brand ?? '').isNotEmpty) ...[
+                        const Icon(Icons.business_rounded,
+                            size: 12, color: Colors.white70),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            product.brand!,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      if ((product.barcode ?? '').isNotEmpty) ...[
+                        const Icon(Icons.qr_code_rounded,
+                            size: 12, color: Colors.white70),
+                        const SizedBox(width: 4),
+                        Text(
+                          product.barcode!,
+                          style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.5),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      if (product.minimumStock > 0) ...[
+                        const Icon(Icons.warning_amber_rounded,
+                            size: 12, color: Color(0xFFFFD580)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Mín: ${product.minimumStock}',
+                          style: const TextStyle(
+                              color: Color(0xFFFFD580),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),
