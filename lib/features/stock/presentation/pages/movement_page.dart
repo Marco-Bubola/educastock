@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
-import '../../../../core/observability/analytics_service.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../products/domain/entities/product.dart';
+import '../../../products/presentation/controllers/products_provider.dart';
+import '../../../recipes/domain/entities/stock_recipe.dart';
+import '../../../recipes/presentation/controllers/recipes_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../data/datasources/stock_remote_datasource.dart';
 import '../../domain/entities/stock_movement.dart';
+
+enum _OutputMode { products, recipes }
 
 final stockDatasourceProvider = Provider<StockRemoteDatasource>(
   (_) => StockRemoteDatasource(),
@@ -23,256 +27,230 @@ class MovementPage extends ConsumerStatefulWidget {
 }
 
 class _MovementPageState extends ConsumerState<MovementPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _quantityController = TextEditingController();
-  final _reasonController = TextEditingController();
+  final _searchController = TextEditingController();
   final _activityController = TextEditingController();
 
-  MovementType _type = MovementType.saida;
+  _OutputMode _mode = _OutputMode.products;
+  String _search = '';
+  String? _categoryKey;
   String _reasonCode = MovementReasonCode.uso.name;
+  String? _selectedRecipeId;
+  final Map<String, int> _selectedQtyByProduct = {};
   bool _isLoading = false;
 
   static const _reasonLabels = {
     'uso': 'Uso/Distribuição',
     'validade': 'Vencimento',
     'avaria': 'Avaria/Perda',
-    'receita': 'Receita',
-    'ajusteInventario': 'Diferença de inventário',
-    'doacao': 'Doação externa',
     'outro': 'Outro',
   };
 
-  List<String> _allowedReasonCodesForType(MovementType type) {
-    return switch (type) {
-      MovementType.entrada => [MovementReasonCode.outro.name],
-      MovementType.saida => [
-          MovementReasonCode.uso.name,
-          MovementReasonCode.receita.name,
-          MovementReasonCode.doacao.name,
-          MovementReasonCode.outro.name,
-        ],
-      MovementType.ajustePositivo => [MovementReasonCode.ajusteInventario.name],
-      MovementType.ajusteNegativo => [MovementReasonCode.ajusteInventario.name],
-      MovementType.descarte => [
-          MovementReasonCode.validade.name,
-          MovementReasonCode.avaria.name,
-          MovementReasonCode.outro.name,
-        ],
-    };
-  }
-
   @override
   void dispose() {
-    _quantityController.dispose();
-    _reasonController.dispose();
+    _searchController.dispose();
     _activityController.dispose();
     super.dispose();
   }
 
-  Batch? _getFefoRecommendedBatch({
-    required List<Batch> allBatches,
-    required Batch selectedBatch,
-  }) {
-    final candidates = allBatches
-        .where(
-          (b) =>
-              b.productId == selectedBatch.productId &&
-              b.quantity > 0 &&
-              b.status == BatchStatus.disponivel,
-        )
-        .toList();
-
-    if (candidates.isEmpty) return null;
-
-    candidates.sort((a, b) {
-      if (a.noExpiry && b.noExpiry) return 0;
-      if (a.noExpiry) return 1;
-      if (b.noExpiry) return -1;
-      if (a.expiryDate == null && b.expiryDate == null) return 0;
-      if (a.expiryDate == null) return 1;
-      if (b.expiryDate == null) return -1;
-      return a.expiryDate!.compareTo(b.expiryDate!);
-    });
-
-    return candidates.first;
+  int _availableForProduct(String productId, List<Batch> batches) {
+    return batches
+        .where((b) => b.productId == productId && b.status == BatchStatus.disponivel)
+        .fold<int>(0, (acc, b) => acc + b.quantity);
   }
 
-  Future<void> _submit(Batch batch, List<Batch> allBatches) async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _openFilterModal({
+    required List<String> categoryKeys,
+    required Map<String, String> categoryLabelMap,
+  }) async {
+    String? draftCategory = _categoryKey;
+    String draftReason = _reasonCode;
 
-    final qty = int.tryParse(_quantityController.text) ?? 0;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(ctx).colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Filtros de saída', style: AppTypography.headingMedium),
+                  const SizedBox(height: AppSpacing.md),
+                  Text('Categoria', style: AppTypography.labelMedium),
+                  const SizedBox(height: AppSpacing.xs),
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xs,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Todas'),
+                        selected: draftCategory == null,
+                        onSelected: (_) => setSheetState(() => draftCategory = null),
+                      ),
+                      ...categoryKeys.map(
+                        (key) => ChoiceChip(
+                          label: Text(categoryLabelMap[key] ?? key),
+                          selected: draftCategory == key,
+                          onSelected: (_) => setSheetState(() => draftCategory = key),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text('Motivo da saída', style: AppTypography.labelMedium),
+                  const SizedBox(height: AppSpacing.xs),
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xs,
+                    children: _reasonLabels.entries
+                        .map(
+                          (e) => ChoiceChip(
+                            label: Text(e.value),
+                            selected: draftReason == e.key,
+                            onSelected: (_) => setSheetState(() => draftReason = e.key),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            setState(() {
+                              _categoryKey = null;
+                              _reasonCode = MovementReasonCode.uso.name;
+                            });
+                            Navigator.pop(ctx);
+                          },
+                          child: const Text('Limpar'),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: CasaButton(
+                          label: 'Aplicar filtros',
+                          onPressed: () {
+                            setState(() {
+                              _categoryKey = draftCategory;
+                              _reasonCode = draftReason;
+                            });
+                            Navigator.pop(ctx);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
-    if ((_type == MovementType.saida ||
-            _type == MovementType.ajusteNegativo ||
-            _type == MovementType.descarte) &&
-        qty > batch.quantity) {
+  Future<void> _submitProducts(List<Product> products) async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+
+    final requests = <ProductOutputRequest>[];
+    for (final entry in _selectedQtyByProduct.entries) {
+      if (entry.value <= 0) continue;
+      final product = products.firstWhere(
+        (p) => p.id == entry.key,
+        orElse: () => Product(
+          id: entry.key,
+          name: 'Produto',
+          category: ProductCategory.outro,
+          unit: 'un',
+          isPerishable: true,
+          createdAt: DateTime.now(),
+          createdBy: user.id,
+        ),
+      );
+      requests.add(
+        ProductOutputRequest(
+          productId: product.id,
+          productName: product.name,
+          quantity: entry.value,
+        ),
+      );
+    }
+
+    if (requests.isEmpty) {
       showCasaSnackbar(
         context,
-        message: 'Quantidade indisponível. Saldo atual: ${batch.quantity}',
+        message: 'Selecione ao menos um produto com quantidade.',
         isError: true,
       );
       return;
     }
 
-    final user = ref.read(currentUserProvider);
-    if (user == null) return;
-
-    final stockRules = ref.read(stockRulesConfigProvider).valueOrNull;
-    final approvalLimit = stockRules?.negativeAdjustmentApprovalLimit ?? 50;
-    final allowedReasons = _allowedReasonCodesForType(_type);
-    if (!allowedReasons.contains(_reasonCode)) {
-      _reasonCode = allowedReasons.first;
-    }
-
-    final isOutbound = _type == MovementType.saida ||
-        _type == MovementType.ajusteNegativo ||
-        _type == MovementType.descarte;
-
-    final fefoRecommended = _getFefoRecommendedBatch(
-      allBatches: allBatches,
-      selectedBatch: batch,
-    );
-    final isFefoViolation = isOutbound &&
-        fefoRecommended != null &&
-        fefoRecommended.id != batch.id;
-
-    if (isFefoViolation) {
-      final reason = _reasonController.text.trim();
-      if (!user.canApproveAdjustments) {
-        showCasaSnackbar(
-          context,
-          message:
-              'Saída fora da ordem FEFO bloqueada. Use o lote recomendado primeiro.',
-          isError: true,
-        );
-        return;
-      }
-      if (reason.isEmpty) {
-        showCasaSnackbar(
-          context,
-          message:
-              'Admin: informe motivo para liberar saída fora da ordem FEFO.',
-          isError: true,
-        );
-        return;
-      }
-    }
-
-    if (_type == MovementType.ajusteNegativo &&
-        qty > approvalLimit &&
-        !user.canApproveAdjustments) {
-      final reason = _reasonController.text.trim();
-      if (reason.isEmpty) {
-        showCasaSnackbar(
-          context,
-          message: 'Informe o motivo para solicitar aprovação do ajuste.',
-          isError: true,
-        );
-        return;
-      }
-
-      await ref.read(stockDatasourceProvider).createAdjustmentApprovalRequest(
-            productId: batch.productId,
-            productName: batch.productName,
-            batchId: batch.id,
-            quantity: qty,
-            requestedBy: user.id,
-            requestedByName: user.name,
-            reason: reason,
-          );
-      ref.read(analyticsServiceProvider).logStockMovement(
-            type: _type.name,
-            quantity: qty,
-            fefoOverride: isFefoViolation,
-            requiresApproval: true,
+    setState(() => _isLoading = true);
+    try {
+      await ref.read(stockDatasourceProvider).registerBulkOutputFefo(
+            items: requests,
+            performedBy: user.id,
+            performedByName: user.name,
+            reasonCode: _reasonCode,
+            reason: _reasonLabels[_reasonCode],
+            activity: _activityController.text.trim().isEmpty
+                ? null
+                : _activityController.text.trim(),
           );
       if (!mounted) return;
       showCasaSnackbar(
         context,
-        message:
-            'Ajuste enviado para aprovação (acima do limite de $approvalLimit).',
+        message: 'Saída registrada com sucesso!',
         isSuccess: true,
       );
-      context.pop();
-      return;
+      setState(() => _selectedQtyByProduct.clear());
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      showCasaSnackbar(
+        context,
+        message: error.toString().replaceFirst('Exception: ', ''),
+        isError: true,
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
 
-    final newQty = isOutbound ? batch.quantity - qty : batch.quantity + qty;
-    String? nextStatus;
-    if (newQty <= 0) {
-      if (_type == MovementType.descarte &&
-          _reasonCode == MovementReasonCode.validade.name) {
-        nextStatus = BatchStatus.vencido.name;
-      } else if (_type == MovementType.descarte) {
-        nextStatus = BatchStatus.descartado.name;
-      } else {
-        nextStatus = BatchStatus.distribuido.name;
-      }
-    }
-
-    final movement = StockMovement(
-      id: '',
-      productId: batch.productId,
-      productName: batch.productName,
-      batchId: batch.id,
-      type: _type,
-      quantity: qty,
-        reasonCode: _reasonCode,
-      reason: _reasonController.text.trim().isEmpty
-          ? _reasonLabels[_reasonCode]
-          : _reasonController.text.trim(),
-      activity: _activityController.text.trim().isEmpty
-          ? null
-          : _activityController.text.trim(),
-      performedBy: user.id,
-      performedByName: user.name,
-      performedAt: DateTime.now(),
-      auditBefore: {'quantity': batch.quantity, 'status': batch.status.name},
-      auditAfter: {
-        'quantity': newQty,
-        'status': nextStatus ?? batch.status.name,
-        'fefoRecommendedBatchId': fefoRecommended?.id,
-        'fefoOverride': isFefoViolation,
-        'reasonCode': _reasonCode,
-      },
-    );
-
+  Future<void> _submitRecipe(StockRecipe recipe) async {
     setState(() => _isLoading = true);
     try {
-      await ref.read(stockDatasourceProvider).registerMovement(
-            movement: movement,
-            batchId: batch.id,
-            previousQuantity: batch.quantity,
-            newQuantity: newQty,
-        nextStatus: nextStatus,
-          );
-      ref.read(analyticsServiceProvider).logStockMovement(
-            type: _type.name,
-            quantity: qty,
-            fefoOverride: isFefoViolation,
-            requiresApproval: false,
-          );
-      if (mounted) {
-        showCasaSnackbar(
-          context,
-          message: 'Movimentação registrada!',
-          isSuccess: true,
-        );
-        context.pop();
-      }
-    } catch (error, stackTrace) {
-      ref.read(analyticsServiceProvider).recordHandledError(
-            error,
-            stackTrace,
-            reason: 'stock_movement_failed',
-          );
-      if (mounted) {
-        showCasaSnackbar(
-          context,
-          message: 'Erro ao registrar movimentação.',
-          isError: true,
-        );
-      }
+      await ref.read(recipesNotifierProvider.notifier).executeRecipe(recipe);
+      if (!mounted) return;
+      showCasaSnackbar(
+        context,
+        message: 'Saída por receita registrada com sucesso!',
+        isSuccess: true,
+      );
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      showCasaSnackbar(
+        context,
+        message: error.toString().replaceFirst('Exception: ', ''),
+        isError: true,
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -280,201 +258,355 @@ class _MovementPageState extends ConsumerState<MovementPage> {
 
   @override
   Widget build(BuildContext context) {
+    final productsAsync = ref.watch(productsProvider);
     final batchesAsync = ref.watch(allAvailableBatchesProvider);
+    final recipesAsync = ref.watch(recipesProvider);
+    final categoryLabelMap = ref.watch(categoryLabelMapProvider);
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const ModernProfileAppBar(
-        title: 'Movimentação de Estoque',
-        subtitle: 'Registro de entrada e saída',
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      appBar: ModernProfileAppBar(
+        title: 'Saída de Estoque',
+        subtitle: 'Produtos avulsos ou receita ativa',
         showBackButton: true,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.md),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.danger600.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: Text(
+                  'SAÍDA',
+                  style: AppTypography.labelSmall.copyWith(
+                    color: AppColors.danger600,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: batchesAsync.when(
-          data: (batches) {
-            final batch = batches.where((b) => b.id == widget.batchId).firstOrNull;
-            if (batch == null && widget.batchId.isNotEmpty) {
-              return const CasaEmptyState(
-                icon: Icons.search_off_rounded,
-                title: 'Lote não encontrado',
-                description: 'O lote selecionado não está disponível.',
+          data: (batches) => productsAsync.when(
+            data: (products) {
+              final categories = products.map((e) => e.category.name).toSet().toList()..sort();
+              final filteredProducts = products.where((p) {
+                final q = _search.trim().toLowerCase();
+                final searchOk = q.isEmpty ||
+                    p.name.toLowerCase().contains(q) ||
+                    (p.brand?.toLowerCase().contains(q) ?? false);
+                final categoryOk = _categoryKey == null || p.category.name == _categoryKey;
+                return searchOk && categoryOk;
+              }).toList();
+
+              final width = MediaQuery.of(context).size.width;
+              final cross = width >= 900
+                  ? 4
+                  : width >= 700
+                      ? 3
+                      : 2;
+
+              return ListView(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Text('Produtos avulsos'),
+                          selected: _mode == _OutputMode.products,
+                          onSelected: (_) => setState(() => _mode = _OutputMode.products),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: ChoiceChip(
+                          label: const Text('Receita ativa'),
+                          selected: _mode == _OutputMode.recipes,
+                          onSelected: (_) => setState(() => _mode = _OutputMode.recipes),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CasaTextField(
+                          label: 'Busca rápida',
+                          controller: _searchController,
+                          hint: 'Nome ou marca',
+                          onChanged: (v) => setState(() => _search = v),
+                          prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      IconButton.filledTonal(
+                        onPressed: () => _openFilterModal(
+                          categoryKeys: categories,
+                          categoryLabelMap: categoryLabelMap,
+                        ),
+                        icon: const Icon(Icons.tune_rounded),
+                        tooltip: 'Filtros',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    children: [
+                      if (_categoryKey != null)
+                        Chip(label: Text(categoryLabelMap[_categoryKey] ?? _categoryKey!)),
+                      Chip(label: Text(_reasonLabels[_reasonCode] ?? 'Uso/Distribuição')),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  CasaTextField(
+                    label: 'Atividade / Projeto (opcional)',
+                    controller: _activityController,
+                    prefixIcon: const Icon(Icons.work_outline_rounded, size: 20),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  if (_mode == _OutputMode.products) ...[
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filteredProducts.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: cross,
+                        mainAxisSpacing: AppSpacing.sm,
+                        crossAxisSpacing: AppSpacing.sm,
+                        childAspectRatio: 0.82,
+                      ),
+                      itemBuilder: (_, i) {
+                        final p = filteredProducts[i];
+                        final available = _availableForProduct(p.id, batches);
+                        final qty = _selectedQtyByProduct[p.id] ?? 0;
+
+                        return Container(
+                          padding: const EdgeInsets.all(AppSpacing.xs),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(AppRadius.card),
+                            border: Border.all(
+                              color: qty > 0
+                                  ? AppColors.brandPrimary600
+                                  : Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(AppRadius.small),
+                                  child: p.imageUrl != null && p.imageUrl!.isNotEmpty
+                                      ? Image.network(
+                                          p.imageUrl!,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => Container(
+                                            color: AppColors.brandPrimary100,
+                                            child: const Center(child: Icon(Icons.inventory_2_outlined)),
+                                          ),
+                                        )
+                                      : Container(
+                                          color: AppColors.brandPrimary100,
+                                          child: const Center(child: Icon(Icons.inventory_2_outlined)),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                p.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.labelSmall.copyWith(
+                                  color: onSurface,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                'Disponível: $available ${p.unit}',
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: onSurfaceVariant,
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline_rounded, size: 16),
+                                    onPressed: qty > 0
+                                        ? () => setState(() {
+                                              final next = qty - 1;
+                                              if (next <= 0) {
+                                                _selectedQtyByProduct.remove(p.id);
+                                              } else {
+                                                _selectedQtyByProduct[p.id] = next;
+                                              }
+                                            })
+                                        : null,
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      '$qty',
+                                      textAlign: TextAlign.center,
+                                      style: AppTypography.labelMedium.copyWith(color: onSurface),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                                    onPressed: available > qty
+                                        ? () => setState(() {
+                                              _selectedQtyByProduct[p.id] = qty + 1;
+                                            })
+                                        : null,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    CasaButton(
+                      label: 'Confirmar saída de produtos',
+                      icon: Icons.outbound_rounded,
+                      isLoading: _isLoading,
+                      onPressed: _isLoading ? null : () => _submitProducts(products),
+                    ),
+                  ] else ...[
+                    recipesAsync.when(
+                      data: (recipes) {
+                        final filtered = recipes.where((r) {
+                          final q = _search.trim().toLowerCase();
+                          if (q.isEmpty) return true;
+                          return r.name.toLowerCase().contains(q) ||
+                              (r.description?.toLowerCase().contains(q) ?? false);
+                        }).toList();
+
+                        if (filtered.isEmpty) {
+                          return const CasaEmptyState(
+                            icon: Icons.menu_book_outlined,
+                            title: 'Nenhuma receita ativa encontrada',
+                          );
+                        }
+
+                        return Column(
+                          children: [
+                            GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: filtered.length,
+                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: cross,
+                                mainAxisSpacing: AppSpacing.sm,
+                                crossAxisSpacing: AppSpacing.sm,
+                                childAspectRatio: 1.02,
+                              ),
+                              itemBuilder: (_, i) {
+                                final r = filtered[i];
+                                final selected = _selectedRecipeId == r.id;
+                                return InkWell(
+                                  onTap: () => setState(() => _selectedRecipeId = r.id),
+                                  borderRadius: BorderRadius.circular(AppRadius.card),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(AppSpacing.md),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.surfaceContainerLow,
+                                      borderRadius: BorderRadius.circular(AppRadius.card),
+                                      border: Border.all(
+                                        color: selected
+                                            ? AppColors.brandPrimary600
+                                            : Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                r.name,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: AppTypography.labelLarge.copyWith(
+                                                  color: onSurface,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
+                                            if (selected)
+                                              const Icon(Icons.check_circle_rounded,
+                                                  color: AppColors.brandPrimary600, size: 18),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          '${r.items.length} itens',
+                                          style: AppTypography.bodySmall.copyWith(
+                                            color: onSurfaceVariant,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Expanded(
+                                          child: Text(
+                                            r.description ?? 'Sem descrição',
+                                            maxLines: 3,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppTypography.bodySmall.copyWith(
+                                              color: onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                            CasaButton(
+                              label: 'Executar saída por receita',
+                              icon: Icons.play_arrow_rounded,
+                              isLoading: _isLoading,
+                              onPressed: _isLoading || _selectedRecipeId == null
+                                  ? null
+                                  : () {
+                                      final recipe = filtered.firstWhere((r) => r.id == _selectedRecipeId);
+                                      _submitRecipe(recipe);
+                                    },
+                            ),
+                          ],
+                        );
+                      },
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (e, _) => CasaEmptyState(
+                        icon: Icons.error_outline_rounded,
+                        title: 'Erro ao carregar receitas',
+                        description: e.toString(),
+                      ),
+                    ),
+                  ],
+                ],
               );
-            }
-            return _buildForm(batch, batches);
-          },
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Erro: $e')),
+          ),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Erro: $e')),
         ),
-      ),
-    );
-  }
-
-  Widget _buildForm(Batch? batch, List<Batch> allBatches) {
-    final recommended = batch == null
-        ? null
-        : _getFefoRecommendedBatch(
-            allBatches: allBatches,
-            selectedBatch: batch,
-          );
-
-    return Form(
-      key: _formKey,
-      child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        children: [
-          if (batch != null &&
-              recommended != null &&
-              recommended.id != batch.id) ...[
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.warning600.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.card),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.priority_high_rounded,
-                    color: AppColors.warning600,
-                    size: 18,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      'FEFO: lote recomendado para saída é o de validade mais próxima.',
-                      style: AppTypography.bodySmall
-                          .copyWith(color: AppColors.warning600),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-          ],
-          if (batch != null) ...[
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(AppRadius.card),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Lote selecionado',
-                    style: AppTypography.labelMedium
-                        .copyWith(color: AppColors.neutral500),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    batch.productName,
-                    style: AppTypography.headingSmall
-                        .copyWith(color: AppColors.neutral900),
-                  ),
-                  Text(
-                    'Saldo atual: ${batch.quantity} • Origem: ${batch.origin}',
-                    style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.neutral500),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-          ],
-          const CasaSectionHeader(title: 'Tipo de Movimentação'),
-          const SizedBox(height: AppSpacing.sm),
-          Wrap(
-            spacing: AppSpacing.sm,
-            children: MovementType.values.map((t) {
-              final isSelected = _type == t;
-              final label = switch (t) {
-                MovementType.entrada => 'Entrada',
-                MovementType.saida => 'Saída',
-                MovementType.ajustePositivo => 'Ajuste +',
-                MovementType.ajusteNegativo => 'Ajuste -',
-                MovementType.descarte => 'Descarte',
-              };
-              final color = switch (t) {
-                MovementType.entrada || MovementType.ajustePositivo =>
-                  AppColors.success600,
-                MovementType.saida => AppColors.brandPrimary600,
-                MovementType.ajusteNegativo => AppColors.warning600,
-                MovementType.descarte => AppColors.danger600,
-              };
-              return ChoiceChip(
-                label: Text(label),
-                selected: isSelected,
-                selectedColor: color.withValues(alpha: 0.15),
-                labelStyle: AppTypography.labelMedium.copyWith(
-                  color: isSelected ? color : AppColors.neutral700,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                ),
-                onSelected: (_) => setState(() {
-                  _type = t;
-                  final allowed = _allowedReasonCodesForType(t);
-                  if (!allowed.contains(_reasonCode)) {
-                    _reasonCode = allowed.first;
-                  }
-                }),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            children: _allowedReasonCodesForType(_type).map((code) {
-              final selected = _reasonCode == code;
-              return ChoiceChip(
-                label: Text(_reasonLabels[code] ?? code),
-                selected: selected,
-                selectedColor: AppColors.brandPrimary100,
-                labelStyle: AppTypography.labelSmall.copyWith(
-                  color: selected ? AppColors.brandPrimary700 : AppColors.neutral700,
-                ),
-                onSelected: (_) => setState(() => _reasonCode = code),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () => context.push(AppRoutes.recipes),
-              icon: const Icon(Icons.menu_book_rounded, size: 18),
-              label: const Text('Aplicar receita'),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          CasaTextField(
-            label: 'Quantidade *',
-            controller: _quantityController,
-            keyboardType: TextInputType.number,
-            prefixIcon: const Icon(Icons.numbers_rounded, size: 20),
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Informe a quantidade';
-              final n = int.tryParse(v);
-              if (n == null || n <= 0) return 'Quantidade inválida';
-              return null;
-            },
-          ),
-          const SizedBox(height: AppSpacing.md),
-          CasaTextField(
-            label: _type == MovementType.saida ? 'Atividade / Projeto' : 'Observação',
-            controller: _type == MovementType.saida ? _activityController : _reasonController,
-            maxLines: 2,
-          ),
-          const SizedBox(height: AppSpacing.xxl),
-          CasaButton(
-            label: 'Registrar Movimentação',
-            onPressed: (_isLoading || batch == null)
-                ? null
-                : () => _submit(batch, allBatches),
-            isLoading: _isLoading,
-            icon: Icons.swap_horiz_rounded,
-          ),
-        ],
       ),
     );
   }
