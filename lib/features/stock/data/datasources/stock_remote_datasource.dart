@@ -1,6 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/stock_movement.dart';
 
+class ProductOutputRequest {
+  final String productId;
+  final String productName;
+  final int quantity;
+
+  const ProductOutputRequest({
+    required this.productId,
+    required this.productName,
+    required this.quantity,
+  });
+}
+
 class StockRemoteDatasource {
   final FirebaseFirestore _db;
 
@@ -225,5 +237,131 @@ class StockRemoteDatasource {
         'reviewedAt': DateTime.now().toIso8601String(),
       });
     });
+  }
+
+  Future<void> registerBulkOutputFefo({
+    required List<ProductOutputRequest> items,
+    required String performedBy,
+    required String performedByName,
+    required String reasonCode,
+    String? reason,
+    String? activity,
+  }) async {
+    if (items.isEmpty) {
+      throw Exception('Nenhum item selecionado para saída.');
+    }
+
+    final planned = <Map<String, dynamic>>[];
+
+    for (final item in items) {
+      if (item.quantity <= 0) continue;
+
+      final batchesSnap = await _db
+          .collection('batches')
+          .where('productId', isEqualTo: item.productId)
+          .where('status', isEqualTo: 'disponivel')
+          .where('quantity', isGreaterThan: 0)
+          .get();
+
+      final docs = batchesSnap.docs.toList();
+      docs.sort((a, b) {
+        final ad = DateTime.tryParse((a.data()['expiryDate'] as String?) ?? '9999-12-31') ?? DateTime(9999);
+        final bd = DateTime.tryParse((b.data()['expiryDate'] as String?) ?? '9999-12-31') ?? DateTime(9999);
+        final an = a.data()['noExpiry'] as bool? ?? false;
+        final bn = b.data()['noExpiry'] as bool? ?? false;
+        if (an && bn) return 0;
+        if (an) return 1;
+        if (bn) return -1;
+        return ad.compareTo(bd);
+      });
+
+      final available = docs.fold<int>(0, (acc, d) => acc + ((d.data()['quantity'] as num?)?.toInt() ?? 0));
+      if (available < item.quantity) {
+        throw Exception(
+          'Estoque insuficiente para ${item.productName}. Disponível: $available, necessário: ${item.quantity}.',
+        );
+      }
+
+      var remaining = item.quantity;
+      for (final doc in docs) {
+        if (remaining <= 0) break;
+        final before = (doc.data()['quantity'] as num?)?.toInt() ?? 0;
+        final consume = before >= remaining ? remaining : before;
+        final after = before - consume;
+        remaining -= consume;
+
+        planned.add({
+          'doc': doc,
+          'productId': item.productId,
+          'productName': item.productName,
+          'consumed': consume,
+          'before': before,
+          'after': after,
+          'oldStatus': doc.data()['status'] as String? ?? 'disponivel',
+        });
+      }
+    }
+
+    if (planned.isEmpty) {
+      throw Exception('Nenhum consumo calculado para saída.');
+    }
+
+    final batch = _db.batch();
+    final now = DateTime.now().toIso8601String();
+
+    for (final p in planned) {
+      final doc = p['doc'] as QueryDocumentSnapshot<Map<String, dynamic>>;
+      final productId = p['productId'] as String;
+      final productName = p['productName'] as String;
+      final consumed = p['consumed'] as int;
+      final before = p['before'] as int;
+      final after = p['after'] as int;
+      final oldStatus = p['oldStatus'] as String;
+
+      batch.update(doc.reference, {
+        'quantity': after,
+        if (after <= 0) 'status': 'distribuido',
+      });
+
+      final movementRef = _movements.doc();
+      batch.set(movementRef, {
+        'productId': productId,
+        'productName': productName,
+        'batchId': doc.id,
+        'type': MovementType.saida.name,
+        'quantity': consumed,
+        'reasonCode': reasonCode,
+        'reason': reason,
+        'activity': activity,
+        'performedBy': performedBy,
+        'performedByName': performedByName,
+        'performedAt': now,
+        'isPendingSync': false,
+        'auditBefore': {'quantity': before, 'status': oldStatus},
+        'auditAfter': {
+          'quantity': after,
+          'status': after <= 0 ? 'distribuido' : oldStatus,
+          'reasonCode': reasonCode,
+        },
+      });
+
+      final auditRef = _auditLogs.doc();
+      batch.set(auditRef, {
+        'collection': 'batches',
+        'documentId': doc.id,
+        'action': 'saida',
+        'before': {'quantity': before, 'status': oldStatus},
+        'after': {
+          'quantity': after,
+          'status': after <= 0 ? 'distribuido' : oldStatus,
+          'reasonCode': reasonCode,
+        },
+        'performedBy': performedBy,
+        'performedByName': performedByName,
+        'performedAt': now,
+      });
+    }
+
+    await batch.commit();
   }
 }
