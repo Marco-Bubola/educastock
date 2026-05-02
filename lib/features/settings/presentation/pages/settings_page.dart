@@ -176,8 +176,9 @@ class SettingsPage extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final isDark = themeMode == ThemeMode.dark;
 
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: cs.surface,
       appBar: ModernProfileAppBar(
         title: 'Configuracoes',
         subtitle: 'Preferencias e conta',
@@ -192,18 +193,29 @@ class SettingsPage extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
-                color: AppColors.brandPrimary600,
+                gradient: const LinearGradient(
+                  colors: [AppColors.brandPrimary600, AppColors.secondaryBlue600],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 borderRadius: BorderRadius.circular(AppRadius.card),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brandPrimary600.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: AppColors.surface.withValues(alpha: 0.2),
+                    backgroundColor: Colors.white.withValues(alpha: 0.2),
                     radius: 28,
                     child: Text(
                       user?.name.substring(0, 1).toUpperCase() ?? 'U',
                       style: AppTypography.headingMedium
-                          .copyWith(color: AppColors.surface),
+                          .copyWith(color: Colors.white),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),
@@ -214,18 +226,18 @@ class SettingsPage extends ConsumerWidget {
                         Text(
                           user?.name ?? 'Usuário',
                           style: AppTypography.headingSmall
-                              .copyWith(color: AppColors.surface),
+                              .copyWith(color: Colors.white),
                         ),
                         Text(
                           user?.email ?? '',
                           style: AppTypography.bodySmall.copyWith(
-                            color: AppColors.surface.withValues(alpha: 0.8),
+                            color: Colors.white.withValues(alpha: 0.8),
                           ),
                         ),
                         Text(
                           _roleLabel(user?.role.name ?? ''),
                           style: AppTypography.labelSmall.copyWith(
-                            color: AppColors.brandPrimary100,
+                            color: Colors.white.withValues(alpha: 0.7),
                           ),
                         ),
                       ],
@@ -317,7 +329,7 @@ class SettingsPage extends ConsumerWidget {
               child: Text(
                 'EducaStock v1.0.0 • ONG Casa da Criança',
                 style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.neutral500,
+                  color: cs.onSurfaceVariant,
                 ),
               ),
             ),
@@ -351,7 +363,8 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? AppColors.neutral700;
+    final cs = Theme.of(context).colorScheme;
+    final c = color ?? cs.onSurface;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: InkWell(
@@ -360,12 +373,27 @@ class _SettingsTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.lg),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.35)),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 4),
+            ],
           ),
           child: Row(
             children: [
-              Icon(icon, color: c, size: 22),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: c.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                ),
+                child: Icon(icon, color: c, size: 20),
+              ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Text(
@@ -374,7 +402,7 @@ class _SettingsTile extends StatelessWidget {
                 ),
               ),
               Icon(Icons.chevron_right_rounded,
-                  color: AppColors.neutral500, size: 18),
+                  color: cs.onSurfaceVariant, size: 18),
             ],
           ),
         ),
@@ -398,23 +426,39 @@ class _SettingsSwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.lg),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.35)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 4),
+          ],
         ),
         child: Row(
           children: [
-            Icon(icon, color: AppColors.neutral700, size: 22),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: cs.onSurface.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(AppRadius.small),
+              ),
+              child: Icon(icon, color: cs.onSurface, size: 20),
+            ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Text(
                 label,
                 style: AppTypography.bodyLarge.copyWith(
-                  color: AppColors.neutral700,
+                  color: cs.onSurface,
                 ),
               ),
             ),
