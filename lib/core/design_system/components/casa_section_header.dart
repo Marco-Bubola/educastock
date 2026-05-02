@@ -19,17 +19,34 @@ class CasaSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
-        vertical: AppSpacing.sm,
+        vertical: AppSpacing.xs,
       ),
       child: Row(
         children: [
+          // Accent bar colorida
+          Container(
+            width: 3,
+            height: 14,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.brandPrimary600, AppColors.secondaryBlue600],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           Text(
             title,
             style: AppTypography.headingSmall.copyWith(
-              color: AppColors.neutral900,
+              color: cs.onSurface,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
             ),
           ),
           if (count != null) ...[
@@ -40,14 +57,14 @@ class CasaSectionHeader extends StatelessWidget {
                 vertical: 2,
               ),
               decoration: BoxDecoration(
-                color: AppColors.brandPrimary100,
+                color: AppColors.brandPrimary600.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
               child: Text(
                 '$count',
                 style: AppTypography.labelSmall.copyWith(
                   color: AppColors.brandPrimary600,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -61,11 +78,13 @@ class CasaSectionHeader extends StatelessWidget {
                   horizontal: AppSpacing.sm,
                   vertical: AppSpacing.xs,
                 ),
+                foregroundColor: AppColors.brandPrimary600,
               ),
               child: Text(
                 action!,
                 style: AppTypography.labelMedium.copyWith(
                   color: AppColors.brandPrimary600,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
