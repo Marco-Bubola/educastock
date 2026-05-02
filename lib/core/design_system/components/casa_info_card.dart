@@ -26,13 +26,16 @@ class CasaInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = iconColor ?? AppColors.brandPrimary600;
+    final cs = Theme.of(context).colorScheme;
+    final cardBg = backgroundColor ?? cs.surfaceContainerLow;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.lg),
         decoration: BoxDecoration(
-          color: backgroundColor ?? AppColors.surface,
+          color: cardBg,
           borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.06),
@@ -51,28 +54,28 @@ class CasaInfoCard extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
+                    color: color.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(AppRadius.small),
                   ),
                   child: Icon(icon, color: color, size: 22),
                 ),
                 if (onTap != null)
                   Icon(Icons.arrow_forward_ios_rounded,
-                      size: 14, color: AppColors.neutral500),
+                      size: 14, color: cs.onSurfaceVariant),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
             Text(
               value,
               style: AppTypography.numberMedium.copyWith(
-                color: AppColors.neutral900,
+                color: cs.onSurface,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               title,
               style: AppTypography.labelMedium.copyWith(
-                color: AppColors.neutral500,
+                color: cs.onSurfaceVariant,
               ),
             ),
             if (subtitle != null) ...[
@@ -80,7 +83,7 @@ class CasaInfoCard extends StatelessWidget {
               Text(
                 subtitle!,
                 style: AppTypography.labelSmall.copyWith(
-                  color: AppColors.neutral500,
+                  color: cs.onSurfaceVariant,
                 ),
               ),
             ],
