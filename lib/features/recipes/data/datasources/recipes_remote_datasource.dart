@@ -98,7 +98,7 @@ class RecipesRemoteDatasource {
         return ad.compareTo(bd);
       });
 
-      final totalAvailable = docs.fold<int>(0, (sum, d) => sum + ((d.data()['quantity'] as num?)?.toInt() ?? 0));
+      final totalAvailable = docs.fold<int>(0, (acc, d) => acc + ((d.data()['quantity'] as num?)?.toInt() ?? 0));
       if (totalAvailable < item.quantity) {
         throw Exception('Estoque insuficiente para ${item.productName}. Disponível: $totalAvailable, necessário: ${item.quantity}.');
       }
@@ -167,7 +167,7 @@ class RecipesRemoteDatasource {
       'recipeId': recipe.id,
       'recipeName': recipe.name,
       'totalItems': recipe.items.length,
-      'totalQuantityMoved': plannedUpdates.fold<int>(0, (sum, e) => sum + (e['consumed'] as int)),
+      'totalQuantityMoved': plannedUpdates.fold<int>(0, (acc, e) => acc + (e['consumed'] as int)),
       'performedBy': userId,
       'performedByName': userName,
       'performedAt': now.toIso8601String(),
