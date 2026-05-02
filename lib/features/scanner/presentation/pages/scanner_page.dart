@@ -40,6 +40,91 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
     });
   }
 
+  void _showManualBarcodeInput(BuildContext ctx) {
+    final ctrl = TextEditingController();
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        final cs = Theme.of(sheetCtx).colorScheme;
+        return Padding(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppRadius.modal)),
+            ),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: cs.outlineVariant,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                  ),
+                ),
+                Text('Código de barras manual',
+                    style: AppTypography.headingSmall.copyWith(
+                        color: cs.onSurface, fontWeight: FontWeight.w700)),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                    'Digite o código para verificar se o produto já existe.',
+                    style: AppTypography.bodySmall
+                        .copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: AppSpacing.lg),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: 'Ex: 7891234567890',
+                    prefixIcon: const Icon(Icons.qr_code_rounded),
+                    border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.input)),
+                    labelText: 'Código de barras',
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () {
+                      final barcode = ctrl.text.trim();
+                      if (barcode.isEmpty) return;
+                      Navigator.of(sheetCtx).pop();
+                      context.push(
+                          '${AppRoutes.productReview}?barcode=$barcode');
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandPrimary600,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.button)),
+                    ),
+                    child: const Text('Buscar produto'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
@@ -121,10 +206,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             bottom: 24,
             left: AppSpacing.lg,
             right: AppSpacing.lg,
-            child: TextButton(
-              onPressed: () => context.push(AppRoutes.productForm),
+            child: TextButton.icon(
+              onPressed: () => _showManualBarcodeInput(context),
               style: TextButton.styleFrom(foregroundColor: Colors.white70),
-              child: const Text('Cadastro manual sem código de barras'),
+              icon: const Icon(Icons.keyboard_rounded, size: 18),
+              label: const Text('Cadastro manual sem código de barras'),
             ),
           ),
         ],
