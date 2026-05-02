@@ -41,3 +41,15 @@ class BatchFormNotifier extends Notifier<AsyncValue<String?>> {
 final batchFormProvider =
     NotifierProvider<BatchFormNotifier, AsyncValue<String?>>(
         () => BatchFormNotifier());
+
+/// Conta quantos lotes ativos estão na localização indicada (pelo label).
+/// Útil para validar capacidade de prateleira/nível.
+final batchCountByLocationProvider =
+    Provider.family<int, String>((ref, locationLabel) {
+  return ref.watch(allAvailableBatchesProvider).when(
+        data: (batches) =>
+            batches.where((b) => b.shelfLocation == locationLabel).length,
+        loading: () => 0,
+        error: (_, __) => 0,
+      );
+});
