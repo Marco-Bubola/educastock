@@ -16,48 +16,197 @@ class AppNavigationShell extends StatelessWidget {
   static const _tabRoutes = [
     AppRoutes.dashboard,
     AppRoutes.productList,
+    '${AppRoutes.movement}?batchId=',
     AppRoutes.alerts,
     AppRoutes.reports,
   ];
 
   int _selectedIndex(String currentLocation) {
-    if (currentLocation.startsWith(AppRoutes.alerts)) return 2;
-    if (currentLocation.startsWith(AppRoutes.reports)) return 3;
+    if (currentLocation.startsWith(AppRoutes.movement)) return 2;
+    if (currentLocation.startsWith(AppRoutes.alerts)) return 3;
+    if (currentLocation.startsWith(AppRoutes.reports)) return 4;
     if (currentLocation.startsWith(AppRoutes.productList)) return 1;
     return 0;
   }
 
   @override
   Widget build(BuildContext context) {
+    final idx = _selectedIndex(location);
     return Scaffold(
       body: child,
-      bottomNavigationBar: NavigationBar(
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Inicio',
+      bottomNavigationBar: _AnimatedTabBar(
+        selectedIndex: idx,
+        onTap: (i) => context.go(_tabRoutes[i]),
+      ),
+    );
+  }
+}
+
+// ─── Tab definitions ────────────────────────────────────────────────────────
+
+class _TabDef {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final Color color;
+  const _TabDef({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.color,
+  });
+}
+
+const _tabs = [
+  _TabDef(
+    icon: Icons.home_outlined,
+    activeIcon: Icons.home_rounded,
+    label: 'Início',
+    color: Color(0xFF1D5FA8),
+  ),
+  _TabDef(
+    icon: Icons.inventory_2_outlined,
+    activeIcon: Icons.inventory_2_rounded,
+    label: 'Estoque',
+    color: Color(0xFF2563EB),
+  ),
+  _TabDef(
+    icon: Icons.outbound_outlined,
+    activeIcon: Icons.outbound_rounded,
+    label: 'Saída',
+    color: Color(0xFFC53030),
+  ),
+  _TabDef(
+    icon: Icons.notifications_outlined,
+    activeIcon: Icons.notifications_rounded,
+    label: 'Alertas',
+    color: Color(0xFFB7791F),
+  ),
+  _TabDef(
+    icon: Icons.bar_chart_outlined,
+    activeIcon: Icons.bar_chart_rounded,
+    label: 'Relatórios',
+    color: Color(0xFF2E7D32),
+  ),
+];
+
+// ─── Animated Tab Bar ────────────────────────────────────────────────────────
+
+class _AnimatedTabBar extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+
+  const _AnimatedTabBar({
+    required this.selectedIndex,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border(
+          top: BorderSide(
+            color: cs.outlineVariant.withValues(alpha: 0.5),
+            width: 0.8,
           ),
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2_rounded),
-            label: 'Estoque',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications_rounded),
-            label: 'Alertas',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart_rounded),
-            label: 'Relatorios',
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
           ),
         ],
-        selectedIndex: _selectedIndex(location),
-        onDestinationSelected: (index) {
-          context.go(_tabRoutes[index]);
-        },
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Row(
+            children: List.generate(_tabs.length, (i) {
+              return Expanded(child: _TabItem(
+                tab: _tabs[i],
+                selected: selectedIndex == i,
+                onTap: () => onTap(i),
+              ));
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TabItem extends StatelessWidget {
+  final _TabDef tab;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TabItem({
+    required this.tab,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inactiveColor = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? tab.color.withValues(alpha: isDark ? 0.22 : 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedScale(
+              scale: selected ? 1.18 : 1.0,
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutBack,
+              child: Icon(
+                selected ? tab.activeIcon : tab.icon,
+                size: 24,
+                color: selected ? tab.color : inactiveColor,
+              ),
+            ),
+            const SizedBox(height: 3),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 180),
+              style: TextStyle(
+                fontSize: selected ? 10.5 : 9.5,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                color: selected ? tab.color : inactiveColor,
+                letterSpacing: selected ? 0.2 : 0,
+              ),
+              child: Text(tab.label, maxLines: 1),
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeInOut,
+              margin: const EdgeInsets.only(top: 3),
+              height: 3,
+              width: selected ? 20 : 0,
+              decoration: BoxDecoration(
+                color: tab.color,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
