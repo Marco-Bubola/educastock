@@ -181,6 +181,30 @@ class ReportsPage extends ConsumerWidget {
               'transferencia': 'Transferência',
             };
 
+            // Tendência mensal: agrupar lotes por mês de entrada
+            final Map<String, int> monthTrend = {};
+            final now = DateTime.now();
+            for (int i = 5; i >= 0; i--) {
+              final d = DateTime(now.year, now.month - i);
+              final key =
+                  '${d.month.toString().padLeft(2, '0')}/${d.year % 100}';
+              monthTrend[key] = 0;
+            }
+            for (final b in batches) {
+              final key =
+                  '${b.entryDate.month.toString().padLeft(2, '0')}/${b.entryDate.year % 100}';
+              if (monthTrend.containsKey(key)) {
+                monthTrend[key] = monthTrend[key]! + b.quantity;
+              }
+            }
+
+            // Saúde do estoque (0–100)
+            final healthScore = (100 -
+                    (expired * 10) -
+                    (exp7List.length * 5) -
+                    (exp30List.length - exp7List.length) * 2)
+                .clamp(0, 100);
+
             // Distribuição por validade (buckets: vencido, 0-7, 8-30, 31-90, >90, sem val)
             final Map<String, int> expiryBuckets = {
               'Vencido': 0,
@@ -228,9 +252,17 @@ class ReportsPage extends ConsumerWidget {
                   expired: expired,
                   criticals: exp7List.length,
                   warnings: exp30List.length,
+                  healthScore: healthScore,
                   isDark: isDark,
                   cs: cs,
                 ),
+                const SizedBox(height: AppSpacing.xl),
+
+                // ─── Tendência mensal de entradas
+                CasaSectionHeader(title: 'Entradas Mensais (6 meses)'),
+                const SizedBox(height: AppSpacing.sm),
+                _MonthlyTrendChart(
+                    monthTrend: monthTrend, isDark: isDark, cs: cs),
                 const SizedBox(height: AppSpacing.xl),
 
                 // ─── Gráfico de barras: Validade
@@ -262,7 +294,7 @@ class ReportsPage extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
-                // ─── Lista de próximos a vencer
+                // ─── Tabela top vencendo
                 CasaSectionHeader(
                     title: 'Próximos a Vencer',
                     count: exp30List.length),
@@ -292,6 +324,7 @@ class _SummaryGrid extends StatelessWidget {
   final int expired;
   final int criticals;
   final int warnings;
+  final int healthScore;
   final bool isDark;
   final ColorScheme cs;
   const _SummaryGrid(
@@ -301,6 +334,7 @@ class _SummaryGrid extends StatelessWidget {
       required this.expired,
       required this.criticals,
       required this.warnings,
+      required this.healthScore,
       required this.isDark,
       required this.cs});
 
@@ -308,6 +342,11 @@ class _SummaryGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final currFmt = NumberFormat.currency(
         locale: 'pt_BR', symbol: 'R\$', decimalDigits: 0);
+    final healthColor = healthScore >= 80
+        ? AppColors.success600
+        : healthScore >= 50
+            ? AppColors.warning600
+            : AppColors.danger600;
     final cards = [
       _SummaryDef('Lotes', '$totalBatches', Icons.layers_rounded,
           AppColors.brandPrimary600),
@@ -315,12 +354,12 @@ class _SummaryGrid extends StatelessWidget {
           AppColors.secondaryBlue600),
       _SummaryDef('Valor est.', currFmt.format(totalValue),
           Icons.attach_money_rounded, AppColors.success600),
-      _SummaryDef('Vencidos', '$expired', Icons.cancel_outlined,
-          expired > 0 ? AppColors.danger600 : AppColors.success600),
+      _SummaryDef('Saúde', '$healthScore%',
+          Icons.favorite_rounded, healthColor),
       _SummaryDef('Críticos', '$criticals', Icons.warning_rounded,
           criticals > 0 ? AppColors.danger600 : AppColors.success600),
-      _SummaryDef('Atenção', '$warnings', Icons.schedule_rounded,
-          warnings > 0 ? AppColors.warning600 : AppColors.success600),
+      _SummaryDef('Vencidos', '$expired', Icons.cancel_outlined,
+          expired > 0 ? AppColors.danger600 : AppColors.success600),
     ];
     return GridView.count(
       crossAxisCount: 3,
@@ -384,6 +423,163 @@ class _SummaryCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Gráfico de linha: tendência mensal ──────────────────────────────────
+
+class _MonthlyTrendChart extends StatelessWidget {
+  final Map<String, int> monthTrend;
+  final bool isDark;
+  final ColorScheme cs;
+  const _MonthlyTrendChart(
+      {required this.monthTrend, required this.isDark, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    final keys = monthTrend.keys.toList();
+    final values = keys.map((k) => monthTrend[k]!.toDouble()).toList();
+    final maxVal = values.fold(0.0, math.max);
+
+    if (maxVal == 0) {
+      return Container(
+        height: 140,
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.35)),
+        ),
+        child: Center(
+          child: Text('Sem entradas nos últimos 6 meses',
+              style: AppTypography.bodySmall
+                  .copyWith(color: cs.onSurfaceVariant)),
+        ),
+      );
+    }
+
+    final spots = values.asMap().entries
+        .map((e) => FlSpot(e.key.toDouble(), e.value))
+        .toList();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
+      height: 180,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
+        ],
+      ),
+      child: LineChart(
+        LineChartData(
+          minY: 0,
+          maxY: maxVal * 1.3,
+          clipData: const FlClipData.all(),
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: math.max(1, maxVal / 4),
+            getDrawingHorizontalLine: (v) => FlLine(
+              color: cs.outlineVariant.withValues(alpha: 0.3),
+              strokeWidth: 1,
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 24,
+                getTitlesWidget: (v, _) {
+                  final idx = v.toInt();
+                  if (idx < 0 || idx >= keys.length) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      keys[idx],
+                      style: TextStyle(
+                          fontSize: 9, color: cs.onSurfaceVariant),
+                    ),
+                  );
+                },
+              ),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 32,
+                getTitlesWidget: (v, _) {
+                  if (v == 0) return const SizedBox.shrink();
+                  return Text(
+                    v.toInt().toString(),
+                    style: TextStyle(
+                        fontSize: 9, color: cs.onSurfaceVariant),
+                  );
+                },
+              ),
+            ),
+            topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false)),
+          ),
+          lineTouchData: LineTouchData(
+            touchTooltipData: LineTouchTooltipData(
+              getTooltipColor: (_) => cs.surfaceContainer,
+              getTooltipItems: (spots) => spots
+                  .map((s) => LineTooltipItem(
+                        '${s.y.toInt()} un.',
+                        TextStyle(
+                            color: cs.onSurface,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11),
+                      ))
+                  .toList(),
+            ),
+          ),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              curveSmoothness: 0.35,
+              color: AppColors.brandPrimary600,
+              barWidth: 2.5,
+              dotData: FlDotData(
+                show: true,
+                getDotPainter: (s, pct, bar, idx) =>
+                    FlDotCirclePainter(
+                  radius: 4,
+                  color: AppColors.brandPrimary600,
+                  strokeColor: cs.surface,
+                  strokeWidth: 1.5,
+                ),
+              ),
+              belowBarData: BarAreaData(
+                show: true,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.brandPrimary600.withValues(alpha: 0.25),
+                    AppColors.brandPrimary600.withValues(alpha: 0.0),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
       ),
     );
   }
