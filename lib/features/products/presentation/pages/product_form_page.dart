@@ -139,6 +139,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final formState = ref.watch(productFormProvider);
     final activeCategories = ref.watch(activeProductCategoriesProvider);
     final categoryLabelMap = ref.watch(categoryLabelMapProvider);
@@ -149,7 +150,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
     final isEditing = widget.productId != null;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: cs.surface,
       appBar: ModernProfileAppBar(
         title: isEditing ? 'Editar Produto' : 'Novo Produto',
         subtitle: isEditing ? 'Atualize os dados do produto' : 'Preencha as informações do produto',
@@ -290,12 +291,12 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
               // Perecível
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(AppRadius.card),
                   border: Border.all(
                     color: _isPerishable
                         ? AppColors.warning600.withValues(alpha: 0.4)
-                        : AppColors.neutral100,
+                        : cs.outlineVariant.withValues(alpha: 0.4),
                   ),
                 ),
                 child: SwitchListTile(
@@ -308,8 +309,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                     height: 38,
                     decoration: BoxDecoration(
                       color: _isPerishable
-                          ? AppColors.warning600.withValues(alpha: 0.1)
-                          : AppColors.neutral100,
+                          ? AppColors.warning600.withValues(alpha: 0.12)
+                          : cs.surfaceContainer,
                       borderRadius: BorderRadius.circular(AppRadius.small),
                     ),
                     child: Icon(
@@ -317,13 +318,13 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                       size: 20,
                       color: _isPerishable
                           ? AppColors.warning600
-                          : AppColors.neutral500,
+                          : cs.onSurfaceVariant,
                     ),
                   ),
                   title: Text(
                     'Produto Perecível',
                     style: AppTypography.labelLarge
-                        .copyWith(color: AppColors.neutral900),
+                        .copyWith(color: cs.onSurface),
                   ),
                   subtitle: Text(
                     _isPerishable
@@ -332,7 +333,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                     style: AppTypography.bodySmall.copyWith(
                       color: _isPerishable
                           ? AppColors.warning600
-                          : AppColors.neutral500,
+                          : cs.onSurfaceVariant,
                     ),
                   ),
                   value: _isPerishable,
@@ -345,18 +346,19 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
               // Estoque mínimo
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(color: AppColors.neutral100),
+                  border: Border.all(
+                      color: cs.outlineVariant.withValues(alpha: 0.4)),
                 ),
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 child: Row(
                   children: [
                     Container(
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: AppColors.danger600.withValues(alpha: 0.08),
+                        color: AppColors.danger600.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(AppRadius.small),
                       ),
                       child: const Icon(Icons.warning_amber_rounded,
@@ -370,62 +372,68 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                           Text(
                             'Estoque Mínimo',
                             style: AppTypography.labelLarge
-                                .copyWith(color: AppColors.neutral900),
+                                .copyWith(color: cs.onSurface),
                           ),
                           Text(
-                            'Alerta quando quantidade ficar abaixo deste valor',
+                            'Alerta abaixo deste valor',
                             style: AppTypography.bodySmall
-                                .copyWith(color: AppColors.neutral500),
+                                .copyWith(color: cs.onSurfaceVariant),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
-                    SizedBox(
-                      width: 72,
-                      child: Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              if (_minimumStock > 0) {
-                                setState(() => _minimumStock--);
-                              }
-                            },
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: AppColors.neutral100,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.remove_rounded,
-                                  size: 16, color: AppColors.neutral700),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            if (_minimumStock > 0) {
+                              setState(() => _minimumStock--);
+                            }
+                          },
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainer,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: cs.outlineVariant),
+                            ),
+                            child: Icon(Icons.remove_rounded,
+                                size: 16, color: cs.onSurfaceVariant),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 36,
+                          child: Text(
+                            '$_minimumStock',
+                            textAlign: TextAlign.center,
+                            style: AppTypography.headingSmall.copyWith(
+                              color: cs.onSurface,
                             ),
                           ),
-                          Expanded(
-                            child: Text(
-                              '$_minimumStock',
-                              textAlign: TextAlign.center,
-                              style: AppTypography.headingSmall.copyWith(
-                                color: AppColors.neutral900,
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(() => _minimumStock++),
+                          child: Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  AppColors.brandPrimary600,
+                                  AppColors.secondaryBlue600,
+                                ],
                               ),
+                              shape: BoxShape.circle,
                             ),
+                            child: const Icon(Icons.add_rounded,
+                                size: 16, color: Colors.white),
                           ),
-                          GestureDetector(
-                            onTap: () => setState(() => _minimumStock++),
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: AppColors.brandPrimary100,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.add_rounded,
-                                  size: 16, color: AppColors.brandPrimary600),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
