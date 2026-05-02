@@ -9,6 +9,7 @@ import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../locations/presentation/controllers/locations_provider.dart';
+import '../../../locations/domain/entities/storage_location.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/controllers/products_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
@@ -234,6 +235,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     if (existingProductId.isNotEmpty) {
       linkedProduct = await ref.read(productsDatasourceProvider).getProductById(existingProductId);
     }
+    if (!mounted) return;
     final isPerishable = linkedProduct?.isPerishable ?? !_noExpiry;
 
     // Validação crítica: perecível exige validade ou flag noExpiry
@@ -621,107 +623,30 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
               const SizedBox(height: AppSpacing.md),
 
               locationsState.when(
-                data: (locations) {
-                  final items = locations
-                      .map((l) => DropdownMenuItem<String>(
-                            value: l.label,
-                            child: Text(l.label),
-                          ))
-                      .toList();
-
-                  return Column(
-                    children: [
-                      if (locations.isNotEmpty)
-                        DropdownButtonFormField<String>(
-                          // ignore: deprecated_member_use
-                          value: _manualLocation ? null : _selectedLocationLabel,
-                          decoration: const InputDecoration(
-                            labelText: 'Localizacao estruturada',
-                            prefixIcon:
-                                Icon(Icons.inventory_2_outlined, size: 20),
-                          ),
-                          items: items,
-                          onChanged: (v) {
-                            setState(() {
-                              _selectedLocationLabel = v;
-                              _manualLocation = false;
-                            });
-                          },
-                        )
-                      else
-                        Container(
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                          decoration: BoxDecoration(
-                            color: AppColors.warning600.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.info_outline_rounded,
-                                  color: AppColors.warning600, size: 18),
-                              const SizedBox(width: AppSpacing.sm),
-                              Expanded(
-                                child: Text(
-                                  'Nenhuma localizacao cadastrada.',
-                                  style: AppTypography.bodySmall.copyWith(
-                                    color: AppColors.warning600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Wrap(
-                          spacing: AppSpacing.sm,
-                          runSpacing: AppSpacing.sm,
-                          children: [
-                            TextButton.icon(
-                              onPressed: () {
-                                setState(() {
-                                  _manualLocation = !_manualLocation;
-                                  if (_manualLocation) {
-                                    _selectedLocationLabel = null;
-                                  }
-                                });
-                              },
-                              icon: Icon(
-                                _manualLocation
-                                    ? Icons.check_circle_rounded
-                                    : Icons.edit_location_alt_outlined,
-                                size: 18,
-                              ),
-                              label: Text(
-                                _manualLocation
-                                    ? 'Usando preenchimento manual'
-                                    : 'Preencher localizacao manualmente',
-                              ),
-                            ),
-                            TextButton.icon(
-                              onPressed: () => context.push(AppRoutes.locations),
-                              icon: const Icon(Icons.settings_outlined, size: 18),
-                              label: const Text('Gerenciar localizacoes'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
+                data: (locations) => _LocationPicker(
+                  locations: locations,
+                  selectedLabel: _manualLocation ? null : _selectedLocationLabel,
+                  onChanged: (label) => setState(() {
+                    _selectedLocationLabel = label;
+                    _manualLocation = false;
+                  }),
+                  onManual: () => setState(() {
+                    _manualLocation = !_manualLocation;
+                    if (_manualLocation) _selectedLocationLabel = null;
+                  }),
+                  onManageLocations: () => context.push(AppRoutes.locations),
+                ),
                 loading: () => const CasaCardSkeleton(),
                 error: (_, __) => const SizedBox.shrink(),
               ),
 
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.sm),
 
               if (_manualLocation) ...[
                 CasaTextField(
-                  label: 'Localizacao manual (Sala/Prateleira/Nivel)',
+                  label: 'Localização manual (Sala/Prateleira/Nível)',
                   controller: _locationController,
-                  prefixIcon:
-                      const Icon(Icons.location_on_outlined, size: 20),
+                  prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
                   hint: 'Ex: Dep-A / P3 / N2',
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -837,6 +762,495 @@ class _ImagePickerSection extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Seletor de localização estruturado: Seção → Prateleira → Nível c/ capacidade
+// ---------------------------------------------------------------------------
+
+class _LocationPicker extends ConsumerStatefulWidget {
+  final List<StorageLocation> locations;
+  final String? selectedLabel;
+  final ValueChanged<String?> onChanged;
+  final VoidCallback onManual;
+  final VoidCallback onManageLocations;
+
+  const _LocationPicker({
+    required this.locations,
+    required this.selectedLabel,
+    required this.onChanged,
+    required this.onManual,
+    required this.onManageLocations,
+  });
+
+  @override
+  ConsumerState<_LocationPicker> createState() => _LocationPickerState();
+}
+
+class _LocationPickerState extends ConsumerState<_LocationPicker> {
+  String? _section;
+  String? _shelf;
+  String? _level;
+
+  @override
+  void didUpdateWidget(covariant _LocationPicker old) {
+    super.didUpdateWidget(old);
+    if (widget.selectedLabel == null && old.selectedLabel != null) {
+      setState(() {
+        _section = null;
+        _shelf = null;
+        _level = null;
+      });
+    }
+  }
+
+  List<String> get _sections {
+    final s = widget.locations.map((l) => l.section).toSet().toList();
+    s.sort();
+    return s;
+  }
+
+  List<StorageLocation> get _locInSection =>
+      widget.locations.where((l) => l.section == _section).toList();
+
+  List<String> get _shelves {
+    final s = _locInSection.map((l) => l.shelf).toSet().toList();
+    s.sort();
+    return s;
+  }
+
+  List<StorageLocation> get _locInShelf =>
+      _locInSection.where((l) => l.shelf == _shelf).toList();
+
+  StorageLocation? _findLoc(String? level) {
+    for (final l in _locInShelf) {
+      if (l.level == level) return l;
+    }
+    return null;
+  }
+
+  void _pickSection(String s) {
+    setState(() {
+      _section = s;
+      _shelf = null;
+      _level = null;
+    });
+    widget.onChanged(null);
+  }
+
+  void _pickShelf(String s) {
+    setState(() {
+      _shelf = s;
+      _level = null;
+    });
+    widget.onChanged(null);
+  }
+
+  void _pickLevel(String? lv) {
+    setState(() => _level = lv);
+    final loc = _findLoc(lv);
+    widget.onChanged(loc?.label);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (widget.locations.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.warning600.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: AppColors.warning600.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline_rounded,
+                color: AppColors.warning600, size: 18),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Nenhuma localização cadastrada.',
+                    style: AppTypography.labelMedium
+                        .copyWith(color: AppColors.warning600),
+                  ),
+                  const SizedBox(height: 4),
+                  TextButton.icon(
+                    onPressed: widget.onManageLocations,
+                    icon: const Icon(Icons.add_location_alt_outlined, size: 15),
+                    label: const Text('Criar localização'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.brandPrimary600,
+                      padding: EdgeInsets.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppColors.brandPrimary600, AppColors.secondaryBlue600],
+                  ),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: const Icon(Icons.layers_rounded,
+                    size: 14, color: Colors.white),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Localização no Estoque',
+                style: AppTypography.labelLarge.copyWith(
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: widget.onManageLocations,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.brandPrimary600,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(fontSize: 11),
+                ),
+                child: const Text('Gerenciar'),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: AppSpacing.md),
+
+          // Seção
+          _StepLabel(label: '1. Seção', done: _section != null),
+          const SizedBox(height: AppSpacing.xs),
+          _ChipRow(
+            items: _sections,
+            selected: _shelf != null ? _section : _section,
+            onTap: _pickSection,
+            activeColor: AppColors.brandPrimary600,
+          ),
+
+          // Prateleira
+          if (_section != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            _StepLabel(label: '2. Prateleira', done: _shelf != null),
+            const SizedBox(height: AppSpacing.xs),
+            _ChipRow(
+              items: _shelves,
+              selected: _shelf,
+              onTap: _pickShelf,
+              activeColor: AppColors.secondaryBlue600,
+            ),
+          ],
+
+          // Nível
+          if (_shelf != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            _StepLabel(label: '3. Nível', done: _level != null),
+            const SizedBox(height: AppSpacing.xs),
+            _buildLevels(cs, isDark),
+          ],
+
+          // Confirmação
+          if (widget.selectedLabel != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.success600.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                border: Border.all(
+                    color: AppColors.success600.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline_rounded,
+                      color: AppColors.success600, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.selectedLabel!,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppColors.success600,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _section = null;
+                        _shelf = null;
+                        _level = null;
+                      });
+                      widget.onChanged(null);
+                    },
+                    child: const Icon(Icons.close_rounded,
+                        size: 16, color: AppColors.success600),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: AppSpacing.xs),
+          TextButton.icon(
+            onPressed: widget.onManual,
+            icon: const Icon(Icons.edit_location_alt_outlined, size: 15),
+            label: const Text('Inserir manualmente'),
+            style: TextButton.styleFrom(
+              foregroundColor: cs.onSurfaceVariant,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              textStyle: const TextStyle(fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLevels(ColorScheme cs, bool isDark) {
+    final allBatches = ref.watch(allAvailableBatchesProvider).valueOrNull ?? [];
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
+      children: _locInShelf.map((loc) {
+        final lv = loc.level ?? '—';
+        final isSelected = _level == loc.level;
+        final limit = loc.productsPerLevel;
+        final count = limit != null
+            ? allBatches
+                .where((b) => b.shelfLocation == loc.label)
+                .length
+            : null;
+        final isFull = limit != null && count != null && count >= limit;
+
+        return GestureDetector(
+          onTap: isFull ? null : () => _pickLevel(loc.level),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(colors: [
+                      AppColors.brandPrimary600,
+                      AppColors.secondaryBlue600,
+                    ])
+                  : null,
+              color: isSelected
+                  ? null
+                  : isFull
+                      ? AppColors.danger600.withValues(alpha: 0.08)
+                      : cs.surfaceContainer,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.transparent
+                    : isFull
+                        ? AppColors.danger600.withValues(alpha: 0.45)
+                        : cs.outlineVariant,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: AppColors.brandPrimary600.withValues(alpha: 0.3),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      )
+                    ]
+                  : [],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'N$lv',
+                      style: AppTypography.labelMedium.copyWith(
+                        color: isSelected
+                            ? Colors.white
+                            : isFull
+                                ? AppColors.danger600
+                                : cs.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (isFull) ...[
+                      const SizedBox(width: 4),
+                      const Icon(Icons.block_rounded,
+                          size: 11, color: AppColors.danger600),
+                    ],
+                  ],
+                ),
+                if (limit != null) ...[
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: 42,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(
+                        value: (count! / limit).clamp(0.0, 1.0),
+                        minHeight: 3,
+                        backgroundColor: isSelected
+                            ? Colors.white.withValues(alpha: 0.3)
+                            : cs.outlineVariant,
+                        valueColor: AlwaysStoppedAnimation(
+                          isSelected
+                              ? Colors.white
+                              : isFull
+                                  ? AppColors.danger600
+                                  : AppColors.success600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '$count/$limit',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: isSelected
+                          ? Colors.white.withValues(alpha: 0.85)
+                          : isFull
+                              ? AppColors.danger600
+                              : cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _StepLabel extends StatelessWidget {
+  final String label;
+  final bool done;
+  const _StepLabel({required this.label, required this.done});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(
+          done ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+          size: 13,
+          color: done ? AppColors.success600 : cs.onSurfaceVariant,
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: AppTypography.labelSmall.copyWith(
+            color: done ? AppColors.success600 : cs.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChipRow extends StatelessWidget {
+  final List<String> items;
+  final String? selected;
+  final ValueChanged<String> onTap;
+  final Color activeColor;
+
+  const _ChipRow({
+    required this.items,
+    required this.selected,
+    required this.onTap,
+    required this.activeColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: items.map((item) {
+          final isSelected = item == selected;
+          return GestureDetector(
+            onTap: () => onTap(item),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.only(right: AppSpacing.sm),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                gradient: isSelected
+                    ? LinearGradient(
+                        colors: [
+                          activeColor,
+                          activeColor.withValues(alpha: 0.75)
+                        ],
+                      )
+                    : null,
+                color: isSelected ? null : cs.surfaceContainer,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                border: Border.all(
+                  color: isSelected
+                      ? Colors.transparent
+                      : activeColor.withValues(alpha: 0.4),
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: activeColor.withValues(alpha: 0.3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    : [],
+              ),
+              child: Text(
+                item,
+                style: AppTypography.labelMedium.copyWith(
+                  color: isSelected ? Colors.white : activeColor,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 }
