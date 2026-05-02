@@ -24,12 +24,17 @@ class LocationsRemoteDatasource {
   }
 
   Future<String> createLocation({
+    String? locationName,
     required String section,
     required String shelf,
     String? level,
     String? room,
+    int? shelvesCount,
+    int? levelsCount,
+    int? productsPerLevel,
   }) async {
     final normalized = _normalizedKey(
+      locationName: locationName,
       section: section,
       shelf: shelf,
       level: level,
@@ -47,10 +52,14 @@ class LocationsRemoteDatasource {
 
     final location = StorageLocation(
       id: '',
+      locationName: _clean(locationName),
       section: section.trim(),
       shelf: shelf.trim(),
       level: _clean(level),
       room: _clean(room),
+      shelvesCount: shelvesCount,
+      levelsCount: levelsCount,
+      productsPerLevel: productsPerLevel,
       isActive: true,
       createdAt: DateTime.now(),
       normalizedKey: normalized,
@@ -65,6 +74,7 @@ class LocationsRemoteDatasource {
   }
 
   String _normalizedKey({
+    String? locationName,
     required String section,
     required String shelf,
     String? level,
@@ -72,7 +82,7 @@ class LocationsRemoteDatasource {
   }) {
     String n(String? value) =>
         (value ?? '').trim().toLowerCase().replaceAll(' ', '');
-    return '${n(section)}|${n(shelf)}|${n(level)}|${n(room)}';
+    return '${n(locationName)}|${n(section)}|${n(shelf)}|${n(level)}|${n(room)}';
   }
 
   String? _clean(String? value) {
