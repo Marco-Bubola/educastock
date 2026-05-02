@@ -53,3 +53,28 @@ final batchCountByLocationProvider =
         error: (_, __) => 0,
       );
 });
+
+// ─── Adicionar unidades a um lote existente ──────────────────────────────
+
+class AddBatchQuantityNotifier
+    extends AutoDisposeNotifier<AsyncValue<void>> {
+  @override
+  AsyncValue<void> build() => const AsyncValue.data(null);
+
+  Future<void> addUnits(Batch batch, int amount) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      final newQty = batch.quantity + amount;
+      final newStatus =
+          newQty > 0 ? BatchStatus.disponivel : BatchStatus.distribuido;
+      await ref
+          .read(batchesDatasourceProvider)
+          .updateBatchQuantity(batch.id, newQty, newStatus);
+    });
+  }
+}
+
+final addBatchQuantityProvider = AutoDisposeNotifierProvider<
+    AddBatchQuantityNotifier, AsyncValue<void>>(
+  () => AddBatchQuantityNotifier(),
+);
