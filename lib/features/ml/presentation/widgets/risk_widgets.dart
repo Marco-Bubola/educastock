@@ -2,6 +2,37 @@ import 'package:flutter/material.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../domain/entities/risk_prediction.dart';
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+Color _fgForLevel(RiskLevel level) {
+  switch (level) {
+    case RiskLevel.verde:
+      return AppColors.success600;
+    case RiskLevel.amarelo:
+      return AppColors.warning600;
+    case RiskLevel.vermelho:
+      return AppColors.danger600;
+  }
+}
+
+Color _bgForLevel(RiskLevel level, bool isDark) {
+  final fg = _fgForLevel(level);
+  return fg.withValues(alpha: isDark ? 0.18 : 0.10);
+}
+
+IconData _iconForLevel(RiskLevel level) {
+  switch (level) {
+    case RiskLevel.verde:
+      return Icons.check_circle_rounded;
+    case RiskLevel.amarelo:
+      return Icons.schedule_rounded;
+    case RiskLevel.vermelho:
+      return Icons.warning_rounded;
+  }
+}
+
+// ─── RiskBadge ────────────────────────────────────────────────────────────────
+
 /// Badge compacto exibindo o nível de risco ML de um lote.
 class RiskBadge extends StatelessWidget {
   final RiskLevel level;
@@ -9,72 +40,50 @@ class RiskBadge extends StatelessWidget {
 
   const RiskBadge({super.key, required this.level, this.compact = false});
 
-  Color get _bgColor {
-    switch (level) {
-      case RiskLevel.verde:
-        return const Color(0xFFE6F4EA);
-      case RiskLevel.amarelo:
-        return const Color(0xFFFEF3C7);
-      case RiskLevel.vermelho:
-        return const Color(0xFFFEE2E2);
-    }
-  }
-
-  Color get _fgColor {
-    switch (level) {
-      case RiskLevel.verde:
-        return AppColors.success600;
-      case RiskLevel.amarelo:
-        return AppColors.warning600;
-      case RiskLevel.vermelho:
-        return AppColors.danger600;
-    }
-  }
-
-  IconData get _icon {
-    switch (level) {
-      case RiskLevel.verde:
-        return Icons.check_circle_outline_rounded;
-      case RiskLevel.amarelo:
-        return Icons.schedule_rounded;
-      case RiskLevel.vermelho:
-        return Icons.warning_amber_rounded;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = _fgForLevel(level);
+    final bg = _bgForLevel(level, isDark);
+
     if (compact) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        width: 26,
+        height: 26,
         decoration: BoxDecoration(
-          color: _bgColor,
-          borderRadius: BorderRadius.circular(20),
+          color: bg,
+          shape: BoxShape.circle,
         ),
-        child: Icon(_icon, size: 14, color: _fgColor),
+        child: Icon(_iconForLevel(level), size: 14, color: fg),
       );
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
       decoration: BoxDecoration(
-        color: _bgColor,
+        color: bg,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: fg.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(_icon, size: 14, color: _fgColor),
+          Icon(_iconForLevel(level), size: 14, color: fg),
           const SizedBox(width: 4),
           Text(
             level.label,
-            style: AppTypography.labelSmall.copyWith(color: _fgColor),
+            style: AppTypography.labelSmall.copyWith(
+              color: fg,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
     );
   }
 }
+
+// ─── RiskInsightCard ─────────────────────────────────────────────────────────
 
 /// Card de insight para o dashboard/página de ML.
 class RiskInsightCard extends StatelessWidget {
@@ -85,47 +94,119 @@ class RiskInsightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pct = (prediction.confidence * 100).toStringAsFixed(0);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    final fg = _fgForLevel(prediction.level);
+    final pct = (prediction.confidence * 100).clamp(0, 100).toInt();
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: AppColors.neutral100),
+          border: Border.all(
+            color: fg.withValues(alpha: isDark ? 0.3 : 0.18),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: fg.withValues(alpha: isDark ? 0.08 : 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
-            RiskBadge(level: prediction.level),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    prediction.productName,
-                    style: AppTypography.labelLarge
-                        .copyWith(color: AppColors.neutral900),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    prediction.level.description,
-                    style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.neutral500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+            // Barra colorida lateral
+            Container(
+              width: 4,
+              height: 72,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [fg, fg.withValues(alpha: 0.5)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(AppRadius.card),
+                ),
               ),
             ),
+            const SizedBox(width: AppSpacing.md),
+            // Ícone
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: _bgForLevel(prediction.level, isDark),
+                borderRadius: BorderRadius.circular(AppRadius.small),
+              ),
+              child: Icon(_iconForLevel(prediction.level), color: fg, size: 20),
+            ),
             const SizedBox(width: AppSpacing.sm),
-            Text(
-              '$pct%',
-              style: AppTypography.numberSmall.copyWith(
-                color: AppColors.neutral700,
+            // Conteúdo
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      prediction.productName,
+                      style: AppTypography.labelLarge.copyWith(
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      prediction.level.description,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 5),
+                    // Barra de confiança
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: prediction.confidence.clamp(0.0, 1.0),
+                              minHeight: 4,
+                              backgroundColor: cs.outlineVariant.withValues(alpha: 0.3),
+                              valueColor: AlwaysStoppedAnimation<Color>(fg),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Text(
+                          '$pct%',
+                          style: AppTypography.labelSmall.copyWith(
+                            color: fg,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.md),
+              child: Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: cs.onSurfaceVariant,
               ),
             ),
           ],
@@ -134,6 +215,8 @@ class RiskInsightCard extends StatelessWidget {
     );
   }
 }
+
+// ─── RiskSummaryRow ──────────────────────────────────────────────────────────
 
 /// Linha de resumo de contadores por nível (Verde/Amarelo/Vermelho).
 class RiskSummaryRow extends StatelessWidget {
@@ -144,10 +227,17 @@ class RiskSummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: RiskLevel.values.map((level) {
-        final count = counts[level] ?? 0;
+      children: RiskLevel.values.asMap().entries.map((e) {
+        final i = e.key;
+        final level = e.value;
         return Expanded(
-          child: _RiskCounter(level: level, count: count),
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: i == 0 ? 0 : AppSpacing.xs,
+              right: i == RiskLevel.values.length - 1 ? 0 : AppSpacing.xs,
+            ),
+            child: _RiskCounter(level: level, count: counts[level] ?? 0),
+          ),
         );
       }).toList(),
     );
@@ -159,50 +249,61 @@ class _RiskCounter extends StatelessWidget {
   final int count;
   const _RiskCounter({required this.level, required this.count});
 
-  Color get _bgColor {
-    switch (level) {
-      case RiskLevel.verde:
-        return const Color(0xFFE6F4EA);
-      case RiskLevel.amarelo:
-        return const Color(0xFFFEF3C7);
-      case RiskLevel.vermelho:
-        return const Color(0xFFFEE2E2);
-    }
-  }
-
-  Color get _fgColor {
-    switch (level) {
-      case RiskLevel.verde:
-        return AppColors.success600;
-      case RiskLevel.amarelo:
-        return AppColors.warning600;
-      case RiskLevel.vermelho:
-        return AppColors.danger600;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = _fgForLevel(level);
+    final bg = _bgForLevel(level, isDark);
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
       decoration: BoxDecoration(
-        color: _bgColor,
+        color: bg,
         borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: fg.withValues(alpha: 0.25)),
       ),
       child: Column(
         children: [
-          Text(
-            '$count',
-            style: AppTypography.numberMedium.copyWith(color: _fgColor),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [fg, fg.withValues(alpha: 0.7)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: fg.withValues(alpha: 0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                '$count',
+                style: AppTypography.labelMedium.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 5),
           Text(
             level.label,
-            style: AppTypography.labelSmall.copyWith(color: _fgColor),
+            style: AppTypography.labelSmall.copyWith(
+              color: fg,
+              fontWeight: FontWeight.w600,
+              fontSize: 10,
+            ),
           ),
         ],
       ),
     );
   }
 }
+
