@@ -15,8 +15,9 @@ class MlInsightsPage extends ConsumerWidget {
     final criticalAsync = ref.watch(criticalBatchPredictionsProvider);
     final sourceAsync = ref.watch(classifierSourceProvider);
 
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: cs.surface,
       appBar: ModernProfileAppBar(
         title: 'Análise de Risco ML',
         subtitle: 'Classificação inteligente de lotes',
@@ -202,7 +203,7 @@ class _Legend extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.neutral100,
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(AppRadius.card),
         ),
         child: Column(
@@ -211,7 +212,7 @@ class _Legend extends StatelessWidget {
             Text(
               'Como funciona a classificação',
               style: AppTypography.labelLarge
-                  .copyWith(color: AppColors.neutral700),
+                  .copyWith(color: Theme.of(context).colorScheme.onSurface),
             ),
             const SizedBox(height: AppSpacing.sm),
             ...RiskLevel.values.map(
@@ -226,7 +227,7 @@ class _Legend extends StatelessWidget {
                       child: Text(
                         l.description,
                         style: AppTypography.bodySmall
-                            .copyWith(color: AppColors.neutral700),
+                            .copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ),
                   ],
