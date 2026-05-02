@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
@@ -33,6 +35,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
   final _nameController = TextEditingController();
   final _brandController = TextEditingController();
   final _descController = TextEditingController();
+  final _unitSizeController = TextEditingController();
 
   ProductCategory _category = ProductCategory.alimento;
   String _unit = 'un';
@@ -40,8 +43,39 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
   int _minimumStock = 0;
   DateTime? _originalCreatedAt;
   String? _originalCreatedBy;
+  File? _imageFile;
+  String? _existingImageUrl;
+  final _imagePicker = ImagePicker();
+
+  // Unidades que precisam de tamanho de embalagem
+  static const _sizedUnits = {'kg', 'g', 'L', 'mL'};
+  bool get _needsSize => _sizedUnits.contains(_unit);
 
   final List<String> _units = ['un', 'kg', 'g', 'L', 'mL', 'cx', 'pct', 'frd'];
+
+  String get _unitHint => switch (_unit) {
+        'kg' => 'Ex: 1, 0.5, 5',
+        'g' => 'Ex: 500, 250, 100',
+        'L' => 'Ex: 1, 2, 0.5',
+        'mL' => 'Ex: 250, 500, 1000',
+        _ => '',
+      };
+
+  String get _unitLabel => switch (_unit) {
+        'kg' => 'Quantidade em kg',
+        'g' => 'Quantidade em gramas',
+        'L' => 'Quantidade em litros',
+        'mL' => 'Quantidade em mililitros',
+        _ => '',
+      };
+
+  // Retorna a unidade final a ser salva (ex: "500g", "1kg", "2L")
+  String get _effectiveUnit {
+    if (_needsSize && _unitSizeController.text.trim().isNotEmpty) {
+      return '${_unitSizeController.text.trim()}$_unit';
+    }
+    return _unit;
+  }
 
   @override
   void initState() {
@@ -66,16 +100,28 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
             .read(productsDatasourceProvider)
             .getProductById(widget.productId!);
         if (product != null && mounted) {
+          // Decompõe unidade armazenada (ex: "500g" → size="500", unit="g")
+          String storedUnit = product.unit;
+          String storedSize = '';
+          for (final u in _sizedUnits) {
+            if (storedUnit.endsWith(u) && storedUnit.length > u.length) {
+              storedSize = storedUnit.substring(0, storedUnit.length - u.length);
+              storedUnit = u;
+              break;
+            }
+          }
           setState(() {
             _nameController.text = product.name;
             _brandController.text = product.brand ?? '';
             _descController.text = product.description ?? '';
             _category = product.category;
-            _unit = product.unit;
+            _unit = storedUnit;
+            _unitSizeController.text = storedSize;
             _isPerishable = product.isPerishable;
             _minimumStock = product.minimumStock;
             _originalCreatedAt = product.createdAt;
             _originalCreatedBy = product.createdBy;
+            _existingImageUrl = product.imageUrl;
           });
         }
       });
@@ -87,6 +133,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
     _nameController.dispose();
     _brandController.dispose();
     _descController.dispose();
+    _unitSizeController.dispose();
     super.dispose();
   }
 
@@ -102,7 +149,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
           ? null
           : _brandController.text.trim(),
       category: _category,
-      unit: _unit,
+      unit: _effectiveUnit,
       barcode: widget.barcode,
       description: _descController.text.trim().isEmpty
           ? null
@@ -113,7 +160,10 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
       createdBy: _originalCreatedBy ?? user.id,
     );
 
-    await ref.read(productFormProvider.notifier).saveProduct(product);
+    await ref.read(productFormProvider.notifier).saveProduct(
+          product,
+          imageFile: _imageFile,
+        );
 
     final state = ref.read(productFormProvider);
     if (!mounted) return;
@@ -276,8 +326,65 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                 items: _units
                     .map((u) => DropdownMenuItem(value: u, child: Text(u)))
                     .toList(),
-                onChanged: (v) => setState(() => _unit = v!),
+                onChanged: (v) => setState(() {
+                  _unit = v!;
+                  if (!_sizedUnits.contains(v)) {
+                    _unitSizeController.clear();
+                  }
+                }),
               ),
+              // Campo de tamanho da embalagem (aparece para kg, g, L, mL)
+              if (_needsSize) ...[
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: CasaTextField(
+                        label: _unitLabel,
+                        hint: _unitHint,
+                        controller: _unitSizeController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        textInputAction: TextInputAction.next,
+                        prefixIcon: const Icon(Icons.scale_outlined, size: 20),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.brandPrimary600.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(AppRadius.input),
+                        border: Border.all(
+                            color: AppColors.brandPrimary600
+                                .withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        _unitSizeController.text.trim().isNotEmpty
+                            ? '${_unitSizeController.text.trim()}$_unit'
+                            : _unit,
+                        style: AppTypography.labelLarge.copyWith(
+                          color: AppColors.brandPrimary600,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text(
+                    'Exemplo: "500g", "1kg", "250mL" serão salvos como unidade.',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.xl),
 
               // ── Seção: Configurações ──────────────────────────────
@@ -454,6 +561,44 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                 maxLines: 3,
                 prefixIcon: const Icon(Icons.notes_rounded, size: 20),
               ),
+              const SizedBox(height: AppSpacing.xl),
+
+              // ── Seção: Foto do Produto ─────────────────────────
+              _SectionLabel(
+                icon: Icons.photo_camera_rounded,
+                label: 'FOTO DO PRODUTO',
+                color: AppColors.brandPrimary600,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _ProductImagePicker(
+                imageFile: _imageFile,
+                existingImageUrl: _existingImageUrl,
+                cs: cs,
+                onPickCamera: () async {
+                  final picked = await _imagePicker.pickImage(
+                    source: ImageSource.camera,
+                    imageQuality: 80,
+                    maxWidth: 1280,
+                  );
+                  if (picked != null && mounted) {
+                    setState(() => _imageFile = File(picked.path));
+                  }
+                },
+                onPickGallery: () async {
+                  final picked = await _imagePicker.pickImage(
+                    source: ImageSource.gallery,
+                    imageQuality: 80,
+                    maxWidth: 1280,
+                  );
+                  if (picked != null && mounted) {
+                    setState(() => _imageFile = File(picked.path));
+                  }
+                },
+                onRemove: () => setState(() {
+                  _imageFile = null;
+                  _existingImageUrl = null;
+                }),
+              ),
               const SizedBox(height: AppSpacing.xxl),
 
               CasaButton(
@@ -477,6 +622,119 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─── Seletor de imagem do produto ─────────────────────────────────────────
+
+class _ProductImagePicker extends StatelessWidget {
+  final File? imageFile;
+  final String? existingImageUrl;
+  final ColorScheme cs;
+  final VoidCallback onPickCamera;
+  final VoidCallback onPickGallery;
+  final VoidCallback onRemove;
+
+  const _ProductImagePicker({
+    required this.imageFile,
+    required this.existingImageUrl,
+    required this.cs,
+    required this.onPickCamera,
+    required this.onPickGallery,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageFile != null || existingImageUrl != null;
+
+    if (hasImage) {
+      return Column(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            child: imageFile != null
+                ? Image.file(imageFile!,
+                    height: 180,
+                    width: double.infinity,
+                    fit: BoxFit.cover)
+                : Image.network(existingImageUrl!,
+                    height: 180,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (_, child, loading) =>
+                        loading == null ? child : const SizedBox(height: 180)),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextButton.icon(
+            onPressed: onRemove,
+            icon: const Icon(Icons.delete_outline_rounded,
+                size: 16, color: AppColors.danger600),
+            label: Text(
+              'Remover foto',
+              style: AppTypography.labelSmall
+                  .copyWith(color: AppColors.danger600),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.4),
+            style: BorderStyle.solid),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.add_photo_alternate_outlined,
+              size: 40, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Foto opcional para identificar o produto',
+            style: AppTypography.bodySmall.copyWith(
+                color: cs.onSurfaceVariant, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickCamera,
+                  icon: const Icon(Icons.photo_camera_rounded, size: 18),
+                  label: const Text('Câmera'),
+                  style: OutlinedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.button)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickGallery,
+                  icon: const Icon(Icons.photo_library_outlined, size: 18),
+                  label: const Text('Galeria'),
+                  style: OutlinedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.button)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
