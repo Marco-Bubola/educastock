@@ -25,12 +25,6 @@ class DashboardPage extends ConsumerWidget {
         subtitle: 'Painel operacional',
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () => context.push(AppRoutes.alerts),
-          ),
-        ],
       ),
       body: SafeArea(
         child: ListView(
