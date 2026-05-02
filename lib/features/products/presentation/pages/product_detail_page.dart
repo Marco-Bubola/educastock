@@ -266,20 +266,33 @@ class _ProductAppBar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg, 0, AppSpacing.lg, 10),
-              child: Row(
-                children: [
-                  _HeaderChip(product.unit),
-                  const SizedBox(width: 6),
-                  if (product.isPerishable)
-                    _HeaderChip('Perecível',
-                        icon: Icons.schedule_rounded,
-                        color: const Color(0xFFFFD580)),
-                  if ((product.barcode ?? '').isNotEmpty) ...[
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _HeaderChip(product.unit),
                     const SizedBox(width: 6),
-                    _HeaderChip('Cód. barras',
-                        icon: Icons.qr_code_rounded),
+                    _HeaderChip(
+                      product.category.name,
+                      icon: Icons.category_outlined,
+                      color: const Color(0xFFB8D4FF),
+                    ),
+                    const SizedBox(width: 6),
+                    if (product.isPerishable)
+                      _HeaderChip('Perecível',
+                          icon: Icons.schedule_rounded,
+                          color: const Color(0xFFFFD580))
+                    else
+                      _HeaderChip('Não perecível',
+                          icon: Icons.shield_outlined,
+                          color: const Color(0xFFA7F3D0)),
+                    if ((product.barcode ?? '').isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      _HeaderChip('Cód. barras',
+                          icon: Icons.qr_code_rounded),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ],
@@ -459,18 +472,9 @@ class _ProductInfoCard extends StatelessWidget {
     final rows = <_InfoDef>[
       if ((product.brand ?? '').isNotEmpty)
         _InfoDef(Icons.business_rounded, 'Marca', product.brand!),
-      _InfoDef(Icons.category_outlined, 'Categoria', product.category.name),
-      _InfoDef(Icons.straighten_rounded, 'Unidade', product.unit),
       if ((product.barcode ?? '').isNotEmpty)
         _InfoDef(
             Icons.qr_code_rounded, 'Código de Barras', product.barcode!),
-      _InfoDef(
-        product.isPerishable
-            ? Icons.schedule_rounded
-            : Icons.shield_outlined,
-        'Tipo',
-        product.isPerishable ? 'Perecível' : 'Não perecível',
-      ),
       if (product.minimumStock > 0)
         _InfoDef(Icons.warning_amber_rounded, 'Estoque mínimo',
             '${product.minimumStock}'),
