@@ -15,18 +15,26 @@ class LocationsNotifier extends AsyncNotifier<void> {
   Future<void> build() async {}
 
   Future<void> createLocation({
+    String? locationName,
     required String section,
     required String shelf,
     String? level,
     String? room,
+    int? shelvesCount,
+    int? levelsCount,
+    int? productsPerLevel,
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       await ref.read(locationsDatasourceProvider).createLocation(
+            locationName: locationName,
             section: section,
             shelf: shelf,
             level: level,
             room: room,
+            shelvesCount: shelvesCount,
+            levelsCount: levelsCount,
+            productsPerLevel: productsPerLevel,
           );
     });
   }
