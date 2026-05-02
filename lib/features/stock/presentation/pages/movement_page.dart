@@ -268,31 +268,30 @@ class _MovementPageState extends ConsumerState<MovementPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: ModernProfileAppBar(
-        title: 'Saída de Estoque',
-        subtitle: 'Produtos avulsos ou receita ativa',
+        title: 'Distribuição',
+        subtitle: 'Produtos avulsos ou por receita',
         showBackButton: true,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.md),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.danger600.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Text(
-                  'SAÍDA',
-                  style: AppTypography.labelSmall.copyWith(
-                    color: AppColors.danger600,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
+      floatingActionButton: _mode == _OutputMode.products
+          ? _ConfirmFab(
+              isLoading: _isLoading,
+              label: 'Confirmar Distribuição',
+              icon: Icons.outbound_rounded,
+              onPressed: () => _submitProducts(productsAsync.valueOrNull ?? []),
+            )
+          : recipesAsync.valueOrNull?.any((r) => r.id == _selectedRecipeId) == true
+              ? _ConfirmFab(
+                  isLoading: _isLoading,
+                  label: 'Executar Receita',
+                  icon: Icons.play_arrow_rounded,
+                  onPressed: () {
+                    final recipe = recipesAsync.valueOrNull!
+                        .firstWhere((r) => r.id == _selectedRecipeId);
+                    _submitRecipe(recipe);
+                  },
+                )
+              : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: SafeArea(
         child: batchesAsync.when(
           data: (batches) => productsAsync.when(
@@ -308,71 +307,133 @@ class _MovementPageState extends ConsumerState<MovementPage> {
               }).toList();
 
               final width = MediaQuery.of(context).size.width;
-              final cross = width >= 900
-                  ? 4
-                  : width >= 700
-                      ? 3
-                      : 2;
+              final cross = width >= 700 ? 4 : 4;
 
               return ListView(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('Produtos avulsos'),
+                  // ─── Tab selector moderno ─────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainer,
+                      borderRadius: BorderRadius.circular(AppRadius.input),
+                    ),
+                    child: Row(
+                      children: [
+                        _ModeTab(
+                          label: 'Produto Avulso',
+                          icon: Icons.inventory_2_rounded,
                           selected: _mode == _OutputMode.products,
-                          onSelected: (_) => setState(() => _mode = _OutputMode.products),
+                          onTap: () =>
+                              setState(() => _mode = _OutputMode.products),
                         ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('Receita ativa'),
+                        _ModeTab(
+                          label: 'Receita Ativa',
+                          icon: Icons.menu_book_rounded,
                           selected: _mode == _OutputMode.recipes,
-                          onSelected: (_) => setState(() => _mode = _OutputMode.recipes),
+                          onTap: () =>
+                              setState(() => _mode = _OutputMode.recipes),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.md),
+                  // ─── Busca + filtro ───────────────────────────────
                   Row(
                     children: [
                       Expanded(
-                        child: CasaTextField(
-                          label: 'Busca rápida',
-                          controller: _searchController,
-                          hint: 'Nome ou marca',
-                          onChanged: (v) => setState(() => _search = v),
-                          prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        child: Container(
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainer,
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.input),
+                            border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant
+                                    .withValues(alpha: 0.4)),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (v) => setState(() => _search = v),
+                            style: AppTypography.bodyMedium
+                                .copyWith(color: onSurface),
+                            decoration: InputDecoration(
+                              hintText: 'Buscar produto ou receita...',
+                              hintStyle: AppTypography.bodySmall
+                                  .copyWith(color: onSurfaceVariant),
+                              prefixIcon: const Icon(
+                                  Icons.search_rounded,
+                                  size: 18,
+                                  color: AppColors.neutral500),
+                              border: InputBorder.none,
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.sm),
-                      IconButton.filledTonal(
-                        onPressed: () => _openFilterModal(
-                          categoryKeys: categories,
-                          categoryLabelMap: categoryLabelMap,
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [
+                            AppColors.brandPrimary600,
+                            AppColors.secondaryBlue600
+                          ]),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.input),
                         ),
-                        icon: const Icon(Icons.tune_rounded),
-                        tooltip: 'Filtros',
+                        child: IconButton(
+                          onPressed: () => _openFilterModal(
+                            categoryKeys: categories,
+                            categoryLabelMap: categoryLabelMap,
+                          ),
+                          icon: const Icon(Icons.tune_rounded,
+                              color: Colors.white, size: 18),
+                          tooltip: 'Filtros',
+                        ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: AppSpacing.xs),
+                  // Chips de filtros ativos
+                  if (_categoryKey != null || _reasonCode != MovementReasonCode.uso.name)
+                    Wrap(
+                      spacing: AppSpacing.xs,
+                      children: [
+                        if (_categoryKey != null)
+                          Chip(
+                            label: Text(
+                                categoryLabelMap[_categoryKey] ??
+                                    _categoryKey!),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () =>
+                                setState(() => _categoryKey = null),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        if (_reasonCode != MovementReasonCode.uso.name)
+                          Chip(
+                            label: Text(
+                                _reasonLabels[_reasonCode] ??
+                                    'Uso/Distribuição'),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () => setState(() =>
+                                _reasonCode = MovementReasonCode.uso.name),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                      ],
+                    ),
                   const SizedBox(height: AppSpacing.sm),
-                  Wrap(
-                    spacing: AppSpacing.xs,
-                    children: [
-                      if (_categoryKey != null)
-                        Chip(label: Text(categoryLabelMap[_categoryKey] ?? _categoryKey!)),
-                      Chip(label: Text(_reasonLabels[_reasonCode] ?? 'Uso/Distribuição')),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
                   CasaTextField(
                     label: 'Atividade / Projeto (opcional)',
                     controller: _activityController,
-                    prefixIcon: const Icon(Icons.work_outline_rounded, size: 20),
+                    prefixIcon: const Icon(Icons.work_outline_rounded,
+                        size: 20),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   if (_mode == _OutputMode.products) ...[
@@ -391,15 +452,45 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                         final available = _availableForProduct(p.id, batches);
                         final qty = _selectedQtyByProduct[p.id] ?? 0;
 
+                        // Detecta proximidade de validade
+                        final nearExpiry = batches.any((b) =>
+                            b.productId == p.id &&
+                            b.status == BatchStatus.disponivel &&
+                            b.expiryDate != null &&
+                            b.expiryDate!
+                                    .difference(DateTime.now())
+                                    .inDays <=
+                                30);
+                        final expiredBatch = batches.any((b) =>
+                            b.productId == p.id &&
+                            b.status == BatchStatus.disponivel &&
+                            b.expiryDate != null &&
+                            b.expiryDate!.isBefore(DateTime.now()));
+
+                        final borderColor = qty > 0
+                            ? AppColors.brandPrimary600
+                            : expiredBatch
+                                ? AppColors.danger600
+                                : nearExpiry
+                                    ? AppColors.warning600
+                                    : Theme.of(context)
+                                        .dividerColor
+                                        .withValues(alpha: 0.35);
+                        final bgColor = expiredBatch
+                            ? AppColors.danger600.withValues(alpha: 0.06)
+                            : nearExpiry
+                                ? AppColors.warning600.withValues(alpha: 0.06)
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerLow;
+
                         return Container(
                           padding: const EdgeInsets.all(AppSpacing.xs),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceContainerLow,
+                            color: bgColor,
                             borderRadius: BorderRadius.circular(AppRadius.card),
                             border: Border.all(
-                              color: qty > 0
-                                  ? AppColors.brandPrimary600
-                                  : Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                              color: borderColor,
                             ),
                           ),
                           child: Column(
@@ -440,6 +531,18 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                                   color: onSurfaceVariant,
                                 ),
                               ),
+                              if (expiredBatch)
+                                Text('VENCIDO',
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        color: AppColors.danger600,
+                                        fontWeight: FontWeight.w800))
+                              else if (nearExpiry)
+                                Text('VENCE EM BREVE',
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        color: AppColors.warning600,
+                                        fontWeight: FontWeight.w700)),
                               Row(
                                 children: [
                                   IconButton(
@@ -476,13 +579,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                           ),
                         );
                       },
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    CasaButton(
-                      label: 'Confirmar saída de produtos',
-                      icon: Icons.outbound_rounded,
-                      isLoading: _isLoading,
-                      onPressed: _isLoading ? null : () => _submitProducts(products),
                     ),
                   ] else ...[
                     recipesAsync.when(
@@ -575,18 +671,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                                 );
                               },
                             ),
-                            const SizedBox(height: AppSpacing.lg),
-                            CasaButton(
-                              label: 'Executar saída por receita',
-                              icon: Icons.play_arrow_rounded,
-                              isLoading: _isLoading,
-                              onPressed: _isLoading || _selectedRecipeId == null
-                                  ? null
-                                  : () {
-                                      final recipe = filtered.firstWhere((r) => r.id == _selectedRecipeId);
-                                      _submitRecipe(recipe);
-                                    },
-                            ),
                           ],
                         );
                       },
@@ -606,6 +690,134 @@ class _MovementPageState extends ConsumerState<MovementPage> {
           ),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Erro: $e')),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── FAB de confirmação ────────────────────────────────────────────────────
+
+class _ConfirmFab extends StatelessWidget {
+  final bool isLoading;
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  const _ConfirmFab(
+      {required this.isLoading,
+      required this.label,
+      required this.icon,
+      required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: onPressed == null || isLoading
+                ? null
+                : const LinearGradient(colors: [
+                    AppColors.brandPrimary600,
+                    AppColors.secondaryBlue600
+                  ]),
+            color:
+                onPressed == null || isLoading ? AppColors.neutral500 : null,
+            borderRadius: BorderRadius.circular(AppRadius.button),
+            boxShadow: onPressed == null
+                ? []
+                : [
+                    BoxShadow(
+                        color: AppColors.brandPrimary600
+                            .withValues(alpha: 0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4))
+                  ],
+          ),
+          child: ElevatedButton.icon(
+            onPressed: isLoading ? null : onPressed,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.button)),
+            ),
+            icon: isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : Icon(icon, size: 20, color: Colors.white),
+            label: Text(
+              label,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Tab selector moderno ─────────────────────────────────────────────────
+
+class _ModeTab extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ModeTab(
+      {required this.label,
+      required this.icon,
+      required this.selected,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          decoration: BoxDecoration(
+            gradient: selected
+                ? const LinearGradient(colors: [
+                    AppColors.brandPrimary600,
+                    AppColors.secondaryBlue600
+                  ])
+                : null,
+            color: selected ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.small),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 16,
+                  color: selected
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: selected
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
