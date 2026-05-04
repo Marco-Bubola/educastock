@@ -14,14 +14,30 @@ class BatchesRemoteDatasource {
   CollectionReference get _col => _db.collection('batches');
 
   Stream<List<Batch>> watchBatchesByProduct(String productId) {
+    // NOTE: We intentionally avoid .orderBy('expiryDate') on Firestore because
+    // Firestore excludes documents where the ordered field is null/absent. Batches
+    // with noExpiry=true have expiryDate as null and would be silently dropped.
+    // Sorting is done in Dart instead (FEFO: soonest-expiry first, noExpiry last).
     return _col
         .where('productId', isEqualTo: productId)
         .where('status', isEqualTo: BatchStatus.disponivel.name)
-        .orderBy('expiryDate')
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => Batch.fromMap(d.data() as Map<String, dynamic>, d.id))
-            .toList());
+        .map((snap) {
+          final batches = snap.docs
+              .map((d) =>
+                  Batch.fromMap(d.data() as Map<String, dynamic>, d.id))
+              .toList();
+          batches.sort((a, b) {
+            if (a.noExpiry && b.noExpiry) return 0;
+            if (a.noExpiry) return 1;
+            if (b.noExpiry) return -1;
+            if (a.expiryDate == null && b.expiryDate == null) return 0;
+            if (a.expiryDate == null) return 1;
+            if (b.expiryDate == null) return -1;
+            return a.expiryDate!.compareTo(b.expiryDate!);
+          });
+          return batches;
+        });
   }
 
   /// Retorna todos os lotes disponíveis ordenados por validade (FEFO)
