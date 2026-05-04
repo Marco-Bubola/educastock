@@ -92,7 +92,7 @@ class ProductDetailPage extends ConsumerWidget {
                     ),
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+                          AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
                       sliver: SliverToBoxAdapter(
                         child: _StatsRow(
                           totalBatches: batches.length,
@@ -462,7 +462,7 @@ class _ProductInfoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if ((product.description ?? '').isEmpty) return const SizedBox(height: AppSpacing.lg);
+    if ((product.description ?? '').isEmpty) return const SizedBox.shrink();
     return Container(
       margin: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),

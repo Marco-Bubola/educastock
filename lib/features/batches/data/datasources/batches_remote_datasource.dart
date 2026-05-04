@@ -28,9 +28,12 @@ class BatchesRemoteDatasource {
                   Batch.fromMap(d.data() as Map<String, dynamic>, d.id))
               .toList();
           batches.sort((a, b) {
+            // noExpiry batches go to the end regardless of expiryDate
             if (a.noExpiry && b.noExpiry) return 0;
             if (a.noExpiry) return 1;
             if (b.noExpiry) return -1;
+            // Defensive: a non-noExpiry batch without expiryDate is treated
+            // as furthest in the future (shouldn't normally happen)
             if (a.expiryDate == null && b.expiryDate == null) return 0;
             if (a.expiryDate == null) return 1;
             if (b.expiryDate == null) return -1;
