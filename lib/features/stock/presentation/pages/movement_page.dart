@@ -28,7 +28,6 @@ class MovementPage extends ConsumerStatefulWidget {
 
 class _MovementPageState extends ConsumerState<MovementPage> {
   final _searchController = TextEditingController();
-  final _activityController = TextEditingController();
 
   _OutputMode _mode = _OutputMode.products;
   String _search = '';
@@ -48,7 +47,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
   @override
   void dispose() {
     _searchController.dispose();
-    _activityController.dispose();
     super.dispose();
   }
 
@@ -209,9 +207,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
             performedByName: user.name,
             reasonCode: _reasonCode,
             reason: _reasonLabels[_reasonCode],
-            activity: _activityController.text.trim().isEmpty
-                ? null
-                : _activityController.text.trim(),
+            activity: null,
           );
       if (!mounted) return;
       showCasaSnackbar(
@@ -307,7 +303,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
               }).toList();
 
               final width = MediaQuery.of(context).size.width;
-              final cross = width >= 700 ? 4 : 4;
+              final cross = width >= 700 ? 4 : 2;
 
               return ListView(
                 padding: const EdgeInsets.fromLTRB(
@@ -400,7 +396,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.xs),
                   // Chips de filtros ativos
                   if (_categoryKey != null || _reasonCode != MovementReasonCode.uso.name)
                     Wrap(
@@ -429,13 +424,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                       ],
                     ),
                   const SizedBox(height: AppSpacing.sm),
-                  CasaTextField(
-                    label: 'Atividade / Projeto (opcional)',
-                    controller: _activityController,
-                    prefixIcon: const Icon(Icons.work_outline_rounded,
-                        size: 20),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
                   if (_mode == _OutputMode.products) ...[
                     GridView.builder(
                       shrinkWrap: true,
@@ -445,7 +433,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                         crossAxisCount: cross,
                         mainAxisSpacing: AppSpacing.sm,
                         crossAxisSpacing: AppSpacing.sm,
-                        childAspectRatio: 0.82,
+                        childAspectRatio: 0.80,
                       ),
                       itemBuilder: (_, i) {
                         final p = filteredProducts[i];
@@ -546,7 +534,9 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                               Row(
                                 children: [
                                   IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline_rounded, size: 16),
+                                    icon: const Icon(Icons.remove_circle_outline_rounded, size: 18),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                     onPressed: qty > 0
                                         ? () => setState(() {
                                               final next = qty - 1;
@@ -566,7 +556,9 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                                     ),
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                                    icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                     onPressed: available > qty
                                         ? () => setState(() {
                                               _selectedQtyByProduct[p.id] = qty + 1;
@@ -604,10 +596,10 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                               physics: const NeverScrollableScrollPhysics(),
                               itemCount: filtered.length,
                               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: cross,
+                                crossAxisCount: width >= 700 ? 4 : 2,
                                 mainAxisSpacing: AppSpacing.sm,
                                 crossAxisSpacing: AppSpacing.sm,
-                                childAspectRatio: 1.02,
+                                childAspectRatio: 1.1,
                               ),
                               itemBuilder: (_, i) {
                                 final r = filtered[i];
