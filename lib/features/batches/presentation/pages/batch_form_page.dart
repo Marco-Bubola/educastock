@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -91,13 +91,19 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       linkedProduct = await ref.read(productsDatasourceProvider).getProductById(existingProductId);
     }
     if (!mounted) return;
-    final isPerishable = linkedProduct?.isPerishable ?? !_noExpiry;
+    final isPerishable = linkedProduct?.isPerishable ?? true;
 
-    // Validação crítica: perecível exige validade ou flag noExpiry
+    // Se nao perecivel, define noExpiry automaticamente
+    if (!isPerishable) {
+      _noExpiry = true;
+      _expiryDate = null;
+    }
+
+    // Validacao critica: perecivel exige validade
     if (isPerishable && !_noExpiry && _expiryDate == null) {
       showCasaSnackbar(
         context,
-        message: 'Informe a data de validade ou marque "Sem validade".',
+        message: 'Informe a data de validade do lote.',
         isError: true,
       );
       return;
@@ -360,113 +366,119 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
               ),
               const SizedBox(height: AppSpacing.md),
 
-              // â”€â”€â”€ SeÃ§Ã£o 2: Validade â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-              _BatchSection(
-                icon: Icons.event_rounded,
-                iconColor: _expiryDate != null
-                    ? AppColors.success600
-                    : _noExpiry
-                        ? AppColors.neutral500
-                        : AppColors.warning600,
-                title: 'Validade',
-                cs: cs,
-                child: Column(
-                  children: [
-                    Container(
+              // --- Secao 2: Validade ---
+              Builder(builder: (_) {
+                final isPerishable = productAsync.valueOrNull?.isPerishable ?? true;
+                if (!isPerishable) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!_noExpiry) setState(() { _noExpiry = true; _expiryDate = null; });
+                  });
+                  return _BatchSection(
+                    icon: Icons.all_inclusive_rounded,
+                    iconColor: AppColors.neutral500,
+                    title: 'Validade',
+                    cs: cs,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
-                        color: cs.surfaceContainer,
-                        borderRadius: BorderRadius.circular(AppRadius.input),
+                        color: AppColors.neutral500.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(AppRadius.card),
+                        border: Border.all(color: AppColors.neutral500.withValues(alpha: 0.3)),
                       ),
-                      padding: const EdgeInsets.all(4),
                       child: Row(
                         children: [
-                          _ToggleBtn(
-                            label: 'Com validade',
-                            icon: Icons.event_available_rounded,
-                            selected: !_noExpiry,
-                            onTap: () => setState(() => _noExpiry = false),
-                            cs: cs,
-                          ),
-                          _ToggleBtn(
-                            label: 'Sem validade',
-                            icon: Icons.all_inclusive_rounded,
-                            selected: _noExpiry,
-                            onTap: () => setState(() {
-                              _noExpiry = true;
-                              _expiryDate = null;
-                            }),
-                            cs: cs,
+                          const Icon(Icons.shield_outlined, size: 18, color: AppColors.neutral500),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Produto nao perecivel - sem data de validade',
+                              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    if (!_noExpiry) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      InkWell(
-                        onTap: _pickExpiryDate,
-                        borderRadius: BorderRadius.circular(AppRadius.input),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.md,
-                              vertical: AppSpacing.md),
-                          decoration: BoxDecoration(
-                            color: _expiryDate != null
-                                ? AppColors.success600.withValues(alpha: 0.06)
-                                : cs.surfaceContainer,
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.input),
-                            border: Border.all(
-                              color: _expiryDate != null
-                                  ? AppColors.success600
-                                      .withValues(alpha: 0.4)
-                                  : cs.outlineVariant
-                                      .withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.calendar_month_rounded,
-                                  size: 20,
+                  );
+                }
+                return _BatchSection(
+                  icon: Icons.event_rounded,
+                  iconColor: _expiryDate != null ? AppColors.success600 : AppColors.warning600,
+                  title: 'Validade',
+                  cs: cs,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: AppSpacing.xs,
+                        runSpacing: AppSpacing.xs,
+                        children: [
+                          _QuickDateChip(label: '+30 dias', onTap: () => setState(() => _expiryDate = DateTime.now().add(const Duration(days: 30)))),
+                          _QuickDateChip(label: '+90 dias', onTap: () => setState(() => _expiryDate = DateTime.now().add(const Duration(days: 90)))),
+                          _QuickDateChip(label: '+180 dias', onTap: () => setState(() => _expiryDate = DateTime.now().add(const Duration(days: 180)))),
+                          _QuickDateChip(label: '+1 ano', onTap: () => setState(() => _expiryDate = DateTime.now().add(const Duration(days: 365)))),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _expiryDate != null
+                                    ? AppColors.success600.withValues(alpha: 0.08)
+                                    : cs.surfaceContainer,
+                                borderRadius: BorderRadius.circular(AppRadius.input),
+                                border: Border.all(
                                   color: _expiryDate != null
-                                      ? AppColors.success600
-                                      : cs.onSurfaceVariant),
-                              const SizedBox(width: AppSpacing.sm),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Data de Validade',
-                                      style: AppTypography.labelSmall
-                                          .copyWith(
-                                              color: cs.onSurfaceVariant,
-                                              fontSize: 10),
-                                    ),
-                                    Text(
-                                      _expiryDate != null
-                                          ? fmt.format(_expiryDate!)
-                                          : 'Toque para selecionar',
-                                      style: AppTypography.labelMedium
-                                          .copyWith(
-                                        color: _expiryDate != null
-                                            ? cs.onSurface
-                                            : cs.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
+                                      ? AppColors.success600.withValues(alpha: 0.45)
+                                      : cs.outlineVariant.withValues(alpha: 0.4),
                                 ),
                               ),
-                              Icon(Icons.chevron_right_rounded,
-                                  size: 18, color: cs.onSurfaceVariant),
-                            ],
+                              child: Row(
+                                children: [
+                                  Icon(Icons.calendar_month_rounded, size: 18,
+                                      color: _expiryDate != null ? AppColors.success600 : cs.onSurfaceVariant),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _expiryDate != null ? fmt.format(_expiryDate!) : 'Selecione a validade',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: _expiryDate != null ? FontWeight.w700 : FontWeight.w400,
+                                      color: _expiryDate != null ? cs.onSurface : cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  if (_expiryDate != null) ...[
+                                    const SizedBox(width: 6),
+                                    GestureDetector(
+                                      onTap: () => setState(() => _expiryDate = null),
+                                      child: Icon(Icons.close_rounded, size: 14, color: cs.onSurfaceVariant),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: AppSpacing.sm),
+                          OutlinedButton.icon(
+                            onPressed: _pickExpiryDate,
+                            icon: const Icon(Icons.edit_calendar_rounded, size: 16),
+                            label: const Text('Outra data'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.brandPrimary600,
+                              side: const BorderSide(color: AppColors.brandPrimary600),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.button)),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                  ],
-                ),
-              ),
+                  ),
+                );
+              }),
               const SizedBox(height: AppSpacing.md),
 
               // â”€â”€â”€ SeÃ§Ã£o 3: Origem â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -614,6 +626,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
 }
 
 // â”€â”€â”€ FAB de confirmaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- FAB compacto de cadastro ---
 
 class _BatchSaveFab extends StatelessWidget {
   final bool isLoading;
@@ -622,51 +635,41 @@ class _BatchSaveFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: isLoading
-                ? null
-                : const LinearGradient(colors: [
-                    AppColors.brandPrimary600,
-                    AppColors.secondaryBlue600
-                  ]),
-            color: isLoading ? AppColors.neutral500 : null,
-            borderRadius: BorderRadius.circular(AppRadius.button),
-            boxShadow: [
-              BoxShadow(
-                  color: AppColors.brandPrimary600.withValues(alpha: 0.35),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4))
-            ],
+    return Center(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: isLoading
+              ? null
+              : const LinearGradient(colors: [
+                  AppColors.brandPrimary600,
+                  AppColors.secondaryBlue600
+                ]),
+          color: isLoading ? AppColors.neutral500 : null,
+          borderRadius: BorderRadius.circular(AppRadius.button),
+          boxShadow: [
+            BoxShadow(
+                color: AppColors.brandPrimary600.withValues(alpha: 0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 3))
+          ],
+        ),
+        child: ElevatedButton.icon(
+          onPressed: isLoading ? null : onSave,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.button)),
           ),
-          child: ElevatedButton.icon(
-            onPressed: isLoading ? null : onSave,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.button)),
-            ),
-            icon: isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.add_box_rounded,
-                    size: 20, color: Colors.white),
-            label: const Text(
-              'Adicionar ao Estoque',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15),
-            ),
+          icon: isLoading
+              ? const SizedBox(
+                  width: 16, height: 16,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : const Icon(Icons.inventory_2_rounded, size: 18, color: Colors.white),
+          label: const Text(
+            'Cadastrar',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
           ),
         ),
       ),
@@ -674,7 +677,7 @@ class _BatchSaveFab extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€ SeÃ§Ã£o de card do formulÃ¡rio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Secao de card do formulario ---
 
 class _BatchSection extends StatelessWidget {
   final IconData icon;
@@ -764,63 +767,34 @@ class _QtyBtn extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€ Toggle com/sem validade â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Chip de data rapida ---
 
-class _ToggleBtn extends StatelessWidget {
+class _QuickDateChip extends StatelessWidget {
   final String label;
-  final IconData icon;
-  final bool selected;
   final VoidCallback onTap;
-  final ColorScheme cs;
-  const _ToggleBtn(
-      {required this.label,
-      required this.icon,
-      required this.selected,
-      required this.onTap,
-      required this.cs});
+  const _QuickDateChip({required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-          decoration: BoxDecoration(
-            gradient: selected
-                ? const LinearGradient(colors: [
-                    AppColors.brandPrimary600,
-                    AppColors.secondaryBlue600
-                  ])
-                : null,
-            color: selected ? null : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppRadius.small),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon,
-                  size: 15,
-                  color: selected ? Colors.white : cs.onSurfaceVariant),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? Colors.white : cs.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: AppColors.brandPrimary600.withValues(alpha: 0.09),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: AppColors.brandPrimary600.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brandPrimary600),
         ),
       ),
     );
   }
 }
 
-// â”€â”€â”€ Card de origem â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Card de origem ---
 
 class _OriginCard extends StatelessWidget {
   final String originKey;
@@ -830,14 +804,7 @@ class _OriginCard extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   final ColorScheme cs;
-  const _OriginCard(
-      {required this.originKey,
-      required this.label,
-      required this.icon,
-      required this.color,
-      required this.selected,
-      required this.onTap,
-      required this.cs});
+  const _OriginCard({required this.originKey, required this.label, required this.icon, required this.color, required this.selected, required this.onTap, required this.cs});
 
   @override
   Widget build(BuildContext context) {
