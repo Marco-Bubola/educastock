@@ -15,6 +15,9 @@ import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../../core/router/app_router.dart';
 import 'package:go_router/go_router.dart';
+import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
+import '../../../ml/domain/entities/risk_prediction.dart';
+import '../../../ml/presentation/widgets/risk_widgets.dart';
 
 // ─── Helpers de exportação ────────────────────────────────────────────────
 
@@ -107,6 +110,10 @@ class ReportsPage extends ConsumerWidget {
     final allBatchesAsync = ref.watch(allAvailableBatchesProvider);
     final expiring7 = ref.watch(expiringBatchesProvider(7));
     final expiring30 = ref.watch(expiringBatchesProvider(30));
+    // ML providers
+    final riskCountsAsync = ref.watch(riskCountsProvider);
+    final riskPredictionsAsync = ref.watch(batchRiskPredictionsProvider);
+    final classifierSourceAsync = ref.watch(classifierSourceProvider);
 
     final allList = allBatchesAsync.valueOrNull ?? [];
     final exp7List = expiring7.valueOrNull ?? [];
@@ -166,10 +173,19 @@ class ReportsPage extends ConsumerWidget {
                 batches.fold<int>(0, (s, b) => s + b.quantity);
             final totalValue = batches.fold<double>(
                 0, (s, b) => s + (b.unitPrice ?? 0) * b.quantity);
-            final expired =
-                batches.where((b) => b.isExpired).length;
+            final expired = batches.where((b) => b.isExpired).length;
 
-            // Distribuição por origem (doacao, compra, parceiro, transferencia)
+            // Categorias mais presentes
+            final Map<String, int> catCount = {};
+            for (final b in batches) {
+              catCount[b.productName] = (catCount[b.productName] ?? 0) + b.quantity;
+            }
+            final topProducts = (catCount.entries.toList()
+                  ..sort((a, b) => b.value.compareTo(a.value)))
+                .take(5)
+                .toList();
+
+            // Distribuição por origem
             final Map<String, int> originCount = {};
             for (final b in batches) {
               originCount[b.origin] = (originCount[b.origin] ?? 0) + 1;
@@ -181,7 +197,7 @@ class ReportsPage extends ConsumerWidget {
               'transferencia': 'Transferência',
             };
 
-            // Tendência mensal: agrupar lotes por mês de entrada
+            // Tendência mensal
             final Map<String, int> monthTrend = {};
             final now = DateTime.now();
             for (int i = 5; i >= 0; i--) {
@@ -205,7 +221,7 @@ class ReportsPage extends ConsumerWidget {
                     (exp30List.length - exp7List.length) * 2)
                 .clamp(0, 100);
 
-            // Distribuição por validade (buckets: vencido, 0-7, 8-30, 31-90, >90, sem val)
+            // Distribuição por validade
             final Map<String, int> expiryBuckets = {
               'Vencido': 0,
               '0–7d': 0,
@@ -240,6 +256,12 @@ class ReportsPage extends ConsumerWidget {
               totalItems: totalItems,
             );
 
+            // ML predictions
+            final riskCounts = riskCountsAsync.valueOrNull ?? {};
+            final predictions = riskPredictionsAsync.valueOrNull ?? [];
+            final sortedPredictions = [...predictions]..sort(_sortByRisk);
+            final classifierSrc = classifierSourceAsync.valueOrNull ?? 'rule_based';
+
             return ListView(
               padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
                   AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
@@ -259,14 +281,24 @@ class ReportsPage extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.xl),
 
                 // ─── Tendência mensal de entradas
-                CasaSectionHeader(title: 'Entradas Mensais (6 meses)'),
+                _SectionHeader(
+                  title: 'Entradas Mensais',
+                  subtitle: 'Últimos 6 meses',
+                  icon: Icons.trending_up_rounded,
+                  color: AppColors.brandPrimary600,
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 _MonthlyTrendChart(
                     monthTrend: monthTrend, isDark: isDark, cs: cs),
                 const SizedBox(height: AppSpacing.xl),
 
                 // ─── Gráfico de barras: Validade
-                CasaSectionHeader(title: 'Distribuição por Prazo'),
+                _SectionHeader(
+                  title: 'Distribuição por Prazo',
+                  subtitle: 'Status de validade dos lotes',
+                  icon: Icons.schedule_rounded,
+                  color: AppColors.warning600,
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 _ExpiryBarChart(
                     buckets: expiryBuckets, isDark: isDark, cs: cs),
@@ -274,7 +306,12 @@ class ReportsPage extends ConsumerWidget {
 
                 // ─── Gráfico de pizza: Origem
                 if (originCount.isNotEmpty) ...[
-                  CasaSectionHeader(title: 'Lotes por Origem'),
+                  _SectionHeader(
+                    title: 'Lotes por Origem',
+                    subtitle: 'Distribuição das fontes de estoque',
+                    icon: Icons.pie_chart_rounded,
+                    color: AppColors.secondaryBlue600,
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   _CategoryPieChart(
                     catCount: originCount,
@@ -285,19 +322,151 @@ class ReportsPage extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
-                // ─── Insights inteligentes
-                if (insights.isNotEmpty) ...[
-                  CasaSectionHeader(title: 'Insights do Estoque'),
+                // ─── Top 5 produtos por quantidade
+                if (topProducts.isNotEmpty) ...[
+                  _SectionHeader(
+                    title: 'Top Produtos em Estoque',
+                    subtitle: '5 produtos com maior quantidade',
+                    icon: Icons.inventory_2_rounded,
+                    color: AppColors.success600,
+                  ),
                   const SizedBox(height: AppSpacing.sm),
-                  _InsightsPanel(
-                      insights: insights, isDark: isDark, cs: cs),
+                  _TopProductsChart(
+                    products: topProducts,
+                    totalItems: totalItems,
+                    isDark: isDark,
+                    cs: cs,
+                  ),
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
+                // ─── Análise de Risco ML (completa)
+                _SectionHeader(
+                  title: 'Análise de Risco ML',
+                  subtitle: classifierSrc == 'tflite'
+                      ? 'Modelo TFLite on-device ativo'
+                      : 'Classificação por regras inteligentes',
+                  icon: classifierSrc == 'tflite'
+                      ? Icons.memory_rounded
+                      : Icons.rule_rounded,
+                  color: AppColors.brandPrimary600,
+                  badge: classifierSrc == 'tflite' ? 'TFLite' : 'Rules',
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                // Resumo de contadores ML
+                riskCountsAsync.when(
+                  data: (counts) => RiskSummaryRow(counts: counts),
+                  loading: () => Row(
+                    children: List.generate(
+                      3,
+                      (_) => const Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 4),
+                          child: CasaCardSkeleton(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                // Lista completa de predições ML
+                riskPredictionsAsync.when(
+                  data: (_) {
+                    if (sortedPredictions.isEmpty) {
+                      return const CasaEmptyState(
+                        icon: Icons.inventory_2_outlined,
+                        title: 'Nenhum lote para classificar',
+                      );
+                    }
+                    // Críticos primeiro (vermelho)
+                    final criticals = sortedPredictions
+                        .where((p) => p.level == RiskLevel.vermelho)
+                        .toList();
+                    final others = sortedPredictions
+                        .where((p) => p.level != RiskLevel.vermelho)
+                        .toList();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (criticals.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.warning_rounded,
+                                    size: 14, color: AppColors.danger600),
+                                const SizedBox(width: 4),
+                                Text('Críticos (${criticals.length})',
+                                    style: AppTypography.labelSmall.copyWith(
+                                        color: AppColors.danger600,
+                                        fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                          ),
+                          ...criticals.map((p) => Padding(
+                                padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.xs),
+                                child: RiskInsightCard(prediction: p),
+                              )),
+                          const SizedBox(height: AppSpacing.sm),
+                        ],
+                        if (others.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                            child: Text('Demais Lotes (${others.length})',
+                                style: AppTypography.labelSmall.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                          ...others.map((p) => Padding(
+                                padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.xs),
+                                child: RiskInsightCard(prediction: p),
+                              )),
+                        ],
+                      ],
+                    );
+                  },
+                  loading: () => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(
+                      3,
+                      (_) => const Padding(
+                        padding: EdgeInsets.only(bottom: AppSpacing.xs),
+                        child: CasaCardSkeleton(),
+                      ),
+                    ),
+                  ),
+                  error: (e, _) => Text('Erro ML: $e',
+                      style: AppTypography.bodySmall
+                          .copyWith(color: AppColors.danger600)),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                // Legenda ML
+                _MlLegend(isDark: isDark, cs: cs),
+                const SizedBox(height: AppSpacing.xl),
+
+                // ─── Insights inteligentes
+                _SectionHeader(
+                  title: 'Insights do Estoque',
+                  subtitle: 'Alertas e recomendações automáticas',
+                  icon: Icons.lightbulb_rounded,
+                  color: AppColors.warning600,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                _InsightsPanel(insights: insights),
+                const SizedBox(height: AppSpacing.xl),
+
                 // ─── Tabela top vencendo
-                CasaSectionHeader(
-                    title: 'Próximos a Vencer',
-                    count: exp30List.length),
+                _SectionHeader(
+                  title: 'Próximos a Vencer',
+                  subtitle: 'Lotes vencendo nos próximos 30 dias',
+                  icon: Icons.access_time_rounded,
+                  color: AppColors.danger600,
+                  count: exp30List.length,
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 if (exp30List.isEmpty)
                   const CasaEmptyState(
@@ -310,6 +479,298 @@ class ReportsPage extends ConsumerWidget {
             );
           },
         ),
+      ),
+    );
+  }
+
+  int _sortByRisk(RiskPrediction a, RiskPrediction b) {
+    const order = {
+      RiskLevel.vermelho: 0,
+      RiskLevel.amarelo: 1,
+      RiskLevel.verde: 2,
+    };
+    final cmp = order[a.level]!.compareTo(order[b.level]!);
+    if (cmp != 0) return cmp;
+    return b.confidence.compareTo(a.confidence);
+  }
+}
+
+// ─── Section Header moderno ──────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final IconData icon;
+  final Color color;
+  final String? badge;
+  final int? count;
+
+  const _SectionHeader({
+    required this.title,
+    this.subtitle,
+    required this.icon,
+    required this.color,
+    this.badge,
+    this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [color, color.withValues(alpha: 0.7)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.small),
+            boxShadow: [
+              BoxShadow(
+                  color: color.withValues(alpha: 0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2)),
+            ],
+          ),
+          child: Icon(icon, color: Colors.white, size: 18),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: AppTypography.headingSmall.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (count != null && count! > 0) ...[
+                    const SizedBox(width: AppSpacing.xs),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '$count',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                  if (badge != null) ...[
+                    const SizedBox(width: AppSpacing.xs),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: color.withValues(alpha: 0.4)),
+                      ),
+                      child: Text(
+                        badge!,
+                        style: TextStyle(
+                            color: color,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (subtitle != null)
+                Text(
+                  subtitle!,
+                  style: AppTypography.bodySmall
+                      .copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Top Produtos chart ───────────────────────────────────────────────────
+
+class _TopProductsChart extends StatelessWidget {
+  final List<MapEntry<String, int>> products;
+  final int totalItems;
+  final bool isDark;
+  final ColorScheme cs;
+  const _TopProductsChart(
+      {required this.products,
+      required this.totalItems,
+      required this.isDark,
+      required this.cs});
+
+  static const _colors = [
+    AppColors.brandPrimary600,
+    AppColors.secondaryBlue600,
+    AppColors.success600,
+    AppColors.warning600,
+    Color(0xFF7C3AED),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: products.asMap().entries.map((e) {
+          final color = _colors[e.key % _colors.length];
+          final pct = totalItems == 0
+              ? 0.0
+              : e.value.value / totalItems;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                          color: color, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        e.value.key,
+                        style: AppTypography.labelSmall.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '${e.value.value} un.',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: color,
+                          fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${(pct * 100).toStringAsFixed(0)}%',
+                      style: AppTypography.labelSmall.copyWith(
+                          color: cs.onSurfaceVariant, fontSize: 10),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: pct.clamp(0.0, 1.0),
+                    minHeight: 6,
+                    backgroundColor:
+                        cs.outlineVariant.withValues(alpha: 0.25),
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ─── Legenda ML ───────────────────────────────────────────────────────────
+
+class _MlLegend extends StatelessWidget {
+  final bool isDark;
+  final ColorScheme cs;
+  const _MlLegend({required this.isDark, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      (Icons.check_circle_rounded, AppColors.success600, 'Seguro',
+          'Lote em condições normais.'),
+      (Icons.schedule_rounded, AppColors.warning600, 'Atenção',
+          'Vencimento se aproximando ou estoque baixo.'),
+      (Icons.warning_rounded, AppColors.danger600, 'Crítico',
+          'Risco iminente de perda. Priorize a distribuição.'),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Como funciona a classificação',
+              style: AppTypography.labelSmall.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: AppSpacing.sm),
+          ...items.map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Icon(item.$1, color: item.$2, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      item.$3,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: item.$2,
+                          fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        item.$4,
+                        style: AppTypography.bodySmall.copyWith(
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
       ),
     );
   }
@@ -467,7 +928,7 @@ class _MonthlyTrendChart extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
-      height: 180,
+      height: 210,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -488,8 +949,9 @@ class _MonthlyTrendChart extends StatelessWidget {
             drawVerticalLine: false,
             horizontalInterval: math.max(1, maxVal / 4),
             getDrawingHorizontalLine: (v) => FlLine(
-              color: cs.outlineVariant.withValues(alpha: 0.3),
+              color: cs.outlineVariant.withValues(alpha: 0.25),
               strokeWidth: 1,
+              dashArray: [4, 4],
             ),
           ),
           borderData: FlBorderData(show: false),
@@ -497,18 +959,20 @@ class _MonthlyTrendChart extends StatelessWidget {
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 24,
+                reservedSize: 26,
                 getTitlesWidget: (v, _) {
                   final idx = v.toInt();
                   if (idx < 0 || idx >= keys.length) {
                     return const SizedBox.shrink();
                   }
                   return Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.only(top: 6),
                     child: Text(
                       keys[idx],
                       style: TextStyle(
-                          fontSize: 9, color: cs.onSurfaceVariant),
+                          fontSize: 9,
+                          color: cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w600),
                     ),
                   );
                 },
@@ -551,17 +1015,22 @@ class _MonthlyTrendChart extends StatelessWidget {
             LineChartBarData(
               spots: spots,
               isCurved: true,
-              curveSmoothness: 0.35,
-              color: AppColors.brandPrimary600,
-              barWidth: 2.5,
+              curveSmoothness: 0.4,
+              gradient: const LinearGradient(
+                colors: [
+                  AppColors.brandPrimary600,
+                  AppColors.secondaryBlue600,
+                ],
+              ),
+              barWidth: 3,
               dotData: FlDotData(
                 show: true,
                 getDotPainter: (s, pct, bar, idx) =>
                     FlDotCirclePainter(
-                  radius: 4,
+                  radius: 4.5,
                   color: AppColors.brandPrimary600,
                   strokeColor: cs.surface,
-                  strokeWidth: 1.5,
+                  strokeWidth: 2,
                 ),
               ),
               belowBarData: BarAreaData(
@@ -570,15 +1039,15 @@ class _MonthlyTrendChart extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    AppColors.brandPrimary600.withValues(alpha: 0.25),
-                    AppColors.brandPrimary600.withValues(alpha: 0.0),
+                    AppColors.brandPrimary600.withValues(alpha: 0.28),
+                    AppColors.secondaryBlue600.withValues(alpha: 0.05),
                   ],
                 ),
               ),
             ),
           ],
         ),
-        duration: const Duration(milliseconds: 500),
+        duration: const Duration(milliseconds: 600),
         curve: Curves.easeInOut,
       ),
     );
@@ -624,17 +1093,22 @@ class _ExpiryBarChart extends StatelessWidget {
     }
 
     final barGroups = keys.asMap().entries.map((e) {
+      final barColor = _bucketColor(e.value);
       return BarChartGroupData(
         x: e.key,
         barRods: [
           BarChartRodData(
             toY: buckets[e.value]!.toDouble(),
-            color: _bucketColor(e.value),
-            width: 22,
-            borderRadius: BorderRadius.circular(4),
+            gradient: LinearGradient(
+              colors: [barColor, barColor.withValues(alpha: 0.7)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            width: 24,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
             backDrawRodData: BackgroundBarChartRodData(
               show: true,
-              toY: maxVal * 1.2,
+              toY: maxVal * 1.3,
               color: cs.surfaceContainer,
             ),
           ),
@@ -645,7 +1119,7 @@ class _ExpiryBarChart extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
-      height: 200,
+      height: 230,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -659,13 +1133,14 @@ class _ExpiryBarChart extends StatelessWidget {
       child: BarChart(
         BarChartData(
           barGroups: barGroups,
-          maxY: maxVal * 1.2,
+          maxY: maxVal * 1.3,
           gridData: FlGridData(
             show: true,
             horizontalInterval: maxVal == 0 ? 1 : maxVal / 4,
             getDrawingHorizontalLine: (v) => FlLine(
-              color: cs.outlineVariant.withValues(alpha: 0.3),
+              color: cs.outlineVariant.withValues(alpha: 0.25),
               strokeWidth: 1,
+              dashArray: [4, 4],
             ),
             drawVerticalLine: false,
           ),
@@ -724,7 +1199,7 @@ class _ExpiryBarChart extends StatelessWidget {
             ),
           ),
         ),
-        duration: const Duration(milliseconds: 500),
+        duration: const Duration(milliseconds: 600),
         curve: Curves.easeInOut,
       ),
     );
@@ -958,66 +1433,94 @@ List<_InsightDef> _buildInsights({
 
 class _InsightsPanel extends StatelessWidget {
   final List<_InsightDef> insights;
-  final bool isDark;
-  final ColorScheme cs;
-  const _InsightsPanel(
-      {required this.insights, required this.isDark, required this.cs});
+  const _InsightsPanel({required this.insights});
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: insights.map((insight) {
         return Container(
           margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-          padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             color: cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border(
-              left: BorderSide(color: insight.color, width: 3),
-              top: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.35)),
-              right: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.35)),
-              bottom: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.35)),
-            ),
+            border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.35)),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 4),
+            ],
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: insight.color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.small),
-                ),
-                child:
-                    Icon(insight.icon, color: insight.color, size: 18),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      insight.title,
-                      style: AppTypography.labelLarge.copyWith(
-                        color: cs.onSurface,
-                        fontWeight: FontWeight.w700,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Barra lateral colorida
+                  Container(
+                    width: 4,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          insight.color,
+                          insight.color.withValues(alpha: 0.5)
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      insight.description,
-                      style: AppTypography.bodySmall
-                          .copyWith(color: cs.onSurfaceVariant),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: insight.color.withValues(alpha: 0.12),
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.small),
+                          ),
+                          child: Icon(insight.icon,
+                              color: insight.color, size: 20),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                insight.title,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                insight.description,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurfaceVariant,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       }).toList(),
