@@ -276,14 +276,14 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                     );
                   }
                   return GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
-                        AppSpacing.xs, AppSpacing.lg, AppSpacing.xxxl),
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.md,
+                        AppSpacing.xs, AppSpacing.md, AppSpacing.xxxl),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: AppSpacing.sm,
-                      crossAxisSpacing: AppSpacing.sm,
-                      childAspectRatio: 0.75,
+                      crossAxisCount: 4,
+                      mainAxisSpacing: AppSpacing.xs,
+                      crossAxisSpacing: AppSpacing.xs,
+                      childAspectRatio: 0.62,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
@@ -300,13 +300,13 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                   );
                 },
                 loading: () => GridView.builder(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   gridDelegate:
                       const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: AppSpacing.sm,
-                    crossAxisSpacing: AppSpacing.sm,
-                    childAspectRatio: 0.75,
+                    crossAxisCount: 4,
+                    mainAxisSpacing: AppSpacing.xs,
+                    crossAxisSpacing: AppSpacing.xs,
+                    childAspectRatio: 0.62,
                   ),
                   itemCount: 8,
                   itemBuilder: (_, __) => const CasaCardSkeleton(),
@@ -789,7 +789,7 @@ class _SortChip extends StatelessWidget {
   }
 }
 
-// ─── Card do grid ─────────────────────────────────────────────────────────
+// ─── Card do grid (4 por linha) ───────────────────────────────────────────
 
 class _ProductGridCard extends ConsumerWidget {
   final Product product;
@@ -822,176 +822,140 @@ class _ProductGridCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final accent = _accent();
-    final dateFmt = DateFormat('dd/MM/yy');
+    final dateFmt = DateFormat('dd/MM');
 
-    // Lotes mais próximos ao vencimento
-    final nearBatches = ref.watch(batchesByProductProvider(product.id)).whenOrNull(
-          data: (batches) {
-            final withExpiry = batches
-                .where((b) => !b.noExpiry)
-                .toList()
-              ..sort((a, b) => a.daysToExpiry.compareTo(b.daysToExpiry));
-            return withExpiry.take(2).toList();
-          },
-        ) ??
-        [];
+    final batchData = ref
+        .watch(batchesByProductProvider(product.id))
+        .whenOrNull(data: (batches) {
+      final sorted = batches
+          .where((b) => !b.noExpiry)
+          .toList()
+        ..sort((a, b) => a.daysToExpiry.compareTo(b.daysToExpiry));
+      return sorted.firstOrNull;
+    });
+
+    Color? urgentColor;
+    if (batchData != null) {
+      if (batchData.isExpired) { urgentColor = AppColors.danger600; }
+      else if (batchData.daysToExpiry <= 7) { urgentColor = AppColors.danger600; }
+      else if (batchData.daysToExpiry <= 30) { urgentColor = AppColors.warning600; }
+    }
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 200 + index * 20),
+      duration: Duration(milliseconds: 180 + index * 15),
       curve: Curves.easeOutCubic,
-      builder: (_, v, child) => Opacity(
-          opacity: v,
-          child: Transform.scale(scale: 0.85 + 0.15 * v, child: child)),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          child: Container(
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.35)),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1)),
-              ],
+      builder: (_, v, child) =>
+          Opacity(opacity: v, child: Transform.scale(scale: 0.88 + 0.12 * v, child: child)),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: urgentColor != null
+                  ? urgentColor.withValues(alpha: 0.5)
+                  : cs.outlineVariant.withValues(alpha: 0.3),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ─── Cabeçalho colorido com ícone
-                Container(
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [accent, accent.withValues(alpha: 0.72)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(AppRadius.card)),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ─── Topo colorido compacto
+              Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [accent, accent.withValues(alpha: 0.75)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  child: Center(
-                    child: product.imageUrl != null &&
-                            product.imageUrl!.isNotEmpty
-                        ? ClipRRect(
-                            borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(AppRadius.card)),
-                            child: Image.network(product.imageUrl!,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: 56),
-                          )
-                        : const Icon(Icons.inventory_2_rounded,
-                            color: Colors.white, size: 26),
-                  ),
+                  borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(AppRadius.card)),
                 ),
-                // ─── Informações
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          product.name,
-                          style: AppTypography.labelSmall.copyWith(
-                            color: cs.onSurface,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 11,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                child: Center(
+                  child: product.imageUrl != null && product.imageUrl!.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(AppRadius.card)),
+                          child: Image.network(product.imageUrl!,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: 44),
+                        )
+                      : const Icon(Icons.inventory_2_rounded,
+                          color: Colors.white, size: 20),
+                ),
+              ),
+              // ─── Info
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        product.name,
+                        style: TextStyle(
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10,
+                          height: 1.2,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          catLabel,
-                          style: AppTypography.labelSmall.copyWith(
-                            color: cs.onSurfaceVariant,
-                            fontSize: 9,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        catLabel,
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 9,
                         ),
-                        if (product.isPerishable) ...[
-                          const SizedBox(height: 3),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color:
-                                  AppColors.warning600.withValues(alpha: 0.12),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.pill),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (product.isPerishable && batchData != null) ...[
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Icon(
+                              batchData.isExpired
+                                  ? Icons.cancel_outlined
+                                  : Icons.event_rounded,
+                              size: 9,
+                              color: urgentColor ?? AppColors.success600,
                             ),
-                            child: const Text(
-                              'Perecível',
-                              style: TextStyle(
+                            const SizedBox(width: 2),
+                            Flexible(
+                              child: Text(
+                                batchData.expiryDate != null
+                                    ? '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)'
+                                    : '-',
+                                style: TextStyle(
                                   fontSize: 8,
-                                  color: AppColors.warning600,
-                                  fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ],
-                        // ─── Lotes mais próximos ao vencimento
-                        if (nearBatches.isNotEmpty) ...[
-                          const SizedBox(height: 5),
-                          Divider(
-                              height: 1,
-                              thickness: 0.5,
-                              color: cs.outlineVariant
-                                  .withValues(alpha: 0.4)),
-                          const SizedBox(height: 4),
-                          ...nearBatches.map((b) {
-                            final statusColor = b.isExpired
-                                ? AppColors.danger600
-                                : b.daysToExpiry <= 7
-                                    ? AppColors.danger600
-                                    : b.daysToExpiry <= 30
-                                        ? AppColors.warning600
-                                        : AppColors.success600;
-                            final dateStr = b.expiryDate != null
-                                ? dateFmt.format(b.expiryDate!)
-                                : '—';
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 2),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.event_rounded,
-                                      size: 10, color: statusColor),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    dateStr,
-                                    style: TextStyle(
-                                        fontSize: 9,
-                                        color: statusColor,
-                                        fontWeight: FontWeight.w700),
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    '(${b.daysToExpiry}d)',
-                                    style: TextStyle(
-                                        fontSize: 8,
-                                        color: statusColor
-                                            .withValues(alpha: 0.75)),
-                                  ),
-                                ],
+                                  color: urgentColor ?? AppColors.success600,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            );
-                          }),
-                        ],
+                            ),
+                          ],
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
