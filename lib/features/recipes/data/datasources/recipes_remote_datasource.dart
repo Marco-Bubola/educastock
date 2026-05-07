@@ -83,7 +83,6 @@ class RecipesRemoteDatasource {
           .collection('batches')
           .where('productId', isEqualTo: item.productId)
           .where('status', isEqualTo: 'disponivel')
-          .where('quantity', isGreaterThan: 0)
           .get();
 
       final docs = batchesSnap.docs.toList();
@@ -107,6 +106,7 @@ class RecipesRemoteDatasource {
       for (final doc in docs) {
         if (remaining <= 0) break;
         final before = (doc.data()['quantity'] as num?)?.toInt() ?? 0;
+        if (before <= 0) continue;
         final consume = before >= remaining ? remaining : before;
         final after = before - consume;
         remaining -= consume;
