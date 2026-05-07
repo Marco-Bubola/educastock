@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
@@ -254,7 +255,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
         isSuccess: true,
       );
       setState(() => _selectedQtyByProduct.clear());
-      Navigator.pop(context);
+      context.go('/dashboard');
     } catch (error) {
       if (!mounted) return;
       showCasaSnackbar(
@@ -277,7 +278,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
         message: 'Saída por receita registrada com sucesso!',
         isSuccess: true,
       );
-      Navigator.pop(context);
+      context.go('/dashboard');
     } catch (error) {
       if (!mounted) return;
       showCasaSnackbar(
