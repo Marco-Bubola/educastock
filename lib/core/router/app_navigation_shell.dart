@@ -17,12 +17,14 @@ class AppNavigationShell extends StatelessWidget {
     AppRoutes.dashboard,
     AppRoutes.productList,
     '${AppRoutes.movement}?batchId=',
+    AppRoutes.history,
     AppRoutes.reports,
   ];
 
   int _selectedIndex(String currentLocation) {
     if (currentLocation.startsWith(AppRoutes.movement)) return 2;
-    if (currentLocation.startsWith(AppRoutes.reports)) return 3;
+    if (currentLocation.startsWith(AppRoutes.history)) return 3;
+    if (currentLocation.startsWith(AppRoutes.reports)) return 4;
     if (currentLocation.startsWith(AppRoutes.productList)) return 1;
     return 0;
   }
@@ -73,6 +75,12 @@ const _tabs = [
     activeIcon: Icons.outbound_rounded,
     label: 'Saída',
     color: Color(0xFFC53030),
+  ),
+  _TabDef(
+    icon: Icons.history_outlined,
+    activeIcon: Icons.history_rounded,
+    label: 'Histórico',
+    color: Color(0xFF7C3AED),
   ),
   _TabDef(
     icon: Icons.bar_chart_outlined,
