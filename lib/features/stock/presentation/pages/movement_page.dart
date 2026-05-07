@@ -162,6 +162,44 @@ class _MovementPageState extends ConsumerState<MovementPage> {
     );
   }
 
+  Future<void> _openSummary(List<Product> products) async {
+    if (_selectedQtyByProduct.isEmpty ||
+        _selectedQtyByProduct.values.every((v) => v <= 0)) {
+      showCasaSnackbar(context,
+          message: 'Selecione ao menos um produto com quantidade.',
+          isError: true);
+      return;
+    }
+    final items = _selectedQtyByProduct.entries
+        .where((e) => e.value > 0)
+        .map((e) {
+      final p = products.firstWhere((p) => p.id == e.key,
+          orElse: () => Product(
+                id: e.key,
+                name: e.key,
+                category: ProductCategory.outro,
+                unit: 'un',
+                isPerishable: false,
+                createdAt: DateTime.now(),
+                createdBy: '',
+              ));
+      return _SummaryItem(product: p, qty: e.value);
+    }).toList();
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SummarySheet(
+        items: items,
+        reasonLabel: _reasonLabels[_reasonCode] ?? 'Uso/Distribuição',
+      ),
+    );
+    if (confirmed == true) {
+      await _submitProducts(products);
+    }
+  }
+
   Future<void> _submitProducts(List<Product> products) async {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
@@ -273,7 +311,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
               isLoading: _isLoading,
               label: 'Confirmar Distribuição',
               icon: Icons.outbound_rounded,
-              onPressed: () => _submitProducts(productsAsync.valueOrNull ?? []),
+              onPressed: () => _openSummary(productsAsync.valueOrNull ?? []),
             )
           : recipesAsync.valueOrNull?.any((r) => r.id == _selectedRecipeId) == true
               ? _ConfirmFab(
@@ -303,7 +341,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
               }).toList();
 
               final width = MediaQuery.of(context).size.width;
-              final cross = width >= 700 ? 4 : 2;
 
               return ListView(
                 padding: const EdgeInsets.fromLTRB(
@@ -429,146 +466,52 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: filteredProducts.length,
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: cross,
-                        mainAxisSpacing: AppSpacing.sm,
-                        crossAxisSpacing: AppSpacing.sm,
-                        childAspectRatio: 0.80,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 0.72,
                       ),
                       itemBuilder: (_, i) {
                         final p = filteredProducts[i];
                         final available = _availableForProduct(p.id, batches);
                         final qty = _selectedQtyByProduct[p.id] ?? 0;
+                        final isDark = Theme.of(context).brightness == Brightness.dark;
 
-                        // Detecta proximidade de validade
                         final nearExpiry = batches.any((b) =>
                             b.productId == p.id &&
                             b.status == BatchStatus.disponivel &&
                             b.expiryDate != null &&
-                            b.expiryDate!
-                                    .difference(DateTime.now())
-                                    .inDays <=
-                                30);
+                            b.expiryDate!.difference(DateTime.now()).inDays <= 30);
                         final expiredBatch = batches.any((b) =>
                             b.productId == p.id &&
                             b.status == BatchStatus.disponivel &&
                             b.expiryDate != null &&
                             b.expiryDate!.isBefore(DateTime.now()));
 
-                        final borderColor = qty > 0
-                            ? AppColors.brandPrimary600
-                            : expiredBatch
-                                ? AppColors.danger600
-                                : nearExpiry
-                                    ? AppColors.warning600
-                                    : Theme.of(context)
-                                        .dividerColor
-                                        .withValues(alpha: 0.35);
-                        final bgColor = expiredBatch
-                            ? AppColors.danger600.withValues(alpha: 0.06)
-                            : nearExpiry
-                                ? AppColors.warning600.withValues(alpha: 0.06)
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerLow;
-
-                        return Container(
-                          padding: const EdgeInsets.all(AppSpacing.xs),
-                          decoration: BoxDecoration(
-                            color: bgColor,
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                            border: Border.all(
-                              color: borderColor,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(AppRadius.small),
-                                  child: p.imageUrl != null && p.imageUrl!.isNotEmpty
-                                      ? Image.network(
-                                          p.imageUrl!,
-                                          width: double.infinity,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => Container(
-                                            color: AppColors.brandPrimary100,
-                                            child: const Center(child: Icon(Icons.inventory_2_outlined)),
-                                          ),
-                                        )
-                                      : Container(
-                                          color: AppColors.brandPrimary100,
-                                          child: const Center(child: Icon(Icons.inventory_2_outlined)),
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                p.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTypography.labelSmall.copyWith(
-                                  color: onSurface,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              Text(
-                                'Disponível: $available ${p.unit}',
-                                style: AppTypography.bodySmall.copyWith(
-                                  color: onSurfaceVariant,
-                                ),
-                              ),
-                              if (expiredBatch)
-                                Text('VENCIDO',
-                                    style: TextStyle(
-                                        fontSize: 9,
-                                        color: AppColors.danger600,
-                                        fontWeight: FontWeight.w800))
-                              else if (nearExpiry)
-                                Text('VENCE EM BREVE',
-                                    style: TextStyle(
-                                        fontSize: 9,
-                                        color: AppColors.warning600,
-                                        fontWeight: FontWeight.w700)),
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline_rounded, size: 18),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                    onPressed: qty > 0
-                                        ? () => setState(() {
-                                              final next = qty - 1;
-                                              if (next <= 0) {
-                                                _selectedQtyByProduct.remove(p.id);
-                                              } else {
-                                                _selectedQtyByProduct[p.id] = next;
-                                              }
-                                            })
-                                        : null,
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      '$qty',
-                                      textAlign: TextAlign.center,
-                                      style: AppTypography.labelMedium.copyWith(color: onSurface),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                    onPressed: available > qty
-                                        ? () => setState(() {
-                                              _selectedQtyByProduct[p.id] = qty + 1;
-                                            })
-                                        : null,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
+                        return _ProductOutputCard(
+                          product: p,
+                          available: available,
+                          qty: qty,
+                          isDark: isDark,
+                          index: i,
+                          nearExpiry: nearExpiry,
+                          expiredBatch: expiredBatch,
+                          onDecrement: qty > 0
+                              ? () => setState(() {
+                                    final next = qty - 1;
+                                    if (next <= 0) {
+                                      _selectedQtyByProduct.remove(p.id);
+                                    } else {
+                                      _selectedQtyByProduct[p.id] = next;
+                                    }
+                                  })
+                              : null,
+                          onIncrement: available > qty
+                              ? () => setState(
+                                    () => _selectedQtyByProduct[p.id] = qty + 1,
+                                  )
+                              : null,
                         );
                       },
                     ),
@@ -810,6 +753,627 @@ class _ModeTab extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Card de produto para saída ────────────────────────────────────────────
+
+class _ProductOutputCard extends StatelessWidget {
+  final Product product;
+  final int available;
+  final int qty;
+  final bool isDark;
+  final int index;
+  final bool nearExpiry;
+  final bool expiredBatch;
+  final VoidCallback? onDecrement;
+  final VoidCallback? onIncrement;
+
+  const _ProductOutputCard({
+    required this.product,
+    required this.available,
+    required this.qty,
+    required this.isDark,
+    required this.index,
+    required this.nearExpiry,
+    required this.expiredBatch,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  static const _palettes = [
+    [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+    [Color(0xFF0891B2), Color(0xFF0E7490)],
+    [Color(0xFF059669), Color(0xFF047857)],
+    [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+    [Color(0xFFDB2777), Color(0xFFC026D3)],
+    [Color(0xFFEA580C), Color(0xFFDC2626)],
+    [Color(0xFF0284C7), Color(0xFF0369A1)],
+    [Color(0xFF65A30D), Color(0xFF4D7C0F)],
+  ];
+
+  List<Color> _palette() => _palettes[index % _palettes.length];
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _palette();
+    final accent = expiredBatch
+        ? const Color(0xFFF87171)
+        : nearExpiry
+            ? const Color(0xFFFBBF24)
+            : palette[0];
+    final selected = qty > 0;
+    final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
+    final onCard = isDark ? const Color(0xFFE5E7EB) : const Color(0xFF111827);
+    final subColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: selected
+              ? const Color(0xFF2563EB)
+              : accent.withValues(alpha: isDark ? 0.25 : 0.18),
+          width: selected ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: selected
+                ? const Color(0xFF2563EB).withValues(alpha: 0.18)
+                : accent.withValues(alpha: isDark ? 0.08 : 0.06),
+            blurRadius: selected ? 10 : 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Header colorido ────────────────────────────────────────
+          Container(
+            height: 52,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: expiredBatch
+                    ? [const Color(0xFFF87171), const Color(0xFFDC2626)]
+                    : nearExpiry
+                        ? [const Color(0xFFFBBF24), const Color(0xFFD97706)]
+                        : palette,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(11)),
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  right: -8,
+                  top: -8,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                ),
+                // Badge de quantidade se > 0
+                if (selected)
+                  Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '$qty',
+                        style: const TextStyle(
+                          color: Color(0xFF2563EB),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                Center(
+                  child: product.imageUrl != null &&
+                          product.imageUrl!.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(11)),
+                          child: Image.network(product.imageUrl!,
+                              width: double.infinity,
+                              height: 52,
+                              fit: BoxFit.cover),
+                        )
+                      : Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.25)),
+                          ),
+                          child: const Icon(Icons.inventory_2_rounded,
+                              color: Colors.white, size: 16),
+                        ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Faixa status validade ─────────────────────────────────
+          if (expiredBatch || nearExpiry)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: isDark ? 0.15 : 0.08),
+                border: Border(
+                  bottom: BorderSide(
+                      color: accent.withValues(alpha: isDark ? 0.2 : 0.12)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    expiredBatch
+                        ? Icons.cancel_rounded
+                        : Icons.schedule_rounded,
+                    size: 8,
+                    color: accent,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    expiredBatch ? 'VENCIDO' : 'VENCE EM BREVE',
+                    style: TextStyle(
+                      fontSize: 8,
+                      color: accent,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // ── Info + contador ───────────────────────────────────────
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(7, 5, 7, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: onCard,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 10,
+                      height: 1.25,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Disp: $available ${product.unit}',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: subColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Spacer(),
+                  // Contador
+                  Container(
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: isDark ? 0.1 : 0.06),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                          color: accent.withValues(
+                              alpha: isDark ? 0.2 : 0.14)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: onDecrement,
+                            child: Icon(
+                              Icons.remove_rounded,
+                              size: 14,
+                              color: onDecrement != null
+                                  ? accent
+                                  : accent.withValues(alpha: 0.3),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '$qty',
+                          style: TextStyle(
+                            color: selected ? accent : subColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: onIncrement,
+                            child: Icon(
+                              Icons.add_rounded,
+                              size: 14,
+                              color: onIncrement != null
+                                  ? accent
+                                  : accent.withValues(alpha: 0.3),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Dados para o resumo ───────────────────────────────────────────────────
+
+class _SummaryItem {
+  final Product product;
+  final int qty;
+  const _SummaryItem({required this.product, required this.qty});
+}
+
+// ─── Tela de resumo (bottom sheet) ────────────────────────────────────────
+
+class _SummarySheet extends StatelessWidget {
+  final List<_SummaryItem> items;
+  final String reasonLabel;
+  const _SummarySheet({required this.items, required this.reasonLabel});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
+    final onBg = isDark ? const Color(0xFFE5E7EB) : const Color(0xFF0F172A);
+    final sub = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
+    final totalItems = items.fold<int>(0, (s, e) => s + e.qty);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      maxChildSize: 0.95,
+      minChildSize: 0.5,
+      builder: (_, scrollCtrl) => Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          border: isDark
+              ? Border.all(
+                  color: const Color(0xFF1F2937).withValues(alpha: 0.6))
+              : null,
+        ),
+        child: Column(
+          children: [
+            // ── Handle ────────────────────────────────────────────
+            const SizedBox(height: 10),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: sub.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ── Header ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.outbound_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Resumo da Distribuição',
+                          style: TextStyle(
+                            color: onBg,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          '$reasonLabel  ·  ${items.length} produto${items.length != 1 ? 's' : ''}  ·  $totalItems ${totalItems != 1 ? 'unidades' : 'unidade'}',
+                          style: TextStyle(
+                              color: sub, fontSize: 11, height: 1.3),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(false),
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: sub.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.close_rounded,
+                          size: 16, color: sub),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // ── Divisor ───────────────────────────────────────────
+            Container(
+              height: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              color: sub.withValues(alpha: isDark ? 0.12 : 0.08),
+            ),
+            const SizedBox(height: 10),
+
+            // ── Lista de itens ────────────────────────────────────
+            Expanded(
+              child: ListView.separated(
+                controller: scrollCtrl,
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) {
+                  final item = items[i];
+                  return Container(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: sub.withValues(alpha: isDark ? 0.12 : 0.08),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black
+                              .withValues(alpha: isDark ? 0.15 : 0.04),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        // Avatar
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB)
+                                .withValues(alpha: isDark ? 0.15 : 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: const Color(0xFF2563EB)
+                                    .withValues(alpha: isDark ? 0.25 : 0.15)),
+                          ),
+                          child: item.product.imageUrl != null &&
+                                  item.product.imageUrl!.isNotEmpty
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.network(item.product.imageUrl!,
+                                      fit: BoxFit.cover),
+                                )
+                              : const Icon(Icons.inventory_2_rounded,
+                                  color: Color(0xFF2563EB), size: 16),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.product.name,
+                                style: TextStyle(
+                                  color: onBg,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                item.product.category.name,
+                                style:
+                                    TextStyle(color: sub, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Quantidade
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB)
+                                .withValues(alpha: isDark ? 0.15 : 0.08),
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(
+                                color: const Color(0xFF2563EB)
+                                    .withValues(alpha: isDark ? 0.3 : 0.2)),
+                          ),
+                          child: Text(
+                            '${item.qty} ${item.product.unit}',
+                            style: const TextStyle(
+                              color: Color(0xFF2563EB),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // ── Botões ────────────────────────────────────────────
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  MediaQuery.of(context).padding.bottom + 16),
+              child: Column(
+                children: [
+                  // Aviso
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB)
+                          .withValues(alpha: isDark ? 0.1 : 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF2563EB)
+                            .withValues(alpha: isDark ? 0.2 : 0.12),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded,
+                            size: 14, color: Color(0xFF2563EB)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'O sistema aplicará a regra FEFO — os lotes mais próximos do vencimento sairão primeiro.',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: isDark
+                                    ? const Color(0xFF93C5FD)
+                                    : const Color(0xFF1D4ED8),
+                                height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => Navigator.of(context).pop(false),
+                          child: Container(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 13),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF1F2937)
+                                  : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFF374151)
+                                      : const Color(0xFFE2E8F0)),
+                            ),
+                            child: Text(
+                              'Voltar',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: sub,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: GestureDetector(
+                          onTap: () => Navigator.of(context).pop(true),
+                          child: Container(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 13),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF2563EB),
+                                  Color(0xFF1D4ED8)
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF2563EB)
+                                      .withValues(alpha: 0.35),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(Icons.outbound_rounded,
+                                    color: Colors.white, size: 16),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Confirmar Saída',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
