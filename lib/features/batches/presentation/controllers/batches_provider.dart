@@ -78,3 +78,22 @@ final addBatchQuantityProvider = AutoDisposeNotifierProvider<
     AddBatchQuantityNotifier, AsyncValue<void>>(
   () => AddBatchQuantityNotifier(),
 );
+
+// ─── Deletar lote ────────────────────────────────────────────────────────
+
+class DeleteBatchNotifier extends AutoDisposeNotifier<AsyncValue<void>> {
+  @override
+  AsyncValue<void> build() => const AsyncValue.data(null);
+
+  Future<void> deleteBatch(String batchId) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(batchesDatasourceProvider).deleteBatch(batchId);
+    });
+  }
+}
+
+final deleteBatchProvider =
+    AutoDisposeNotifierProvider<DeleteBatchNotifier, AsyncValue<void>>(
+  () => DeleteBatchNotifier(),
+);
