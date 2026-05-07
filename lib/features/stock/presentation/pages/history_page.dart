@@ -973,211 +973,213 @@ class _SessionCardState extends State<_SessionCard> {
   Widget build(BuildContext context) {
     final first = widget.movements.first;
     final reasonKey = first.reasonCode ?? 'outro';
-    final colors =
-        widget.reasonColors[reasonKey] ?? widget.reasonColors['outro']!;
-    final label = widget.reasonLabels[reasonKey] ?? 'Saída';
-    final icon =
-        widget.reasonIcons[reasonKey] ?? Icons.outbound_rounded;
-    final totalQty =
-        widget.movements.fold<int>(0, (s, m) => s + m.quantity);
+    final colors = widget.reasonColors[reasonKey] ?? widget.reasonColors['outro']!;
+    final totalQty = widget.movements.fold<int>(0, (s, m) => s + m.quantity);
     final timeStr = widget.formatTime(first.performedAt);
     final firstName = first.performedByName.split(' ').first;
     final isDark = widget.isDark;
-    final onCard =
-        isDark ? const Color(0xFFE5E7EB) : const Color(0xFF0F172A);
-    final subColor =
-        isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
-    final divColor =
-        isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9);
+    final onCard = isDark ? const Color(0xFFE5E7EB) : const Color(0xFF0F172A);
+    final subColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
+    final divColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9);
+
+    final preview = widget.movements.take(4).toList();
+    final extra = widget.movements.length > 4 ? widget.movements.length - 4 : 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: widget.cardBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: widget.borderColor),
         boxShadow: isDark
             ? []
             : [
                 BoxShadow(
-                  color: const Color(0xFF000000).withValues(alpha: 0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
                 ),
               ],
       ),
       child: Column(
         children: [
-          // ── Header colorido ────────────────────────────────────────
-          GestureDetector(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 13),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: colors,
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(15),
-                  topRight: const Radius.circular(15),
-                  bottomLeft:
-                      _expanded ? Radius.zero : const Radius.circular(15),
-                  bottomRight:
-                      _expanded ? Radius.zero : const Radius.circular(15),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(icon, color: Colors.white, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          '${widget.movements.length} ${widget.movements.length == 1 ? 'produto' : 'produtos'} · $totalQty un · por $firstName',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.82),
-                            fontSize: 11.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        timeStr,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                      AnimatedRotation(
-                        turns: _expanded ? 0.5 : 0.0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white.withValues(alpha: 0.8),
-                          size: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+          // ── Barra colorida no topo ───────────────────────────────────
+          Container(
+            height: 5,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: colors),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
             ),
           ),
 
-          // ── Lista de produtos (expansível) ─────────────────────────
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 220),
-            crossFadeState: _expanded
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
-            firstChild: Column(
+          // ── Conteúdo principal ───────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ...widget.movements.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final m = entry.value;
-                  return Column(
-                    children: [
-                      Divider(
-                          height: 1,
-                          thickness: 1,
-                          color: i == 0 ? divColor : divColor),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 11),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: colors[0].withValues(
-                                    alpha: isDark ? 0.15 : 0.08),
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Icon(Icons.inventory_2_rounded,
-                                  size: 16, color: colors[0]),
+                // Linha 1: hora + responsável + total
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: colors[0].withValues(alpha: isDark ? 0.18 : 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.access_time_rounded, size: 13, color: colors[0]),
+                          const SizedBox(width: 4),
+                          Text(
+                            timeStr,
+                            style: TextStyle(
+                              color: colors[0],
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                m.productName,
-                                style: TextStyle(
-                                  color: onCard,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13.5,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(Icons.person_outline_rounded, size: 13, color: subColor),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              firstName,
+                              style: TextStyle(color: subColor, fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: colors[0].withValues(
-                                    alpha: isDark ? 0.18 : 0.08),
-                                borderRadius:
-                                    BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '−${m.quantity} un',
-                                style: TextStyle(
-                                  color: colors[0],
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Badge total
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: widget.borderColor),
+                      ),
+                      child: Text(
+                        '$totalQty un',
+                        style: TextStyle(
+                          color: onCard,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
                         ),
                       ),
-                    ],
-                  );
-                }),
-                // Footer
-                if (first.activity != null || first.reason != null) ...[
-                  Divider(height: 1, thickness: 1, color: divColor),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline_rounded,
-                            size: 13, color: subColor),
-                        const SizedBox(width: 6),
-                        Expanded(
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Linha 2: pills dos primeiros 4 produtos
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ...preview.map((m) => Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1F2937)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: widget.borderColor),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.inventory_2_rounded,
+                                  size: 11, color: colors[0]),
+                              const SizedBox(width: 5),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 110),
+                                child: Text(
+                                  m.productName,
+                                  style: TextStyle(
+                                    color: onCard,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: colors[0].withValues(
+                                      alpha: isDark ? 0.2 : 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '×${m.quantity}',
+                                  style: TextStyle(
+                                    color: colors[0],
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                    if (extra > 0)
+                      GestureDetector(
+                        onTap: () => setState(() => _expanded = !_expanded),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: colors[0].withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                           child: Text(
-                            first.activity ?? first.reason ?? '',
-                            style:
-                                TextStyle(color: subColor, fontSize: 11),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            '+$extra mais',
+                            style: TextStyle(
+                              color: colors[0],
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+
+                // Linha 3: expandir se tiver mais de 4
+                if (widget.movements.length > 4) ...[
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () => setState(() => _expanded = !_expanded),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedRotation(
+                          turns: _expanded ? 0.5 : 0.0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(Icons.keyboard_arrow_down_rounded,
+                              size: 16, color: subColor),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _expanded ? 'Ocultar todos' : 'Ver todos ${widget.movements.length} produtos',
+                          style: TextStyle(
+                            color: subColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -1186,30 +1188,66 @@ class _SessionCardState extends State<_SessionCard> {
                 ],
               ],
             ),
-            secondChild: const SizedBox.shrink(),
           ),
 
-          // ── Preview quando colapsado ────────────────────────────────
-          if (!_expanded && widget.movements.length == 1)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-              child: Row(
-                children: [
-                  Icon(Icons.inventory_2_outlined,
-                      size: 14, color: subColor),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      first.productName,
-                      style:
-                          TextStyle(color: subColor, fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          // ── Lista expandida ──────────────────────────────────────────
+          if (_expanded) ...[
+            Divider(height: 1, thickness: 1, color: divColor),
+            ...widget.movements.skip(4).map((m) => Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: colors[0].withValues(
+                                  alpha: isDark ? 0.15 : 0.08),
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Icon(Icons.inventory_2_rounded,
+                                size: 15, color: colors[0]),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              m.productName,
+                              style: TextStyle(
+                                color: onCard,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: colors[0].withValues(
+                                  alpha: isDark ? 0.18 : 0.08),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '×${m.quantity}',
+                              style: TextStyle(
+                                color: colors[0],
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
+                    Divider(height: 1, thickness: 1, color: divColor),
+                  ],
+                )),
+          ],
         ],
       ),
     );
