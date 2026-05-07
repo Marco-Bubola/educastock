@@ -18,6 +18,7 @@ import '../../features/audit/presentation/pages/audit_page.dart';
 import '../../features/reports/presentation/pages/reports_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
 import '../../features/locations/presentation/pages/locations_page.dart';
+import '../../features/locations/presentation/pages/location_create_page.dart';
 import '../../features/settings/presentation/pages/users_management_page.dart';
 import '../../features/settings/presentation/pages/categories_settings_page.dart';
 import '../../features/settings/presentation/pages/alerts_settings_page.dart';
@@ -43,6 +44,7 @@ abstract class AppRoutes {
   static const reports = '/reports';
   static const settings = '/settings';
   static const locations = '/locations';
+  static const locationCreate = '/locations/new';
   static const usersManagement = '/settings/users';
   static const categoriesSettings = '/settings/categories';
   static const alertsSettings = '/settings/alerts';
@@ -167,6 +169,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.locations,
             builder: (_, __) => const LocationsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.locationCreate,
+            builder: (_, __) => const LocationCreatePage(),
           ),
           GoRoute(
             path: AppRoutes.usersManagement,
