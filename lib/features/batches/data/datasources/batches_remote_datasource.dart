@@ -111,4 +111,8 @@ class BatchesRemoteDatasource {
       'status': status.name,
     });
   }
+
+  Future<void> deleteBatch(String batchId) async {
+    await _col.doc(batchId).delete();
+  }
 }
