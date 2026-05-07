@@ -24,6 +24,7 @@ import '../../features/settings/presentation/pages/alerts_settings_page.dart';
 import '../../features/ml/presentation/pages/ml_insights_page.dart';
 import '../../features/recipes/presentation/pages/recipes_page.dart';
 import '../../features/recipes/presentation/pages/recipe_create_page.dart';
+import '../../features/stock/presentation/pages/history_page.dart';
 
 abstract class AppRoutes {
   static const login = '/login';
@@ -48,6 +49,7 @@ abstract class AppRoutes {
   static const mlInsights = '/ml/insights';
   static const recipes = '/recipes';
   static const recipeCreate = '/recipes/new';
+  static const history = '/history';
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -189,6 +191,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.recipeCreate,
             builder: (_, __) => const RecipeCreatePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.history,
+            builder: (_, __) => const HistoryPage(),
           ),
         ],
       ),
