@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
@@ -18,87 +20,23 @@ class DashboardPage extends ConsumerWidget {
     final expiringWarning = ref.watch(expiringBatchesProvider(30));
     final allBatches = ref.watch(allAvailableBatchesProvider);
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: ModernProfileAppBar(
-        title: 'EducaStock',
-        subtitle: 'Painel operacional',
-        profileName: user?.name,
-        onProfileTap: () => context.push(AppRoutes.settings),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+          statusBarColor: Colors.transparent),
+      child: Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        body: ListView(
+          padding: EdgeInsets.zero,
           children: [
-            // KPIs
-            const CasaSectionHeader(title: 'Visão Geral de Hoje'),
-            const SizedBox(height: AppSpacing.sm),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: SizedBox(
-                height: 116,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: allBatches.when(
-                        data: (batches) => _KpiCard(
-                          label: 'Lotes',
-                          value: '${batches.length}',
-                          icon: Icons.inventory_2_rounded,
-                          gradientColors: const [Color(0xFF1D5FA8), Color(0xFF2F74C0)],
-                          onTap: () => context.go(AppRoutes.productList),
-                        ),
-                        loading: () => const _KpiCardSkeleton(),
-                        error: (_, __) => const _KpiCard(
-                          label: 'Lotes',
-                          value: '-',
-                          icon: Icons.inventory_2_rounded,
-                          gradientColors: [Color(0xFF1D5FA8), Color(0xFF2F74C0)],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: expiringCritical.when(
-                        data: (batches) => _KpiCard(
-                          label: 'Vencem 7d',
-                          value: '${batches.length}',
-                          icon: Icons.warning_rounded,
-                          gradientColors: const [Color(0xFFC53030), Color(0xFFE53E3E)],
-                          badge: batches.isNotEmpty ? '${batches.length}' : null,
-                          onTap: () => context.go(AppRoutes.alerts),
-                        ),
-                        loading: () => const _KpiCardSkeleton(),
-                        error: (_, __) => const _KpiCard(
-                          label: 'Vencem 7d',
-                          value: '-',
-                          icon: Icons.warning_rounded,
-                          gradientColors: [Color(0xFFC53030), Color(0xFFE53E3E)],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: expiringWarning.when(
-                        data: (batches) => _KpiCard(
-                          label: 'Atenção 30d',
-                          value: '${batches.length}',
-                          icon: Icons.schedule_rounded,
-                          gradientColors: const [Color(0xFFB7791F), Color(0xFFD69E2E)],
-                          onTap: () => context.go(AppRoutes.alerts),
-                        ),
-                        loading: () => const _KpiCardSkeleton(),
-                        error: (_, __) => const _KpiCard(
-                          label: 'Atenção 30d',
-                          value: '-',
-                          icon: Icons.schedule_rounded,
-                          gradientColors: [Color(0xFFB7791F), Color(0xFFD69E2E)],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            // ─── Header completo ─────────────────────────────────────────
+            _DashboardHeader(
+              user: user,
+              allBatches: allBatches,
+              expiringCritical: expiringCritical,
+              expiringWarning: expiringWarning,
+              onSettingsTap: () => context.push(AppRoutes.settings),
+              onLotesTap: () => context.go(AppRoutes.productList),
+              onAlertsTap: () => context.go(AppRoutes.alerts),
             ),
 
             const SizedBox(height: AppSpacing.xl),
@@ -228,9 +166,327 @@ class DashboardPage extends ConsumerWidget {
             const SizedBox(height: AppSpacing.xxxl),
           ],
         ),
+        floatingActionButton: CasaFabScan(
+          onPressed: () => context.push(AppRoutes.scanner),
+        ),
       ),
-      floatingActionButton: CasaFabScan(
-        onPressed: () => context.push(AppRoutes.scanner),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard Header — Visão Geral completa
+// ---------------------------------------------------------------------------
+
+class _DashboardHeader extends ConsumerWidget {
+  final dynamic user;
+  final AsyncValue<List<dynamic>> allBatches;
+  final AsyncValue<List<dynamic>> expiringCritical;
+  final AsyncValue<List<dynamic>> expiringWarning;
+  final VoidCallback onSettingsTap;
+  final VoidCallback onLotesTap;
+  final VoidCallback onAlertsTap;
+
+  const _DashboardHeader({
+    required this.user,
+    required this.allBatches,
+    required this.expiringCritical,
+    required this.expiringWarning,
+    required this.onSettingsTap,
+    required this.onLotesTap,
+    required this.onAlertsTap,
+  });
+
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Bom dia';
+    if (h < 18) return 'Boa tarde';
+    return 'Boa noite';
+  }
+
+  String _formattedDate() {
+    return DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(DateTime.now());
+  }
+
+  String _firstName() {
+    final name = user?.name as String? ?? '';
+    return name.trim().split(' ').first;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final alertCount = ref.watch(allAvailableBatchesProvider).when(
+          data: (list) =>
+              list.where((b) => !b.noExpiry && (b.isExpired || b.daysToExpiry <= 30)).length,
+          loading: () => 0,
+          error: (_, __) => 0,
+        );
+    final lotesCount = allBatches.maybeWhen(
+        data: (l) => '${l.length}', orElse: () => '…');
+    final critCount = expiringCritical.maybeWhen(
+        data: (l) => '${l.length}', orElse: () => '…');
+    final warnCount = expiringWarning.maybeWhen(
+        data: (l) => '${l.length}', orElse: () => '…');
+    final hasCritical =
+        expiringCritical.maybeWhen(data: (l) => l.isNotEmpty, orElse: () => false);
+
+    final normalizedName = user?.name?.trim() as String? ?? '';
+    final initial = normalizedName.isEmpty
+        ? 'U'
+        : normalizedName.substring(0, 1).toUpperCase();
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0F2444), Color(0xFF1A3A6B), Color(0xFF1D5FA8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Top row: saudação + avatar ────────────────────────────
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${_greeting()}, ${_firstName()} 👋',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 22,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formattedDate(),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // ── Botões de ação: sino + dark/light ─────────────
+                  CasaAlertsBellButton(
+                    alertCount: alertCount,
+                    onDarkBg: true,
+                  ),
+                  const SizedBox(width: 6),
+                  const CasaThemeToggleButton(),
+                  const SizedBox(width: 8),
+                  // Avatar + settings
+                  GestureDetector(
+                    onTap: onSettingsTap,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Divisor ────────────────────────────────────────────────
+              Container(
+                height: 1,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      Colors.white.withValues(alpha: 0.25),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 18),
+
+              // ── KPI cards ─────────────────────────────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: _HeaderKpiCard(
+                      icon: Icons.inventory_2_rounded,
+                      value: lotesCount,
+                      label: 'Lotes',
+                      gradientColors: const [
+                        Color(0xFF1A56C4),
+                        Color(0xFF2F74D0)
+                      ],
+                      onTap: onLotesTap,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _HeaderKpiCard(
+                      icon: Icons.warning_rounded,
+                      value: critCount,
+                      label: 'Vencem 7d',
+                      gradientColors: const [
+                        Color(0xFFC53030),
+                        Color(0xFFE53E3E)
+                      ],
+                      badge: hasCritical ? critCount : null,
+                      onTap: onAlertsTap,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _HeaderKpiCard(
+                      icon: Icons.schedule_rounded,
+                      value: warnCount,
+                      label: 'Atenção 30d',
+                      gradientColors: const [
+                        Color(0xFFB7791F),
+                        Color(0xFFD69E2E)
+                      ],
+                      onTap: onAlertsTap,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── KPI card dentro do header ─────────────────────────────────────────────
+
+class _HeaderKpiCard extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final List<Color> gradientColors;
+  final String? badge;
+  final VoidCallback? onTap;
+
+  const _HeaderKpiCard({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.gradientColors,
+    this.badge,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors.first.withValues(alpha: 0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon,
+                    color: Colors.white.withValues(alpha: 0.9), size: 22),
+                const SizedBox(height: 10),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.82),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            if (badge != null)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 4,
+                          offset: const Offset(0, 1)),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      badge!,
+                      style: TextStyle(
+                        color: gradientColors.first,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -402,125 +658,6 @@ class _AlertBatchTile extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// KPI card colorido (linha horizontal)
-// ---------------------------------------------------------------------------
-
-class _KpiCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final List<Color> gradientColors;
-  final String? badge;
-  final VoidCallback? onTap;
-
-  const _KpiCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.gradientColors,
-    this.badge,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradientColors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          boxShadow: [
-            BoxShadow(
-              color: gradientColors.first.withValues(alpha: 0.35),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 22),
-                const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: AppTypography.numberMedium.copyWith(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.labelSmall.copyWith(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-            if (badge != null)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  width: 18,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 4,
-                          offset: const Offset(0, 1)),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      badge!,
-                      style: TextStyle(
-                        color: gradientColors.first,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _KpiCardSkeleton extends StatelessWidget {
-  const _KpiCardSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
     );
   }
