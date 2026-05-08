@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../data/datasources/alert_checker_service.dart';
 
 // ---------- Entidade ----------
 
@@ -79,7 +81,22 @@ class AlertsNotifier extends AsyncNotifier<void> {
   Future<void> resolve(String alertId) async {
     await ref.read(alertsDatasourceProvider).resolveAlert(alertId);
   }
+
+  Future<void> checkAlerts(int criticalDays, int warningDays) async {
+    await ref.read(alertCheckerServiceProvider).checkAndCreateAlerts(
+          criticalDays: criticalDays,
+          warningDays: warningDays,
+        );
+  }
 }
 
 final alertsNotifierProvider =
     AsyncNotifierProvider<AlertsNotifier, void>(AlertsNotifier.new);
+
+// ─── AlertCheckerService provider ─────────────────────────────────────────
+
+final alertCheckerServiceProvider = Provider<AlertCheckerService>((ref) {
+  return AlertCheckerService(
+    batchesDs: ref.read(batchesDatasourceProvider),
+  );
+});
