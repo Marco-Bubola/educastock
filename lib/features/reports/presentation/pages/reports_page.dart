@@ -19,7 +19,9 @@ import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
 import '../../../ml/domain/entities/risk_prediction.dart';
 import '../../../ml/presentation/widgets/risk_widgets.dart';
 
-// ─── Helpers de exportação ────────────────────────────────────────────────
+import '../controllers/reports_provider.dart';
+import '../../../stock/domain/entities/stock_movement.dart';
+
 
 Future<void> _exportCsv({
   required BuildContext context,
@@ -519,6 +521,10 @@ class ReportsPage extends ConsumerWidget {
                   )
                 else
                   _ExpiryList(batches: exp30List, cs: cs, isDark: isDark),
+                const SizedBox(height: AppSpacing.xl),
+
+                // ─── Movimentações por Período
+                const _MovementsSection(),
               ],
             );
           },
@@ -2121,6 +2127,245 @@ class _ExpirySection extends StatelessWidget {
           );
         }).toList(),
       ),
+    );
+  }
+}
+
+// ─── Seção de movimentações por período ──────────────────────────────────
+
+class _MovementsSection extends ConsumerStatefulWidget {
+  const _MovementsSection();
+
+  @override
+  ConsumerState<_MovementsSection> createState() => _MovementsSectionState();
+}
+
+class _MovementsSectionState extends ConsumerState<_MovementsSection> {
+  int _days = 30;
+  late DateTimeRange _range;
+
+  static const _periods = [7, 30, 90];
+  static const _periodLabels = {7: '7 dias', 30: '30 dias', 90: '90 dias'};
+
+  @override
+  void initState() {
+    super.initState();
+    _updateRange();
+  }
+
+  void _updateRange() {
+    final now = DateTime.now();
+    _range = DateTimeRange(
+      start: DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: _days - 1)),
+      end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+    );
+  }
+
+  void _setPeriod(int days) {
+    setState(() {
+      _days = days;
+      _updateRange();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final summaryAsync = ref.watch(movementsSummaryProvider(_range));
+    final movementsAsync = ref.watch(movementsReportProvider(_range));
+    final fmt = DateFormat('dd/MM HH:mm');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(
+          title: 'Movimentações por Período',
+          subtitle: 'Resumo de entradas, saídas e descartes',
+          icon: Icons.swap_horiz_rounded,
+          color: AppColors.secondaryBlue600,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: _periods.map((p) {
+              final selected = p == _days;
+              return Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                child: FilterChip(
+                  label: Text(_periodLabels[p]!),
+                  selected: selected,
+                  onSelected: (_) => _setPeriod(p),
+                  selectedColor:
+                      AppColors.secondaryBlue600.withValues(alpha: 0.15),
+                  checkmarkColor: AppColors.secondaryBlue600,
+                  labelStyle: TextStyle(
+                    color: selected
+                        ? AppColors.secondaryBlue600
+                        : cs.onSurfaceVariant,
+                    fontWeight:
+                        selected ? FontWeight.w700 : FontWeight.w500,
+                    fontSize: 12,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        summaryAsync.when(
+          loading: () => const CasaCardSkeleton(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (summary) {
+            final types = [
+              ('entrada', 'Entradas', AppColors.success600,
+                  Icons.add_circle_outline_rounded),
+              ('saida', 'Saídas', AppColors.brandPrimary600,
+                  Icons.outbound_rounded),
+              ('ajustePositivo', 'Ajuste +', AppColors.secondaryBlue600,
+                  Icons.trending_up_rounded),
+              ('ajusteNegativo', 'Ajuste -', AppColors.warning600,
+                  Icons.trending_down_rounded),
+              ('descarte', 'Descarte', AppColors.danger600,
+                  Icons.delete_outline_rounded),
+            ];
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: types.map((t) {
+                  final val = summary[t.$1] ?? 0;
+                  return Container(
+                    width: 110,
+                    margin: const EdgeInsets.only(right: AppSpacing.sm),
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      border: Border.all(
+                          color: t.$3.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(t.$4, size: 16, color: t.$3),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$val',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: t.$3,
+                          ),
+                        ),
+                        Text(
+                          t.$2,
+                          style: AppTypography.labelSmall.copyWith(
+                              color: cs.onSurfaceVariant, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        movementsAsync.when(
+          loading: () => Column(
+            children: List.generate(
+                3,
+                (_) => const Padding(
+                      padding: EdgeInsets.only(bottom: AppSpacing.xs),
+                      child: CasaCardSkeleton(),
+                    )),
+          ),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (movements) {
+            if (movements.isEmpty) {
+              return const CasaEmptyState(
+                icon: Icons.swap_horiz_rounded,
+                title: 'Sem movimentações no período',
+              );
+            }
+            final recent = movements.take(10).toList();
+            return Container(
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                children: recent.asMap().entries.map((e) {
+                  final m = e.value;
+                  final typeColor = switch (m.type) {
+                    MovementType.entrada => AppColors.success600,
+                    MovementType.saida => AppColors.brandPrimary600,
+                    MovementType.ajustePositivo =>
+                      AppColors.secondaryBlue600,
+                    MovementType.ajusteNegativo => AppColors.warning600,
+                    MovementType.descarte => AppColors.danger600,
+                  };
+                  return Column(
+                    children: [
+                      if (e.key > 0)
+                        Divider(
+                            height: 1,
+                            color:
+                                cs.outlineVariant.withValues(alpha: 0.3),
+                            indent: AppSpacing.md,
+                            endIndent: AppSpacing.md),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md,
+                            vertical: AppSpacing.sm),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                  color: typeColor,
+                                  shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                m.productName,
+                                style: AppTypography.labelMedium
+                                    .copyWith(color: cs.onSurface),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              '${m.type.name} ${m.quantity}un.',
+                              style: AppTypography.bodySmall.copyWith(
+                                  color: typeColor,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(
+                              fmt.format(m.performedAt),
+                              style: AppTypography.bodySmall.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  fontSize: 10),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: AppSpacing.xxl),
+      ],
     );
   }
 }
