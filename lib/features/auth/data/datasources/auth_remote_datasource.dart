@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -76,7 +77,10 @@ class AuthRemoteDatasource {
     );
     if (credential.user == null) return null;
     final profile = await _fetchUser(credential.user!.uid);
-    return profile ?? _fromFirebaseUser(credential.user!);
+    final user = profile ?? _fromFirebaseUser(credential.user!);
+    _saveFcmToken(credential.user!.uid);
+    _setupTokenRefreshListener(credential.user!.uid);
+    return user;
   }
 
   Future<AppUser?> signInWithGoogle({bool rememberLogin = true}) async {
@@ -107,12 +111,41 @@ class AuthRemoteDatasource {
     } else {
       await clearRememberedEmail();
     }
-    return _ensureUserDocument(firebaseUser);
+    final user = await _ensureUserDocument(firebaseUser);
+    _saveFcmToken(firebaseUser.uid);
+    _setupTokenRefreshListener(firebaseUser.uid);
+    return user;
   }
 
   Future<void> signOut() async {
     await _googleSignIn?.signOut();
     await _auth.signOut();
+  }
+
+  Future<void> _saveFcmToken(String userId) async {
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null || token.trim().isEmpty) return;
+      await _firestore.collection('users').doc(userId).update({
+        'fcmToken': token,
+        'fcmTokenUpdatedAt': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('[AuthDS] _saveFcmToken error: $e');
+    }
+  }
+
+  void _setupTokenRefreshListener(String userId) {
+    FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
+      try {
+        await _firestore.collection('users').doc(userId).update({
+          'fcmToken': token,
+          'fcmTokenUpdatedAt': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        debugPrint('[AuthDS] token refresh update error: $e');
+      }
+    });
   }
 
   Future<AppUser?> getCurrentUser() async {
