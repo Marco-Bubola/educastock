@@ -473,6 +473,17 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.button)),
                             ),
                           ),
+                          const SizedBox(width: AppSpacing.sm),
+                          ExpiryOcrButton(
+                            onDateSuggested: (date) {
+                              setState(() => _expiryDate = date);
+                              showCasaSnackbar(
+                                context,
+                                message: 'Data lida: ${DateFormat('dd/MM/yyyy').format(date)} — confirme se está correta',
+                                isSuccess: true,
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ],
