@@ -2,6 +2,8 @@
 
 Sistema de Gestão de Estoque para a ONG **Casa da Criança** — desenvolvido como Projeto Integrador do curso de **Desenvolvimento de Software Multiplataforma** da Fatec Itapira.
 
+> **Status do projeto:** ~78% concluído — V1.0 em desenvolvimento ativo
+
 ## Equipe
 
 | Nome | Função |
@@ -19,7 +21,7 @@ O **EducaStock** digitaliza e automatiza o controle de doações e suprimentos d
 - 🔄 **Política FEFO** obrigatória nas saídas (First Expired, First Out)
 - 🔔 **Notificações push** de vencimento e baixo estoque (Firebase Messaging)
 - 🤖 **Machine Learning** — classificação de risco de vencimento (Verde/Amarelo/Vermelho)
-- 📊 **Relatórios exportáveis** em PDF e Excel
+- 📊 **Relatórios exportáveis** em PDF e CSV
 - ✅ **Fluxo de aprovação** para ajustes negativos acima de limite
 - 🌐 **Modo offline** com sincronização automática
 
@@ -28,13 +30,45 @@ O **EducaStock** digitaliza e automatiza o controle de doações e suprimentos d
 | Camada | Tecnologia |
 |---|---|
 | App | Flutter 3.x (Dart) — Android, iOS, Web |
-| Estado | Riverpod 2 |
+| Estado | Riverpod 2 + riverpod_generator |
 | Navegação | GoRouter |
 | Backend | Firebase (Firestore, Auth, Storage, Functions) |
 | Push | Firebase Cloud Messaging (FCM) |
-| ML | scikit-learn → TFLite (via `tflite_flutter`) |
-| CI/CD | GitHub Actions |
+| Scanner | mobile_scanner + Google ML Kit (OCR) |
+| ML | Random Forest → TFLite (`tflite_flutter`) |
+| Gráficos | fl_chart |
 | Relatórios | `pdf` + `printing` (Dart) |
+| Offline | Hive + connectivity_plus |
+| CI/CD | GitHub Actions |
+
+## Funcionalidades Implementadas ✅
+
+- **Autenticação** com 4 perfis de acesso: `admin`, `estoquista`, `voluntario`, `visualizador`
+- **Cadastro de produtos** com scanner de código de barras e integração Open Food Facts
+- **Gestão de lotes** (batches) com data de validade e rastreabilidade
+- **Movimentações de estoque**: entrada, saída, ajuste positivo/negativo e descarte
+- **FEFO** — First Expired, First Out — aplicado automaticamente nas saídas
+- **Dashboard** com indicadores em tempo real
+- **Alertas de validade** — leitura da coleção `alerts` do Firestore
+- **Localizações** de armazenamento no estoque
+- **Receitas** de uso dos itens
+- **Auditoria** de logs das últimas 100 ações
+- **Classificação ML de risco** de lotes (Verde / Amarelo / Vermelho)
+- **Design System** completo (`CasaButton`, `CasaTextField`, `CasaStatusChip`, etc.)
+- **Configurações de UI** (tema, preferências do app)
+
+## Pendências em Desenvolvimento 🔧
+
+| # | Funcionalidade | Prioridade |
+|---|---|---|
+| 1 | Geração automática de alertas de validade no Firestore | 🔴 Alta |
+| 2 | Persistência das configurações de alertas e categorias | 🔴 Alta |
+| 3 | OCR de data de validade no cadastro de lote | 🟠 Média-Alta |
+| 4 | Relatório completo de movimentações por período | 🟠 Média-Alta |
+| 5 | Filtros avançados na página de auditoria | 🟡 Média |
+| 6 | Exportação da HistoryPage (CSV) + totalizadores | 🟡 Média |
+| 7 | Push notifications via Cloud Functions | 🟡 Média |
+| 8 | Fila offline com sincronização automática (Hive) | 🟢 Baixa |
 
 ## Módulo de Machine Learning
 
@@ -89,26 +123,26 @@ flutter build apk --release --dart-define=APP_ENV=prod
 
 ```
 lib/
-  core/          # Design system, tema, roteamento, utilitários
+  core/          # Design system, tema, roteamento, utilitários, notificações
   features/      # Módulos: auth, products, batches, stock, alerts,
-                 #          reports, scanner, audit, dashboard, ML
-  infra/         # Repositórios Firebase, providers Riverpod
-functions/       # Cloud Functions TypeScript (alertas agendados, ML server-side)
+                 #          reports, scanner, audit, dashboard, settings, ML
+  infra/         # Repositórios Firebase, providers Riverpod, offline queue
+functions/       # Cloud Functions TypeScript (alertas, push notifications)
 docs/            # Documentação acadêmica (Word ABNT)
+scripts/         # Scripts auxiliares (ML, seed de dados)
 ```
-
 
 ## Cronograma
 
 | Sprint | Período | Entrega |
 |---|---|---|
-| S1 | Mar/2026 Sem 1-2 | Setup, autenticação, design system |
-| S2 | Mar/2026 Sem 3-4 | CRUD produtos/lotes, scanner, OCR |
-| S3 | Abr/2026 Sem 1-2 | FEFO, movimentações, aprovação de ajuste |
-| S4 | Abr/2026 Sem 3-4 | Cloud Functions, alertas, push notifications |
-| S5 | Mai/2026 Sem 1-2 | Relatórios PDF/Excel, filtros, offline/sync |
-| S6 | Mai/2026 Sem 3-4 | Módulo ML: treinamento + integração TFLite |
-| S7 | Jun/2026 Sem 1-2 | Testes, segurança, CI/CD |
+| S1 | Mar/2026 Sem 1-2 | ✅ Setup, autenticação, design system |
+| S2 | Mar/2026 Sem 3-4 | ✅ CRUD produtos/lotes, scanner, integração Open Food Facts |
+| S3 | Abr/2026 Sem 1-2 | ✅ FEFO, movimentações, fluxo de aprovação de ajuste |
+| S4 | Abr/2026 Sem 3-4 | ✅ Dashboard, auditoria, ML de risco de lote |
+| S5 | Mai/2026 Sem 1-2 | 🔧 Alertas automáticos, configurações, OCR de validade |
+| S6 | Mai/2026 Sem 3-4 | 🔧 Relatórios completos, filtros, offline/sync |
+| S7 | Jun/2026 Sem 1-2 | Cloud Functions, push notifications, testes, CI/CD |
 | S8 | Jun/2026 Sem 3-4 | **Deploy PROD + Pitch (30/06/2026)** |
 
 ---
