@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart' show DateTimeRange;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../stock/domain/entities/stock_movement.dart';
+import '../../../stock/presentation/pages/movement_page.dart';
 
 // ---------- Modelos de relatório ----------
 
@@ -111,4 +114,43 @@ final reportSummaryProvider = FutureProvider<ReportSummary>((ref) {
 final stockByCategoryProvider =
     FutureProvider<List<CategoryStock>>((ref) {
   return ref.watch(reportsDatasourceProvider).fetchStockByCategory();
+});
+
+// ─── Movement report providers ───────────────────────────────────────────
+
+final movementsReportProvider =
+    FutureProvider.family<List<StockMovement>, DateTimeRange>((ref, range) async {
+  final ds = ref.read(stockDatasourceProvider);
+  return ds.getMovementsByPeriod(
+    from: range.start,
+    to: range.end.add(const Duration(hours: 23, minutes: 59, seconds: 59)),
+  );
+});
+
+final movementsSummaryProvider =
+    FutureProvider.family<Map<String, int>, DateTimeRange>((ref, range) async {
+  final movements = await ref.read(movementsReportProvider(range).future);
+  final summary = <String, int>{};
+  for (final m in movements) {
+    final key = m.type.name;
+    summary[key] = (summary[key] ?? 0) + m.quantity;
+  }
+  return summary;
+});
+
+final lossesByReasonProvider =
+    FutureProvider.family<Map<String, int>, DateTimeRange>((ref, range) async {
+  final movements = await ref.read(movementsReportProvider(range).future);
+  final losses = movements.where(
+    (m) =>
+        m.type == MovementType.descarte ||
+        m.reasonCode == 'validade' ||
+        m.reasonCode == 'avaria',
+  );
+  final summary = <String, int>{};
+  for (final m in losses) {
+    final key = m.reasonCode ?? 'outro';
+    summary[key] = (summary[key] ?? 0) + m.quantity;
+  }
+  return summary;
 });
