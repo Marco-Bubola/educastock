@@ -81,6 +81,33 @@ class PushNotificationService {
       'updatedAt': DateTime.now().toIso8601String(),
     }, SetOptions(merge: true));
   }
+
+  // ─── Topic subscriptions ─────────────────────────────────────────────────
+
+  static const _topicCritical = 'vencimento_critico';
+  static const _topicWarning = 'vencimento_aviso';
+
+  Future<void> subscribeToTopics(UserRole role) async {
+    try {
+      if (role == UserRole.admin || role == UserRole.estoquista) {
+        await _messaging.subscribeToTopic(_topicCritical);
+        await _messaging.subscribeToTopic(_topicWarning);
+      } else if (role == UserRole.voluntario) {
+        await _messaging.subscribeToTopic(_topicWarning);
+      }
+    } catch (e) {
+      debugPrint('[PNS] subscribeToTopics error: $e');
+    }
+  }
+
+  Future<void> unsubscribeFromTopics() async {
+    try {
+      await _messaging.unsubscribeFromTopic(_topicCritical);
+      await _messaging.unsubscribeFromTopic(_topicWarning);
+    } catch (e) {
+      debugPrint('[PNS] unsubscribeFromTopics error: $e');
+    }
+  }
 }
 
 final pushNotificationServiceProvider = Provider<PushNotificationService>(
