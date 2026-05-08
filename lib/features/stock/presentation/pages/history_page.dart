@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/design_system/design_system.dart';
 import '../../domain/entities/stock_movement.dart';
@@ -361,6 +364,51 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       appBar: ModernProfileAppBar(
         title: 'Histórico',
         subtitle: 'Registro completo de saídas',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download_rounded),
+            tooltip: 'Exportar CSV',
+            onPressed: () {
+              final movAsync = ref.read(stockMovementsProvider);
+              movAsync.whenData((all) async {
+                var filtered = all
+                    .where((m) =>
+                        m.type == MovementType.saida ||
+                        m.type == MovementType.descarte)
+                    .toList();
+                if (_filterReason != null) {
+                  filtered = filtered
+                      .where((m) => m.reasonCode == _filterReason)
+                      .toList();
+                }
+                if (_filterDateRange != null) {
+                  final start = _filterDateRange!.start;
+                  final end = DateTime(
+                      _filterDateRange!.end.year,
+                      _filterDateRange!.end.month,
+                      _filterDateRange!.end.day,
+                      23, 59, 59);
+                  filtered = filtered
+                      .where((m) =>
+                          m.performedAt.isAfter(
+                              start.subtract(const Duration(seconds: 1))) &&
+                          m.performedAt.isBefore(
+                              end.add(const Duration(seconds: 1))))
+                      .toList();
+                }
+                if (_search.isNotEmpty) {
+                  final q = _search.toLowerCase();
+                  filtered = filtered
+                      .where((m) =>
+                          m.productName.toLowerCase().contains(q) ||
+                          m.performedByName.toLowerCase().contains(q))
+                      .toList();
+                }
+                await _exportCsv(context, filtered);
+              });
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -579,6 +627,17 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                   return ListView(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     children: [
+                      // Summary banner when filters active
+                      if (_filterReason != null ||
+                          _filterDateRange != null ||
+                          _search.isNotEmpty)
+                        _SummaryBanner(
+                          movements: outputs,
+                          textPrimary: textPrimary,
+                          textSub: textSub,
+                          cardBg: cardBg,
+                          borderColor: borderColor,
+                        ),
                       for (final entry in dayMap.entries) ...[
                         _DayDivider(
                             label: entry.key,
@@ -1252,4 +1311,162 @@ class _SessionCardState extends State<_SessionCard> {
       ),
     );
   }
+}
+
+// ─── Export CSV function ──────────────────────────────────────────────────
+
+Future<void> _exportCsv(
+    BuildContext context, List<StockMovement> movements) async {
+  final buffer = StringBuffer();
+  buffer.writeln('Data,Produto,Tipo,Motivo,Quantidade,Usuário,Observação');
+  final fmt = DateFormat('dd/MM/yyyy HH:mm');
+  for (final m in movements) {
+    buffer.writeln([
+      '"${fmt.format(m.performedAt)}"',
+      '"${m.productName.replaceAll('"', '""')}"',
+      '"${m.type.name}"',
+      '"${m.reasonCode ?? ''}"',
+      '${m.quantity}',
+      '"${m.performedByName}"',
+      '"${(m.activity ?? '').replaceAll('"', '""')}"',
+    ].join(','));
+  }
+  final dir = await getTemporaryDirectory();
+  final file = File(
+      '${dir.path}/historico_${DateTime.now().millisecondsSinceEpoch}.csv');
+  await file.writeAsString(buffer.toString());
+  await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'text/csv')],
+      text: 'Histórico EducaStock');
+  if (!context.mounted) return;
+  showCasaSnackbar(context, message: 'CSV exportado!', isSuccess: true);
+}
+
+// ─── Summary banner ───────────────────────────────────────────────────────
+
+class _SummaryBanner extends StatelessWidget {
+  final List<StockMovement> movements;
+  final Color textPrimary;
+  final Color textSub;
+  final Color cardBg;
+  final Color borderColor;
+
+  const _SummaryBanner({
+    required this.movements,
+    required this.textPrimary,
+    required this.textSub,
+    required this.cardBg,
+    required this.borderColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final totalMoves = movements.length;
+    final totalEntrada = movements
+        .where((m) => m.type == MovementType.entrada)
+        .fold<int>(0, (sum, m) => sum + m.quantity);
+    final totalSaida = movements
+        .where((m) => m.type == MovementType.saida)
+        .fold<int>(0, (sum, m) => sum + m.quantity);
+    final totalDescarte =
+        movements.where((m) => m.type == MovementType.descarte).length;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _SummaryMini(
+              label: 'Registros',
+              value: '$totalMoves',
+              icon: Icons.list_rounded,
+              color: AppColors.brandPrimary600,
+              textPrimary: textPrimary,
+              textSub: textSub,
+            ),
+            _SummaryMini(
+              label: 'Entradas',
+              value: '$totalEntrada un.',
+              icon: Icons.add_circle_outline_rounded,
+              color: AppColors.success600,
+              textPrimary: textPrimary,
+              textSub: textSub,
+            ),
+            _SummaryMini(
+              label: 'Saídas',
+              value: '$totalSaida un.',
+              icon: Icons.outbound_rounded,
+              color: AppColors.secondaryBlue600,
+              textPrimary: textPrimary,
+              textSub: textSub,
+            ),
+            _SummaryMini(
+              label: 'Descartes',
+              value: '$totalDescarte',
+              icon: Icons.delete_outline_rounded,
+              color: AppColors.danger600,
+              textPrimary: textPrimary,
+              textSub: textSub,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryMini extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  final Color textPrimary;
+  final Color textSub;
+
+  const _SummaryMini({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    required this.textPrimary,
+    required this.textSub,
+  });
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(right: 16),
+        child: Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(icon, size: 14, color: color),
+            ),
+            const SizedBox(width: 6),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value,
+                    style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700)),
+                Text(label,
+                    style: TextStyle(color: textSub, fontSize: 10)),
+              ],
+            ),
+          ],
+        ),
+      );
 }
