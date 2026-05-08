@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../stock/presentation/pages/movement_page.dart';
 
@@ -8,25 +11,300 @@ final auditLogsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
   return ref.watch(stockDatasourceProvider).watchAuditLogs(limit: 100);
 });
 
-class AuditPage extends ConsumerWidget {
+Future<void> _exportAuditCsv(
+    BuildContext context, List<Map<String, dynamic>> logs) async {
+  final buffer = StringBuffer();
+  buffer.writeln('Data,Hora,Ação,Usuário,Antes,Depois');
+  final fmt = DateFormat('dd/MM/yyyy');
+  final fmtTime = DateFormat('HH:mm');
+  for (final log in logs) {
+    final action = log['action'] as String? ?? '';
+    final performedAt = log['performedAt'] as String? ?? '';
+    DateTime? date;
+    try {
+      date = DateTime.parse(performedAt);
+    } catch (_) {}
+    final user = log['performedByName'] as String? ?? '';
+    final before =
+        log['before']?.toString().replaceAll('"', '""') ?? '';
+    final after =
+        log['after']?.toString().replaceAll('"', '""') ?? '';
+    buffer.writeln([
+      '"${date != null ? fmt.format(date) : ''}"',
+      '"${date != null ? fmtTime.format(date) : ''}"',
+      '"$action"',
+      '"$user"',
+      '"$before"',
+      '"$after"',
+    ].join(','));
+  }
+  final dir = await getTemporaryDirectory();
+  final file = File(
+      '${dir.path}/auditoria_${DateTime.now().millisecondsSinceEpoch}.csv');
+  await file.writeAsString(buffer.toString());
+  await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'text/csv')],
+      text: 'Auditoria EducaStock');
+}
+
+class AuditPage extends ConsumerStatefulWidget {
   const AuditPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AuditPage> createState() => _AuditPageState();
+}
+
+class _AuditPageState extends ConsumerState<AuditPage> {
+  String? _filterAction;
+  DateTimeRange? _filterDateRange;
+
+  int get _activeFilterCount =>
+      (_filterAction != null ? 1 : 0) + (_filterDateRange != null ? 1 : 0);
+
+  List<Map<String, dynamic>> _applyFilters(
+      List<Map<String, dynamic>> logs) {
+    var filtered = logs;
+    if (_filterAction != null) {
+      filtered = filtered
+          .where((l) => (l['action'] as String?) == _filterAction)
+          .toList();
+    }
+    if (_filterDateRange != null) {
+      filtered = filtered.where((l) {
+        final performedAt = l['performedAt'] as String? ?? '';
+        try {
+          final date = DateTime.parse(performedAt);
+          return !date.isBefore(_filterDateRange!.start) &&
+              !date.isAfter(_filterDateRange!.end
+                  .add(const Duration(hours: 23, minutes: 59)));
+        } catch (_) {
+          return false;
+        }
+      }).toList();
+    }
+    return filtered;
+  }
+
+  Future<void> _showFilterBottomSheet(BuildContext context) async {
+    String? tmpAction = _filterAction;
+    DateTimeRange? tmpRange = _filterDateRange;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg + MediaQuery.of(ctx).viewInsets.bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Filtrar Auditoria',
+                    style: AppTypography.headingSmall),
+                const SizedBox(height: AppSpacing.lg),
+                Text('Tipo de ação',
+                    style: AppTypography.labelMedium.copyWith(
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  children: [
+                    null,
+                    'entrada',
+                    'saida',
+                    'ajustePositivo',
+                    'ajusteNegativo',
+                    'descarte',
+                  ].map((a) {
+                    final label = a == null
+                        ? 'Todos'
+                        : switch (a) {
+                            'entrada' => 'Entrada',
+                            'saida' => 'Saída',
+                            'ajustePositivo' => 'Ajuste +',
+                            'ajusteNegativo' => 'Ajuste -',
+                            'descarte' => 'Descarte',
+                            _ => a,
+                          };
+                    final selected = tmpAction == a;
+                    return FilterChip(
+                      label: Text(label),
+                      selected: selected,
+                      onSelected: (_) => setModal(() => tmpAction = a),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Text('Período',
+                    style: AppTypography.labelMedium.copyWith(
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  children: [
+                    _PeriodChip(
+                      label: 'Hoje',
+                      selected: tmpRange != null &&
+                          tmpRange!.duration.inHours < 25,
+                      onTap: () {
+                        final now = DateTime.now();
+                        setModal(() => tmpRange = DateTimeRange(
+                            start: DateTime(now.year, now.month, now.day),
+                            end: now));
+                      },
+                    ),
+                    _PeriodChip(
+                      label: '7 dias',
+                      selected: tmpRange != null &&
+                          tmpRange!.duration.inDays >= 6 &&
+                          tmpRange!.duration.inDays <= 8,
+                      onTap: () {
+                        final now = DateTime.now();
+                        setModal(() => tmpRange = DateTimeRange(
+                            start: now.subtract(const Duration(days: 7)),
+                            end: now));
+                      },
+                    ),
+                    _PeriodChip(
+                      label: '30 dias',
+                      selected: tmpRange != null &&
+                          tmpRange!.duration.inDays >= 29 &&
+                          tmpRange!.duration.inDays <= 31,
+                      onTap: () {
+                        final now = DateTime.now();
+                        setModal(() => tmpRange = DateTimeRange(
+                            start: now.subtract(const Duration(days: 30)),
+                            end: now));
+                      },
+                    ),
+                    _PeriodChip(
+                      label: 'Personalizado',
+                      selected: false,
+                      onTap: () async {
+                        final picked = await showDateRangePicker(
+                          context: ctx,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                          initialDateRange: tmpRange,
+                        );
+                        if (picked != null) {
+                          setModal(() => tmpRange = picked);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                if (tmpRange != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    '${DateFormat('dd/MM/yyyy').format(tmpRange!.start)} → ${DateFormat('dd/MM/yyyy').format(tmpRange!.end)}',
+                    style: AppTypography.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.xl),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          setModal(() {
+                            tmpAction = null;
+                            tmpRange = null;
+                          });
+                        },
+                        child: const Text('Limpar'),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () {
+                          setState(() {
+                            _filterAction = tmpAction;
+                            _filterDateRange = tmpRange;
+                          });
+                          Navigator.pop(ctx);
+                        },
+                        child: const Text('Aplicar'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final logsAsync = ref.watch(auditLogsProvider);
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: const ModernProfileAppBar(
+      appBar: ModernProfileAppBar(
         title: 'Auditoria',
         subtitle: 'Histórico de alterações críticas',
         showBackButton: true,
+        actions: [
+          logsAsync.whenData((logs) {
+            final filtered = _applyFilters(logs);
+            return IconButton(
+              icon: const Icon(Icons.download_rounded),
+              tooltip: 'Exportar CSV',
+              onPressed: () => _exportAuditCsv(context, filtered),
+            );
+          }).valueOrNull ??
+              const SizedBox.shrink(),
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.filter_list_rounded),
+                tooltip: 'Filtros',
+                onPressed: () => _showFilterBottomSheet(context),
+              ),
+              if (_activeFilterCount > 0)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: AppColors.brandPrimary600,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$_activeFilterCount',
+                        style: const TextStyle(
+                            fontSize: 9,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
       body: SafeArea(
         child: logsAsync.when(
           data: (logs) {
-            if (logs.isEmpty) {
+            final filtered = _applyFilters(logs);
+            if (filtered.isEmpty) {
               return const CasaEmptyState(
                 icon: Icons.history_rounded,
                 title: 'Nenhum log registrado',
@@ -36,16 +314,18 @@ class AuditPage extends ConsumerWidget {
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
-              itemCount: logs.length,
+              itemCount: filtered.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(height: AppSpacing.sm),
-              itemBuilder: (_, i) => _AuditLogTile(log: logs[i], cs: cs),
+              itemBuilder: (_, i) =>
+                  _AuditLogTile(log: filtered[i], cs: cs),
             );
           },
           loading: () => ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.lg),
             itemCount: 8,
-            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+            separatorBuilder: (_, __) =>
+                const SizedBox(height: AppSpacing.sm),
             itemBuilder: (_, __) => const CasaCardSkeleton(),
           ),
           error: (e, _) => CasaEmptyState(
@@ -59,6 +339,23 @@ class AuditPage extends ConsumerWidget {
   }
 }
 
+// ─── Period chip helper ───────────────────────────────────────────────────
+
+class _PeriodChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _PeriodChip(
+      {required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => FilterChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onTap(),
+      );
+}
+
 class _AuditLogTile extends StatelessWidget {
   final Map<String, dynamic> log;
   final ColorScheme cs;
@@ -69,7 +366,8 @@ class _AuditLogTile extends StatelessWidget {
     final fmt = DateFormat('dd/MM/yyyy HH:mm');
     final action = log['action'] as String? ?? '';
     final performedAt = log['performedAt'] as String? ?? '';
-    final performedByName = log['performedByName'] as String? ?? 'Desconhecido';
+    final performedByName =
+        log['performedByName'] as String? ?? 'Desconhecido';
     DateTime? date;
     try {
       date = DateTime.parse(performedAt);
@@ -89,13 +387,17 @@ class _AuditLogTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border(
           left: BorderSide(color: color, width: 3),
-          top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-          right: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-          bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
+          top: BorderSide(
+              color: cs.outlineVariant.withValues(alpha: 0.35)),
+          right: BorderSide(
+              color: cs.outlineVariant.withValues(alpha: 0.35)),
+          bottom: BorderSide(
+              color: cs.outlineVariant.withValues(alpha: 0.35)),
         ),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6),
         ],
       ),
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -130,8 +432,8 @@ class _AuditLogTile extends StatelessWidget {
                     if (date != null)
                       Text(
                         fmt.format(date),
-                        style: AppTypography.bodySmall
-                            .copyWith(color: cs.onSurfaceVariant, fontSize: 10),
+                        style: AppTypography.bodySmall.copyWith(
+                            color: cs.onSurfaceVariant, fontSize: 10),
                       ),
                   ],
                 ),
@@ -148,7 +450,8 @@ class _AuditLogTile extends StatelessWidget {
                         horizontal: AppSpacing.sm, vertical: 3),
                     decoration: BoxDecoration(
                       color: cs.surfaceContainer,
-                      borderRadius: BorderRadius.circular(AppRadius.small),
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.small),
                     ),
                     child: Text(
                       'Antes: ${log['before']}  →  Depois: ${log['after']}',
