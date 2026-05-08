@@ -16,3 +16,4 @@ export 'components/casa_dialog.dart';
 export 'components/casa_search_bar.dart';
 export 'components/casa_fab_scan.dart';
 export 'components/modern_profile_app_bar.dart';
+export 'components/expiry_ocr_button.dart';
