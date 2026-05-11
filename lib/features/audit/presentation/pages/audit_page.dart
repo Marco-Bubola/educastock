@@ -57,6 +57,8 @@ class AuditPage extends ConsumerStatefulWidget {
 class _AuditPageState extends ConsumerState<AuditPage> {
   String? _filterAction;
   DateTimeRange? _filterDateRange;
+  final _keyAuditList = GlobalKey();
+  final _keyFilterBtn = GlobalKey();
 
   int get _activeFilterCount =>
       (_filterAction != null ? 1 : 0) + (_filterDateRange != null ? 1 : 0);
@@ -258,6 +260,40 @@ class _AuditPageState extends ConsumerState<AuditPage> {
         subtitle: 'Histórico de alterações críticas',
         showBackButton: true,
         actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyFilterBtn,
+                  title: 'Filtros de Auditoria',
+                  description: 'Filtre os registros de auditoria por tipo de ação (criação, edição, exclusão) e por período. Essencial para rastrear mudanças no sistema.',
+                  icon: Icons.filter_alt_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Filtre por "create" para ver novos cadastros',
+                    'Filtre por "update" para ver edições realizadas',
+                    'Filtre por "delete" para verificar exclusões',
+                    'Defina um período para auditorias mensais',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyAuditList,
+                  title: 'Log de Auditoria Completo',
+                  description: 'Registro imutável de todas as ações realizadas no sistema. Cada entrada mostra quem fez a ação, quando, qual entidade foi modificada e os dados antes/depois da mudança.',
+                  icon: Icons.security_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Todos os usuários têm suas ações registradas automaticamente',
+                    'Impossível apagar ou editar registros de auditoria',
+                    'Use para verificar quem alterou quantidades ou produtos',
+                    'Exporte para comprovação em prestações de contas',
+                  ],
+                ),
+              ],
+            ),
+          ),
           logsAsync.whenData((logs) {
             final filtered = _applyFilters(logs);
             return IconButton(
@@ -268,7 +304,8 @@ class _AuditPageState extends ConsumerState<AuditPage> {
           }).valueOrNull ??
               const SizedBox.shrink(),
           Stack(
-            children: [
+              key: _keyFilterBtn,
+              children: [
               IconButton(
                 icon: const Icon(Icons.filter_list_rounded),
                 tooltip: 'Filtros',
@@ -317,8 +354,13 @@ class _AuditPageState extends ConsumerState<AuditPage> {
               itemCount: filtered.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(height: AppSpacing.sm),
-              itemBuilder: (_, i) =>
-                  _AuditLogTile(log: filtered[i], cs: cs),
+              itemBuilder: (_, i) {
+                final tile = _AuditLogTile(log: filtered[i], cs: cs);
+                if (i == 0) {
+                  return KeyedSubtree(key: _keyAuditList, child: tile);
+                }
+                return tile;
+              },
             );
           },
           loading: () => ListView.separated(
