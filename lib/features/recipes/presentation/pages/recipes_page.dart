@@ -14,6 +14,7 @@ class RecipesPage extends ConsumerStatefulWidget {
 
 class _RecipesPageState extends ConsumerState<RecipesPage> {
   String _search = '';
+  final _keyRecipeCard = GlobalKey();
 
   static const _gradients = [
     [Color(0xFF7C3AED), Color(0xFF4F46E5)],
@@ -48,10 +49,33 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
 
     return Scaffold(
       backgroundColor: bg,
-      appBar: const ModernProfileAppBar(
+      appBar: ModernProfileAppBar(
         title: 'Receitas de Saída',
         subtitle: 'Modelos ativos para baixa rápida',
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyRecipeCard,
+                  title: 'Receitas de Saída',
+                  description: 'As receitas são modelos de distribuição com múltiplos ingredientes. Ideal para cozinhas que preparam refeições usando itens do estoque — deduz vários produtos de uma vez.',
+                  icon: Icons.menu_book_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Toque em uma receita para ver ingredientes e quantidades',
+                    'Use "Executar" na tela de Saída para dar baixa na receita inteira',
+                    'Crie novas receitas com o botão "+" no canto inferior',
+                    'O sistema verifica se há estoque suficiente antes de executar',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       floatingActionButton: _buildFab(),
       body: recipesAsync.when(
@@ -156,7 +180,7 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
                         final gradColors =
                             _gradients[i % _gradients.length];
 
-                        return Container(
+                        final card = Container(
                           margin: const EdgeInsets.only(bottom: 14),
                           decoration: BoxDecoration(
                             color: cardBg,
@@ -491,6 +515,10 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
                             ],
                           ),
                         );
+                        if (i == 0) {
+                          return KeyedSubtree(key: _keyRecipeCard, child: card);
+                        }
+                        return card;
                       },
                       childCount: filtered.length,
                     ),
