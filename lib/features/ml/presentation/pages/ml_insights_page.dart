@@ -5,6 +5,9 @@ import '../controllers/risk_classifier_provider.dart';
 import '../widgets/risk_widgets.dart';
 import '../../domain/entities/risk_prediction.dart';
 
+final _keyCriticalSection = GlobalKey();
+final _keyLegend = GlobalKey();
+
 class MlInsightsPage extends ConsumerWidget {
   const MlInsightsPage({super.key});
 
@@ -23,6 +26,39 @@ class MlInsightsPage extends ConsumerWidget {
         subtitle: 'Classificação inteligente de lotes',
         showBackButton: true,
         actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyCriticalSection,
+                  title: 'Análise de Risco com IA',
+                  description: 'O sistema de inteligência artificial analisa os lotes do estoque e classifica o risco de vencimento de cada produto. Priorize a distribuição dos itens de maior risco.',
+                  icon: Icons.psychology_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🔴 Risco Alto: distribuição urgente necessária',
+                    '🟡 Risco Médio: atenção nos próximos dias',
+                    '🟢 Risco Baixo: situação controlada',
+                    'A IA aprende com o histórico de movimentações',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyLegend,
+                  title: 'Legenda de Risco',
+                  description: 'A legenda explica os critérios de classificação de risco utilizados pelo modelo de IA. Clique em cada categoria para filtrar os produtos por nível de risco.',
+                  icon: Icons.legend_toggle_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'O modelo usa dias para vencer, velocidade de consumo e histórico',
+                    'Atualize regularmente para manter as previsões precisas',
+                    'Use junto com os Relatórios para tomada de decisão',
+                  ],
+                ),
+              ],
+            ),
+          ),
           sourceAsync.maybeWhen(
             data: (src) => Tooltip(
               message: src == 'tflite'
@@ -75,7 +111,10 @@ class MlInsightsPage extends ConsumerWidget {
                     ),
                   );
                 }
-                return _PredictionList(predictions: critical);
+                return KeyedSubtree(
+                  key: _keyCriticalSection,
+                  child: _PredictionList(predictions: critical),
+                );
               },
               loading: () => const _LoadingList(),
               error: (_, __) => const SizedBox.shrink(),
@@ -111,7 +150,10 @@ class MlInsightsPage extends ConsumerWidget {
             const SizedBox(height: AppSpacing.xl),
 
             // --- Legenda ---
-            const _Legend(),
+            KeyedSubtree(
+              key: _keyLegend,
+              child: const _Legend(),
+            ),
             const SizedBox(height: AppSpacing.xl),
           ],
         ),
