@@ -23,6 +23,8 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
   String _search = '';
   String? _categoryFilter;
   bool _saving = false;
+  final _keyNameField = GlobalKey();
+  final _keyIngredientsSection = GlobalKey();
 
   @override
   void dispose() {
@@ -89,10 +91,45 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
 
     return Scaffold(
       backgroundColor: bg,
-      appBar: const ModernProfileAppBar(
+      appBar: ModernProfileAppBar(
         title: 'Nova Receita',
         subtitle: 'Monte um modelo de distribuição',
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyNameField,
+                  title: 'Nome da Receita',
+                  description: 'Informe um nome descritivo para a receita, como "Almoço Infantil Padrão" ou "Kit Higiene Básico". O nome ajuda a identificar rapidamente qual modelo usar na distribuição.',
+                  icon: Icons.restaurant_menu_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Use nomes que a equipe reconhece facilmente',
+                    'Inclua a quantidade de porções no nome quando relevante',
+                    'Ex: "Lanche Escolar 30 crianças"',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyIngredientsSection,
+                  title: 'Ingredientes da Receita',
+                  description: 'Adicione cada produto e sua quantidade necessária para uma execução da receita. Ao executar a receita, todas as quantidades serão deduzidas automaticamente do estoque.',
+                  icon: Icons.list_alt_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Adicione todos os ingredientes antes de salvar',
+                    'A quantidade é por execução da receita',
+                    'O sistema verifica estoque disponível antes de cada execução',
+                    'Produtos sem estoque suficiente bloqueiam a execução',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: productsAsync.when(
         data: (products) {
@@ -207,6 +244,7 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
                                     letterSpacing: 0.8)),
                             const SizedBox(height: 10),
                             Container(
+                              key: _keyNameField,
                               decoration: BoxDecoration(
                                 color: cardBg,
                                 borderRadius: BorderRadius.circular(14),
@@ -277,6 +315,7 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
                                     letterSpacing: 0.8)),
                             const SizedBox(height: 10),
                             Container(
+                              key: _keyIngredientsSection,
                               decoration: BoxDecoration(
                                 color: cardBg,
                                 borderRadius: BorderRadius.circular(14),
