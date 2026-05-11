@@ -16,6 +16,9 @@ class AlertsPage extends ConsumerStatefulWidget {
 }
 
 class _AlertsPageState extends ConsumerState<AlertsPage> {
+  final _keyAlertCard = GlobalKey();
+  final _keyAlertList = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +51,28 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
           subtitle: 'Alertas desativados',
           profileName: user?.name,
           onProfileTap: () => context.push(AppRoutes.settings),
+          actions: [
+            buildHelpButton(
+              context: context,
+              onPressed: () => showCasaTutorial(
+                context: context,
+                steps: [
+                  TutorialStep(
+                    key: _keyAlertCard,
+                    title: 'Alertas de Vencimento',
+                    description: 'Os alertas mostram produtos próximos do vencimento ou já vencidos. Ative os alertas em Configurações para começar o monitoramento automático.',
+                    icon: Icons.notification_important_rounded,
+                    align: ContentAlign.bottom,
+                    hints: const [
+                      'Vá em Configurações → Alertas para ativar',
+                      'Defina quantos dias antes do vencimento você quer ser avisado',
+                      'Alertas aparecem também na tela inicial do app',
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         body: const SafeArea(
           child: CasaEmptyState(
@@ -70,6 +95,42 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
         ),
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyAlertCard,
+                  title: 'Card de Alerta',
+                  description: 'Cada card mostra um produto com validade próxima ou vencida. A cor indica a urgência: vermelho = crítico, amarelo = atenção.',
+                  icon: Icons.notification_important_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🔴 Vermelho: vence em até 7 dias ou já venceu — ação imediata!',
+                    '🟡 Amarelo: vence em até 30 dias — monitore e distribua',
+                    'Toque no card para ir direto ao produto e lote',
+                    'Distribua primeiro os itens com validade mais próxima',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyAlertList,
+                  title: 'Lista de Alertas',
+                  description: 'Todos os produtos que precisam de atenção estão listados aqui em ordem de urgência. Resolva os vermelhos primeiro para evitar desperdício e garantir segurança alimentar.',
+                  icon: Icons.list_alt_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'A lista atualiza automaticamente conforme o estoque muda',
+                    'Produtos vencidos: registre descarte em "Saída" → Vencimento',
+                    'Dica: distribua por FEFO (First Expiry, First Out)',
+                    'Toque em um alerta para ver os lotes específicos do produto',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: alertsAsync.when(
@@ -98,7 +159,16 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
               itemCount: alerts.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(height: AppSpacing.sm),
-              itemBuilder: (_, i) => _AlertCard(alert: alerts[i], cs: cs),
+              itemBuilder: (_, i) {
+                final card = _AlertCard(alert: alerts[i], cs: cs);
+                if (i == 0) {
+                  return KeyedSubtree(key: _keyAlertCard, child: card);
+                }
+                if (i == 1) {
+                  return KeyedSubtree(key: _keyAlertList, child: card);
+                }
+                return card;
+              },
             );
           },
         ),
