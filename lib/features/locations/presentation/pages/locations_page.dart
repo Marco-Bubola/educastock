@@ -7,6 +7,9 @@ import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../controllers/locations_provider.dart';
 import '../../domain/entities/storage_location.dart';
 
+final _keyLocationFAB = GlobalKey();
+final _keyLocationsList = GlobalKey();
+
 class LocationsPage extends ConsumerWidget {
   const LocationsPage({super.key});
 
@@ -23,6 +26,41 @@ class LocationsPage extends ConsumerWidget {
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyLocationsList,
+                  title: 'Localizações do Estoque',
+                  description: 'Lista de todos os locais físicos onde os produtos são armazenados na instituição. Cada lote de estoque pode ser associado a uma localização específica.',
+                  icon: Icons.shelves,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Ex: "Prateleira A-1", "Depósito", "Cozinha", "Sala 3"',
+                    'Localizações ajudam a encontrar produtos fisicamente',
+                    'Toque para editar o nome de uma localização',
+                    'Desative localizações que não são mais usadas',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyLocationFAB,
+                  title: 'Nova Localização',
+                  description: 'Crie uma nova localização física para organizar onde os produtos são armazenados. Seja específico para facilitar o trabalho de toda a equipe.',
+                  icon: Icons.add_location_alt_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Use nomes curtos e descritivos',
+                    'Pense nas divisões físicas do seu espaço',
+                    'Ex: por sala, por prateleira, por tipo de armazenamento',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: locations.when(
@@ -31,10 +69,12 @@ class LocationsPage extends ConsumerWidget {
               return _EmptyLocations(
                   onAdd: () => context.push(AppRoutes.locationCreate));
             }
-            return _LocationsList(
-              items: items,
-              onAdd: () => context.push(AppRoutes.locationCreate),
-              onDeactivate: (loc) async {
+            return KeyedSubtree(
+              key: _keyLocationsList,
+              child: _LocationsList(
+                items: items,
+                onAdd: () => context.push(AppRoutes.locationCreate),
+                onDeactivate: (loc) async {
                 final confirm = await CasaDialogConfirmacao.show(
                   context: context,
                   title: 'Desativar localização',
@@ -48,6 +88,7 @@ class LocationsPage extends ConsumerWidget {
                     .read(locationsNotifierProvider.notifier)
                     .deactivateLocation(loc.id);
               },
+              ),
             );
           },
           loading: () => ListView.separated(
@@ -64,6 +105,7 @@ class LocationsPage extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        key: _keyLocationFAB,
         onPressed: () => context.push(AppRoutes.locationCreate),
         backgroundColor: AppColors.brandPrimary600,
         foregroundColor: Colors.white,
