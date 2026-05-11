@@ -11,6 +11,10 @@ import '../../domain/entities/product.dart';
 import '../controllers/products_provider.dart';
 
 
+final _keyDetailInfo = GlobalKey();
+final _keyDetailBatches = GlobalKey();
+final _keyDetailFAB = GlobalKey();
+
 class ProductDetailPage extends ConsumerWidget {
   final String productId;
   const ProductDetailPage({super.key, required this.productId});
@@ -43,6 +47,7 @@ class ProductDetailPage extends ConsumerWidget {
         return Scaffold(
           backgroundColor: isDark ? const Color(0xFF0B1120) : const Color(0xFFF1F5F9),
           floatingActionButton: FloatingActionButton.extended(
+            key: _keyDetailFAB,
             onPressed: () =>
                 context.push('${AppRoutes.batchForm}?productId=$productId'),
             backgroundColor: AppColors.brandPrimary600,
@@ -89,7 +94,9 @@ class ProductDetailPage extends ConsumerWidget {
                         AppSpacing.md, AppSpacing.lg, 120),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
-                        _StatsRow(
+                        KeyedSubtree(
+                          key: _keyDetailInfo,
+                          child: _StatsRow(
                           totalBatches: batches.length,
                           totalQty: totalQty,
                           totalValue: totalValue,
@@ -97,13 +104,17 @@ class ProductDetailPage extends ConsumerWidget {
                           expired: expired,
                           isDark: isDark,
                         ),
+                        ),
                         const SizedBox(height: AppSpacing.lg),
-                        CasaSectionHeader(
+                        KeyedSubtree(
+                          key: _keyDetailBatches,
+                          child: CasaSectionHeader(
                           title: 'Lotes',
                           count: batches.length,
                           action: 'Novo Lote',
                           onAction: () => context.push(
                               '${AppRoutes.batchForm}?productId=$productId'),
+                        ),
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         if (batches.isEmpty)
@@ -162,6 +173,53 @@ class ProductDetailPage extends ConsumerWidget {
       surfaceTintColor: Colors.transparent,
       automaticallyImplyLeading: false,
       titleSpacing: 0,
+      actions: [
+        buildHelpButton(
+          context: context,
+          onPressed: () => showCasaTutorial(
+            context: context,
+            steps: [
+              TutorialStep(
+                key: _keyDetailInfo,
+                title: 'Informações do Produto',
+                description: 'Veja todos os dados cadastrais do produto: categoria, unidade, perecibilidade e quantidade total em estoque somando todos os lotes disponíveis.',
+                icon: Icons.info_rounded,
+                align: ContentAlign.bottom,
+                hints: const [
+                  'A quantidade total soma todos os lotes disponíveis',
+                  'Status "Perecível" indica se o produto tem controle de validade',
+                  'Toque no ícone de editar (lápis) para atualizar as informações',
+                ],
+              ),
+              TutorialStep(
+                key: _keyDetailBatches,
+                title: 'Lotes do Produto',
+                description: 'Lista completa de todos os lotes deste produto no estoque. Cada lote tem sua própria quantidade, data de validade, localização e origem.',
+                icon: Icons.inventory_rounded,
+                align: ContentAlign.bottom,
+                hints: const [
+                  '🔴 Borda vermelha = lote vencido ou crítico',
+                  '🟡 Borda amarela = lote com validade próxima',
+                  '🟢 Borda verde = lote com validade segura',
+                  'Toque em um lote para editar ou dar baixa específica',
+                ],
+              ),
+              TutorialStep(
+                key: _keyDetailFAB,
+                title: 'Adicionar Novo Lote',
+                description: 'Toque no botão "+" para registrar um novo lote de estoque para este produto. Informe a quantidade, validade, origem e localização do lote.',
+                icon: Icons.add_box_rounded,
+                align: ContentAlign.top,
+                hints: const [
+                  'Registre cada compra ou doação como um lote separado',
+                  'Informe a localização física (prateleira, sala) do lote',
+                  'Lotes com validade diferente devem ser cadastrados separadamente',
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
       title: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Row(
