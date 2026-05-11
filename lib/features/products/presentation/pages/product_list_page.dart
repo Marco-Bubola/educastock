@@ -28,6 +28,9 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
   bool _filterNonPerishable = false;
   String? _filterCategory;
   _SortMode _sortMode = _SortMode.name;
+  final _keySearch = GlobalKey();
+  final _keyFilterBtn = GlobalKey();
+  final _keyProductCard = GlobalKey();
 
   @override
   void initState() {
@@ -213,6 +216,51 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keySearch,
+                  title: 'Busca de Produtos',
+                  description: 'Digite o nome ou parte do nome do produto para encontrá-lo instantaneamente no catálogo. A busca é feita em tempo real enquanto você digita.',
+                  icon: Icons.search_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Busca por nome parcial: "feij" encontra "Feijão Carioca"',
+                    'Combine busca com filtros para resultados precisos',
+                    'A busca ignora maiúsculas e minúsculas',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyFilterBtn,
+                  title: 'Filtros Avançados',
+                  description: 'Filtre os produtos por categoria (Alimento, Higiene, etc.), perecibilidade ou ordene por nome. O badge azul indica quantos filtros estão ativos.',
+                  icon: Icons.tune_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Filtre por "Perecíveis" para ver produtos com validade',
+                    'Ordene A→Z para localizar rapidamente no estoque físico',
+                    'Combine filtros para relatórios específicos de auditoria',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyProductCard,
+                  title: 'Cartão de Produto',
+                  description: 'Cada cartão mostra o produto com sua quantidade total em estoque, categoria e status de validade. A borda colorida indica a situação do produto.',
+                  icon: Icons.inventory_2_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🟢 Verde = produto com validade segura (>30 dias)',
+                    '🟡 Amarelo = atenção! Vence em até 30 dias',
+                    '🔴 Vermelho = crítico! Vence em até 7 dias ou já venceu',
+                    'Toque no cartão para ver todos os lotes e detalhes completos',
+                  ],
+                ),
+              ],
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.outbound_rounded),
             onPressed: () => context.push('${AppRoutes.movement}?batchId='),
@@ -230,22 +278,28 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: _SearchField(
-                      controller: _searchCtrl,
-                      onChanged: (v) =>
-                          setState(() => _query = v.toLowerCase()),
-                      isDark: isDark,
-                      cs: cs,
+                    child: KeyedSubtree(
+                      key: _keySearch,
+                      child: _SearchField(
+                        controller: _searchCtrl,
+                        onChanged: (v) =>
+                            setState(() => _query = v.toLowerCase()),
+                        isDark: isDark,
+                        cs: cs,
+                      ),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  _FilterButton(
-                    active: _activeFilterCount > 0,
-                    badge: _activeFilterCount,
-                    onTap: () =>
-                        _openFilterModal(availableCategories, categoryLabelMap),
-                    cs: cs,
-                    isDark: isDark,
+                  KeyedSubtree(
+                    key: _keyFilterBtn,
+                    child: _FilterButton(
+                      active: _activeFilterCount > 0,
+                      badge: _activeFilterCount,
+                      onTap: () =>
+                          _openFilterModal(availableCategories, categoryLabelMap),
+                      cs: cs,
+                      isDark: isDark,
+                    ),
                   ),
                 ],
               ),
@@ -280,22 +334,29 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                         AppSpacing.xs, AppSpacing.md, AppSpacing.xxxl),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
+                      crossAxisCount: 3,
                       mainAxisSpacing: AppSpacing.sm,
                       crossAxisSpacing: AppSpacing.sm,
-                      childAspectRatio: 0.60,
+                      childAspectRatio: 0.70,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
                       final p = filtered[i];
                       final catLabel = categoryLabelMap[p.category.name] ??
                           defaultCategoryLabel(p.category);
-                      return _ProductGridCard(
+                      final card = _ProductGridCard(
                         product: p,
                         catLabel: catLabel,
                         index: i,
                         onTap: () => context.push('/products/${p.id}'),
                       );
+                      if (i == 0) {
+                        return KeyedSubtree(
+                          key: _keyProductCard,
+                          child: card,
+                        );
+                      }
+                      return card;
                     },
                   );
                 },
@@ -303,10 +364,10 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                   padding: const EdgeInsets.all(AppSpacing.md),
                   gridDelegate:
                       const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
+                    crossAxisCount: 3,
                     mainAxisSpacing: AppSpacing.xs,
                     crossAxisSpacing: AppSpacing.xs,
-                    childAspectRatio: 0.62,
+                    childAspectRatio: 0.70,
                   ),
                   itemCount: 8,
                   itemBuilder: (_, __) => const CasaCardSkeleton(),
@@ -804,24 +865,15 @@ class _ProductGridCard extends ConsumerWidget {
     required this.onTap,
   });
 
-  static const _palettes = [
-    [Color(0xFF2563EB), Color(0xFF1D4ED8)], // blue
-    [Color(0xFF0891B2), Color(0xFF0E7490)], // cyan
-    [Color(0xFF059669), Color(0xFF047857)], // green
-    [Color(0xFF7C3AED), Color(0xFF6D28D9)], // purple
-    [Color(0xFFDB2777), Color(0xFFC026D3)], // pink/fuchsia
-    [Color(0xFFEA580C), Color(0xFFDC2626)], // orange/red
-    [Color(0xFF0284C7), Color(0xFF0369A1)], // sky
-    [Color(0xFF65A30D), Color(0xFF4D7C0F)], // lime
-  ];
-
-  List<Color> _palette() => _palettes[index % _palettes.length];
+  // Paletas de alerta: vermelho (crítico/vencido), amarelo (atenção), verde (ok), azul (sem validade)
+  static const _paletteRed    = [Color(0xFFDC2626), Color(0xFFB91C1C)];
+  static const _paletteYellow = [Color(0xFFD97706), Color(0xFFB45309)];
+  static const _paletteGreen  = [Color(0xFF059669), Color(0xFF047857)];
+  static const _paletteBlue   = [Color(0xFF2563EB), Color(0xFF1D4ED8)];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final palette = _palette();
-    final accent = palette[0];
     final dateFmt = DateFormat('dd/MM');
 
     final batchData = ref
@@ -834,38 +886,48 @@ class _ProductGridCard extends ConsumerWidget {
       return sorted.firstOrNull;
     });
 
-    // Status de validade
-    Color expiryColor = const Color(0xFF34D399);
-    IconData expiryIcon = Icons.check_circle_rounded;
+    // Status de validade — define palette e cores
+    Color expiryColor;
+    IconData expiryIcon;
     String? expiryLabel;
-    if (batchData != null) {
-      if (batchData.isExpired) {
-        expiryColor = const Color(0xFFF87171);
-        expiryIcon = Icons.cancel_rounded;
-        expiryLabel = 'Vencido';
-      } else if (batchData.daysToExpiry <= 7) {
-        expiryColor = const Color(0xFFF87171);
-        expiryIcon = Icons.warning_amber_rounded;
-        expiryLabel = batchData.expiryDate != null
-            ? '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)'
-            : null;
-      } else if (batchData.daysToExpiry <= 30) {
-        expiryColor = const Color(0xFFFBBF24);
-        expiryIcon = Icons.schedule_rounded;
-        expiryLabel = batchData.expiryDate != null
-            ? '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)'
-            : null;
-      } else if (batchData.expiryDate != null) {
-        expiryLabel =
-            '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)';
-      }
+    List<Color> palette;
+
+    if (!product.isPerishable || batchData == null) {
+      expiryColor = const Color(0xFF60A5FA);
+      expiryIcon = Icons.inventory_2_rounded;
+      expiryLabel = null;
+      palette = _paletteBlue;
+    } else if (batchData.isExpired) {
+      expiryColor = const Color(0xFFF87171);
+      expiryIcon = Icons.cancel_rounded;
+      expiryLabel = 'VENCIDO';
+      palette = _paletteRed;
+    } else if (batchData.daysToExpiry <= 7) {
+      expiryColor = const Color(0xFFFCA5A5);
+      expiryIcon = Icons.warning_amber_rounded;
+      expiryLabel = batchData.expiryDate != null
+          ? '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)'
+          : 'Crítico';
+      palette = _paletteRed;
+    } else if (batchData.daysToExpiry <= 30) {
+      expiryColor = const Color(0xFFFDE68A);
+      expiryIcon = Icons.schedule_rounded;
+      expiryLabel = batchData.expiryDate != null
+          ? '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)'
+          : 'Atenção';
+      palette = _paletteYellow;
+    } else {
+      expiryColor = const Color(0xFF6EE7B7);
+      expiryIcon = Icons.check_circle_rounded;
+      expiryLabel = batchData.expiryDate != null
+          ? '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)'
+          : null;
+      palette = _paletteGreen;
     }
 
+    final accent = palette[0];
     final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
-    final borderColor = batchData != null &&
-            (batchData.isExpired || batchData.daysToExpiry <= 7)
-        ? expiryColor.withValues(alpha: 0.4)
-        : accent.withValues(alpha: isDark ? 0.22 : 0.14);
+    final borderColor = accent.withValues(alpha: isDark ? 0.45 : 0.35);
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
@@ -879,12 +941,12 @@ class _ProductGridCard extends ConsumerWidget {
           decoration: BoxDecoration(
             color: cardBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: borderColor, width: 1),
+            border: Border.all(color: borderColor, width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: isDark ? 0.1 : 0.08),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
+                color: accent.withValues(alpha: isDark ? 0.20 : 0.15),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
