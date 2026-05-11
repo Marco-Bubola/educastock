@@ -7,6 +7,10 @@ import '../../../../core/theme/theme_mode_controller.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../auth/presentation/utils/auth_error_mapper.dart';
 
+final _keySettingsTheme = GlobalKey();
+final _keySettingsPassword = GlobalKey();
+final _keySettingsUsers = GlobalKey();
+
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -184,6 +188,54 @@ class SettingsPage extends ConsumerWidget {
         subtitle: 'Preferencias e conta',
         profileName: user?.name,
         onProfileTap: () {},
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keySettingsUsers,
+                  title: 'Gerenciar Usuários',
+                  description: 'Cadastre e gerencie os usuários que têm acesso ao sistema. Defina permissões diferenciadas para administradores e colaboradores da instituição.',
+                  icon: Icons.manage_accounts_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Admins podem excluir produtos e gerenciar usuários',
+                    'Colaboradores registram entradas, saídas e fazem scans',
+                    'Desative usuários que saíram da instituição',
+                    'Todas as ações ficam registradas por usuário no log de auditoria',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keySettingsTheme,
+                  title: 'Tema do Aplicativo',
+                  description: 'Alterne entre tema claro e escuro conforme sua preferência ou condição de iluminação. O tema escuro é mais confortável em ambientes com pouca luz.',
+                  icon: Icons.dark_mode_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Tema escuro economiza bateria em telas OLED',
+                    'A preferência é salva por usuário',
+                    'Temas claro e escuro seguem o design do EducaStock',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keySettingsPassword,
+                  title: 'Trocar Senha',
+                  description: 'Altere sua senha de acesso ao sistema. Use uma senha forte com letras, números e caracteres especiais para proteger os dados da instituição.',
+                  icon: Icons.lock_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Mínimo de 6 caracteres',
+                    'Não compartilhe sua senha com outros usuários',
+                    'Troque periodicamente para maior segurança',
+                    'Em caso de esquecimento, contate o administrador',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: ListView(
@@ -250,10 +302,13 @@ class SettingsPage extends ConsumerWidget {
 
             const CasaSectionHeader(title: 'Sistema'),
             const SizedBox(height: AppSpacing.sm),
-            _SettingsTile(
-              icon: Icons.people_outline_rounded,
-              label: 'Gerenciar Usuários',
-              onTap: () => context.push(AppRoutes.usersManagement),
+            KeyedSubtree(
+              key: _keySettingsUsers,
+              child: _SettingsTile(
+                icon: Icons.people_outline_rounded,
+                label: 'Gerenciar Usuários',
+                onTap: () => context.push(AppRoutes.usersManagement),
+              ),
             ),
             _SettingsTile(
               icon: Icons.category_outlined,
@@ -293,18 +348,24 @@ class SettingsPage extends ConsumerWidget {
 
             const CasaSectionHeader(title: 'Conta'),
             const SizedBox(height: AppSpacing.sm),
-            _SettingsSwitchTile(
-              icon: Icons.dark_mode_outlined,
-              label: 'Tema escuro',
-              value: isDark,
-              onChanged: (v) async {
-                await ref.read(themeModeProvider.notifier).toggleDark(v);
-              },
+            KeyedSubtree(
+              key: _keySettingsTheme,
+              child: _SettingsSwitchTile(
+                icon: Icons.dark_mode_outlined,
+                label: 'Tema escuro',
+                value: isDark,
+                onChanged: (v) async {
+                  await ref.read(themeModeProvider.notifier).toggleDark(v);
+                },
+              ),
             ),
-            _SettingsTile(
-              icon: Icons.password_rounded,
-              label: 'Trocar senha',
-              onTap: () => _showChangePasswordDialog(context, ref),
+            KeyedSubtree(
+              key: _keySettingsPassword,
+              child: _SettingsTile(
+                icon: Icons.password_rounded,
+                label: 'Trocar senha',
+                onTap: () => _showChangePasswordDialog(context, ref),
+              ),
             ),
             _SettingsTile(
               icon: Icons.logout_rounded,
