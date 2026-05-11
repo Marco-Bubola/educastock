@@ -21,9 +21,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
   );
 
   bool _navigating = false;
+  final _keyScannerArea = GlobalKey();
+  final _keyScannerManual = GlobalKey();
 
   @override
-  void dispose() {
+  void dispose(){
     _cameraController.dispose();
     super.dispose();
   }
@@ -138,6 +140,39 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyScannerArea,
+                  title: 'Área de Escaneamento',
+                  description: 'Aponte a câmera para o código de barras ou QR code do produto. O sistema reconhece automaticamente e busca o produto no catálogo ou cria um novo cadastro.',
+                  icon: Icons.qr_code_scanner_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Mantenha o código dentro da moldura verde',
+                    'Boa iluminação melhora a leitura',
+                    'Funciona com EAN-13, QR Code e outros formatos',
+                    'Se não reconhecer, tente o código manual abaixo',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyScannerManual,
+                  title: 'Código Manual',
+                  description: 'Se a câmera não conseguir ler o código, digite-o manualmente neste campo. Útil para embalagens danificadas ou códigos muito pequenos.',
+                  icon: Icons.keyboard_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Digite o código numérico completo (EAN-13: 13 dígitos)',
+                    'Confirme com Enter ou o botão de busca',
+                    'Códigos QR também podem ser digitados manualmente',
+                  ],
+                ),
+              ],
+            ),
+          ),
           IconButton(
             icon: ValueListenableBuilder(
               valueListenable: _cameraController,
@@ -163,7 +198,9 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             onDetect: _onDetect,
           ),
           // Overlay guia
-          Center(
+          KeyedSubtree(
+            key: _keyScannerArea,
+            child: Center(
             child: Container(
               width: 260,
               height: 260,
@@ -175,6 +212,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
                 borderRadius: BorderRadius.circular(AppRadius.modal),
               ),
             ),
+          ),
           ),
           // Instrução
           Positioned(
@@ -202,15 +240,18 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             ),
           ),
           // Botão cadastro manual
-          Positioned(
-            bottom: 24,
-            left: AppSpacing.lg,
-            right: AppSpacing.lg,
-            child: TextButton.icon(
-              onPressed: () => _showManualBarcodeInput(context),
-              style: TextButton.styleFrom(foregroundColor: Colors.white70),
-              icon: const Icon(Icons.keyboard_rounded, size: 18),
-              label: const Text('Cadastro manual sem código de barras'),
+          KeyedSubtree(
+            key: _keyScannerManual,
+            child: Positioned(
+              bottom: 24,
+              left: AppSpacing.lg,
+              right: AppSpacing.lg,
+              child: TextButton.icon(
+                onPressed: () => _showManualBarcodeInput(context),
+                style: TextButton.styleFrom(foregroundColor: Colors.white70),
+                icon: const Icon(Icons.keyboard_rounded, size: 18),
+                label: const Text('Cadastro manual sem código de barras'),
+              ),
             ),
           ),
         ],
