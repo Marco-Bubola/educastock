@@ -23,6 +23,9 @@ class BatchFormPage extends ConsumerStatefulWidget {
 
 class _BatchFormPageState extends ConsumerState<BatchFormPage> {
   final _formKey = GlobalKey<FormState>();
+  final _keyBatchQty = GlobalKey();
+  final _keyBatchExpiry = GlobalKey();
+  final _keyBatchLocation = GlobalKey();
   final _productNameController = TextEditingController();
   final _quantityController = TextEditingController();
   final _unitPriceController = TextEditingController();
@@ -263,6 +266,52 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
         title: 'Cadastrar Lote',
         subtitle: productName != null ? 'Produto: $productName' : 'Adicionar ao estoque',
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyBatchQty,
+                  title: 'Número do Lote e Quantidade',
+                  description: 'Informe o número de identificação do lote (código da embalagem) e a quantidade de unidades recebidas. O número do lote permite rastrear a origem de cada item.',
+                  icon: Icons.tag_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Use o código impresso na embalagem do fornecedor',
+                    'A quantidade deve ser em unidades (peças, latas, caixas)',
+                    'Um lote = uma entrada de estoque com mesma origem e validade',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyBatchExpiry,
+                  title: 'Data de Validade',
+                  description: 'Informe a data de validade impressa na embalagem. Use os atalhos (+30, +90, +180 dias) para datas aproximadas ou o escaner para ler QR codes com data.',
+                  icon: Icons.event_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Sempre registre a data exata da embalagem',
+                    'Lotes vencidos são automaticamente bloqueados para saída',
+                    'Produtos não perecíveis não precisam de data de validade',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyBatchLocation,
+                  title: 'Localização no Estoque',
+                  description: 'Selecione onde este lote está fisicamente armazenado na instituição. Localizações ajudam a encontrar produtos rapidamente e organizar o espaço físico.',
+                  icon: Icons.location_on_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Ex: "Prateleira A-3", "Depósito 2", "Cozinha"',
+                    'Crie novas localizações em Configurações → Localizações',
+                    'A localização aparece na lista de lotes e relatórios',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       floatingActionButton: _BatchSaveFab(isLoading: isLoading, onSave: _submit),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -275,10 +324,12 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
             children: [
 
               // â”€â”€â”€ SeÃ§Ã£o 1: NÃºmero do lote + Quantidade â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-              _BatchSection(
-                icon: Icons.tag_rounded,
-                iconColor: AppColors.brandPrimary600,
-                title: 'InformaÃ§Ãµes do Lote',
+              KeyedSubtree(
+                key: _keyBatchQty,
+                child: _BatchSection(
+                  icon: Icons.tag_rounded,
+                  iconColor: AppColors.brandPrimary600,
+                  title: 'Informações do Lote',
                 cs: cs,
                 child: Column(
                   children: [
@@ -363,6 +414,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                     ),
                   ],
                 ),
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
 
@@ -373,39 +425,44 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (!_noExpiry) setState(() { _noExpiry = true; _expiryDate = null; });
                   });
-                  return _BatchSection(
-                    icon: Icons.all_inclusive_rounded,
-                    iconColor: AppColors.neutral500,
-                    title: 'Validade',
-                    cs: cs,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.neutral500.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(AppRadius.card),
-                        border: Border.all(color: AppColors.neutral500.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.shield_outlined, size: 18, color: AppColors.neutral500),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Produto nao perecivel - sem data de validade',
-                              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                  return KeyedSubtree(
+                    key: _keyBatchExpiry,
+                    child: _BatchSection(
+                      icon: Icons.all_inclusive_rounded,
+                      iconColor: AppColors.neutral500,
+                      title: 'Validade',
+                      cs: cs,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.neutral500.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(AppRadius.card),
+                          border: Border.all(color: AppColors.neutral500.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.shield_outlined, size: 18, color: AppColors.neutral500),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Produto nao perecivel - sem data de validade',
+                                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   );
                 }
-                return _BatchSection(
-                  icon: Icons.event_rounded,
-                  iconColor: _expiryDate != null ? AppColors.success600 : AppColors.warning600,
-                  title: 'Validade',
-                  cs: cs,
-                  child: Column(
+                return KeyedSubtree(
+                  key: _keyBatchExpiry,
+                  child: _BatchSection(
+                    icon: Icons.event_rounded,
+                    iconColor: _expiryDate != null ? AppColors.success600 : AppColors.warning600,
+                    title: 'Validade',
+                    cs: cs,
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Wrap(
@@ -487,6 +544,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                         ],
                       ),
                     ],
+                  ),
                   ),
                 );
               }),
@@ -585,7 +643,9 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
 
               // â”€â”€â”€ SeÃ§Ã£o 4: LocalizaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               locationsState.when(
-                data: (locations) => _LocationPicker(
+                data: (locations) => KeyedSubtree(
+                  key: _keyBatchLocation,
+                  child: _LocationPicker(
                   locations: locations,
                   selectedLabel:
                       _manualLocation ? null : _selectedLocationLabel,
@@ -599,6 +659,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                   }),
                   onManageLocations: () =>
                       context.push(AppRoutes.locations),
+                ),
                 ),
                 loading: () => const CasaCardSkeleton(),
                 error: (_, __) => const SizedBox.shrink(),
