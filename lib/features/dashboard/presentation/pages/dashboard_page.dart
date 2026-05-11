@@ -10,7 +10,12 @@ import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
 import '../../../ml/presentation/widgets/risk_widgets.dart';
 
-class DashboardPage extends ConsumerWidget {
+final _keyDashQuickActions = GlobalKey();
+final _keyDashExpiring = GlobalKey();
+final _keyDashHeader = GlobalKey();
+final _keyDashMlRisk = GlobalKey();
+
+class DashboardPageextends ConsumerWidget {
   const DashboardPage({super.key});
 
   @override
@@ -29,7 +34,9 @@ class DashboardPage extends ConsumerWidget {
           padding: EdgeInsets.zero,
           children: [
             // ─── Header completo ─────────────────────────────────────────
-            _DashboardHeader(
+            KeyedSubtree(
+              key: _keyDashHeader,
+              child: _DashboardHeader(
               user: user,
               allBatches: allBatches,
               expiringCritical: expiringCritical,
@@ -37,6 +44,62 @@ class DashboardPage extends ConsumerWidget {
               onSettingsTap: () => context.push(AppRoutes.settings),
               onLotesTap: () => context.go(AppRoutes.productList),
               onAlertsTap: () => context.go(AppRoutes.alerts),
+              onHelpTap: () => showCasaTutorial(
+                context: context,
+                steps: [
+                  TutorialStep(
+                    key: _keyDashHeader,
+                    title: 'Visão Geral do Estoque',
+                    description: 'Os três cards coloridos mostram os indicadores mais importantes: total de lotes, itens que vencem em 7 dias (crítico) e itens com atenção em 30 dias.',
+                    icon: Icons.dashboard_rounded,
+                    align: ContentAlign.bottom,
+                    hints: const [
+                      'Toque em qualquer card para ver os detalhes',
+                      'Vermelho = ação imediata necessária!',
+                      'O número atualiza em tempo real conforme o estoque',
+                    ],
+                  ),
+                  TutorialStep(
+                    key: _keyDashQuickActions,
+                    title: 'Ações Rápidas',
+                    description: 'Toque nos cartões coloridos para acessar rapidamente as principais funções: Escanear, Estoque, Saída, Receitas, Alertas e Localizações.',
+                    icon: Icons.grid_view_rounded,
+                    align: ContentAlign.bottom,
+                    hints: const [
+                      'Escanear: registre entradas pelo código de barras',
+                      'Saída: distribua produtos manualmente',
+                      'Receitas: distribua por modelo de distribuição',
+                      'Alertas: veja todos os produtos próximos do vencimento',
+                    ],
+                  ),
+                  TutorialStep(
+                    key: _keyDashMlRisk,
+                    title: 'Análise de Risco por IA',
+                    description: 'O sistema usa Inteligência Artificial para prever quais produtos têm maior risco de vencer sem ser distribuídos, baseado no histórico de saídas e validade.',
+                    icon: Icons.psychology_rounded,
+                    align: ContentAlign.bottom,
+                    hints: const [
+                      '🔴 Alto risco: distribua com urgência',
+                      '🟡 Médio risco: monitore de perto',
+                      '🟢 Baixo risco: situação controlada',
+                      'Toque em "Ver detalhes" para análise completa',
+                    ],
+                  ),
+                  TutorialStep(
+                    key: _keyDashExpiring,
+                    title: 'Alertas Críticos',
+                    description: 'Lista dos produtos que vencem em até 7 dias. Ação imediata necessária para evitar desperdício e garantir a segurança alimentar das crianças.',
+                    icon: Icons.warning_amber_rounded,
+                    align: ContentAlign.top,
+                    hints: const [
+                      'Distribua ou descarte produtos vencidos imediatamente',
+                      'Registre o descarte em "Saída" com motivo "Vencimento"',
+                      'Toque em "Ver todos" para a lista completa de alertas',
+                    ],
+                  ),
+                ],
+              ),
+            ),
             ),
 
             const SizedBox(height: AppSpacing.xl),
@@ -53,7 +116,9 @@ class DashboardPage extends ConsumerWidget {
                       : constraints.maxWidth >= 620
                           ? 3
                           : 2;
-                  return GridView.count(
+                  return KeyedSubtree(
+                    key: _keyDashQuickActions,
+                    child: GridView.count(
                     crossAxisCount: cross,
                     mainAxisSpacing: AppSpacing.sm,
                     crossAxisSpacing: AppSpacing.sm,
@@ -122,6 +187,7 @@ class DashboardPage extends ConsumerWidget {
                         ),
                       ),
                     ],
+                    ),
                   );
                 },
               ),
@@ -130,7 +196,10 @@ class DashboardPage extends ConsumerWidget {
             const SizedBox(height: AppSpacing.xl),
 
             // Análise de Risco ML
-            _MlRiskSection(),
+            KeyedSubtree(
+              key: _keyDashMlRisk,
+              child: _MlRiskSection(),
+            ),
 
             const SizedBox(height: AppSpacing.xl),
 
@@ -139,6 +208,7 @@ class DashboardPage extends ConsumerWidget {
               data: (batches) {
                 if (batches.isEmpty) return const SizedBox.shrink();
                 return Column(
+                  key: _keyDashExpiring,
                   children: [
                     CasaSectionHeader(
                       title: 'Alertas Críticos',
@@ -186,6 +256,7 @@ class _DashboardHeader extends ConsumerWidget {
   final VoidCallback onSettingsTap;
   final VoidCallback onLotesTap;
   final VoidCallback onAlertsTap;
+  final VoidCallback onHelpTap;
 
   const _DashboardHeader({
     required this.user,
@@ -195,6 +266,7 @@ class _DashboardHeader extends ConsumerWidget {
     required this.onSettingsTap,
     required this.onLotesTap,
     required this.onAlertsTap,
+    required this.onHelpTap,
   });
 
   String _greeting() {
@@ -280,6 +352,11 @@ class _DashboardHeader extends ConsumerWidget {
                     ),
                   ),
                   // ── Botões de ação: sino + dark/light ─────────────
+                  IconButton(
+                    icon: const Icon(Icons.help_outline_rounded, color: Colors.white),
+                    tooltip: 'Dicas desta página',
+                    onPressed: onHelpTap,
+                  ),
                   CasaAlertsBellButton(
                     alertCount: alertCount,
                     onDarkBg: true,
@@ -340,7 +417,7 @@ class _DashboardHeader extends ConsumerWidget {
                   Expanded(
                     child: _HeaderKpiCard(
                       icon: Icons.inventory_2_rounded,
-                      value: lotesCount,
+,                       value: lotesCount,
                       label: 'Lotes',
                       gradientColors: const [
                         Color(0xFF1A56C4),
