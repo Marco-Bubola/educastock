@@ -239,7 +239,7 @@ class StockRemoteDatasource {
     });
   }
 
-  Future<void> registerBulkOutputFefo({
+  Future<Map<String, dynamic>> registerBulkOutputFefo({
     required List<ProductOutputRequest> items,
     required String performedBy,
     required String performedByName,
@@ -309,6 +309,8 @@ class StockRemoteDatasource {
     final batch = _db.batch();
     final now = DateTime.now().toIso8601String();
 
+    final List<Map<String, dynamic>> movementsSummary = [];
+
     for (final p in planned) {
       final doc = p['doc'] as QueryDocumentSnapshot<Map<String, dynamic>>;
       final productId = p['productId'] as String;
@@ -345,6 +347,18 @@ class StockRemoteDatasource {
         },
       });
 
+      movementsSummary.add({
+        'movementId': movementRef.id,
+        'productId': productId,
+        'productName': productName,
+        'batchId': doc.id,
+        'consumed': consumed,
+        'before': before,
+        'after': after,
+        'shelfLocation': doc.data()['shelfLocation'] as String?,
+        'expiryDate': doc.data()['expiryDate'] as String?,
+      });
+
       final auditRef = _auditLogs.doc();
       batch.set(auditRef, {
         'collection': 'batches',
@@ -362,6 +376,26 @@ class StockRemoteDatasource {
       });
     }
 
+    final outputRef = _db.collection('outputs').doc();
+    batch.set(outputRef, {
+      'createdAt': now,
+      'performedBy': performedBy,
+      'performedByName': performedByName,
+      'reasonCode': reasonCode,
+      'reason': reason,
+      'movements': movementsSummary,
+    });
+
     await batch.commit();
+
+    return {
+      'outputId': outputRef.id,
+      'createdAt': now,
+      'performedBy': performedBy,
+      'performedByName': performedByName,
+      'reasonCode': reasonCode,
+      'reason': reason,
+      'movements': movementsSummary,
+    };
   }
 }
