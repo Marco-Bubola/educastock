@@ -32,6 +32,10 @@ class ProductFormPage extends ConsumerStatefulWidget {
 
 class _ProductFormPageState extends ConsumerState<ProductFormPage> {
   final _formKey = GlobalKey<FormState>();
+  final _keyNameField = GlobalKey();
+  final _keyCategoryField = GlobalKey();
+  final _keyPerishableToggle = GlobalKey();
+  final _keySaveBtn = GlobalKey();
   final _nameController = TextEditingController();
   final _brandController = TextEditingController();
   final _descController = TextEditingController();
@@ -205,11 +209,72 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
         title: isEditing ? 'Editar Produto' : 'Novo Produto',
         subtitle: isEditing ? 'Atualize os dados do produto' : 'Preencha as informações do produto',
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyNameField,
+                  title: 'Nome do Produto',
+                  description: 'Informe o nome completo e descritivo do produto. Use nomes claros como "Feijão Carioca 1kg" para facilitar a busca e identificação no estoque.',
+                  icon: Icons.label_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Seja específico: inclua tipo e peso quando relevante',
+                    'Use nomes padronizados que toda a equipe reconheça',
+                    'O nome é usado em buscas, relatórios e receitas',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyCategoryField,
+                  title: 'Categoria',
+                  description: 'Selecione a categoria que melhor classifica o produto. As categorias organizam o estoque e permitem filtros e relatórios por grupo de produtos.',
+                  icon: Icons.category_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Alimento: produtos comestíveis em geral',
+                    'Higiene: sabonetes, fraldas, produtos de limpeza',
+                    'Materiais: papelaria, itens educacionais, outros',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyPerishableToggle,
+                  title: 'Produto Perecível',
+                  description: 'Ative esta opção se o produto possui data de validade. Produtos perecíveis exigem informação de validade em cada lote cadastrado e geram alertas automáticos.',
+                  icon: Icons.timer_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Alimentos e medicamentos: sempre perecíveis',
+                    'Produtos de limpeza: geralmente não perecíveis',
+                    'Perecíveis aparecem nos alertas e relatórios de vencimento',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keySaveBtn,
+                  title: 'Salvar Produto',
+                  description: 'Toque para salvar o produto no catálogo. Após salvar, você poderá cadastrar lotes de estoque para este produto e registrar movimentações.',
+                  icon: Icons.save_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Todos os campos obrigatórios devem estar preenchidos',
+                    'Produtos salvos aparecem imediatamente na lista de estoque',
+                    'Você pode editar as informações do produto a qualquer momento',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
-      floatingActionButton: _SaveFab(
-        isEditing: isEditing,
-        isLoading: isLoading,
-        onSave: _submit,
+      floatingActionButton: KeyedSubtree(
+        key: _keySaveBtn,
+        child: _SaveFab(
+          isEditing: isEditing,
+          isLoading: isLoading,
+          onSave: _submit,
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: SafeArea(
@@ -281,6 +346,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
               ),
               const SizedBox(height: AppSpacing.sm),
               CasaTextField(
+                key: _keyNameField,
                 label: 'Nome do Produto *',
                 hint: 'Ex: Arroz Integral, Sabonete Líquido...',
                 controller: _nameController,
@@ -307,6 +373,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
               ),
               const SizedBox(height: AppSpacing.sm),
               DropdownButtonFormField<ProductCategory>(
+                key: _keyCategoryField,
                 initialValue: _category,
                 decoration: const InputDecoration(
                   labelText: 'Categoria *',
@@ -403,6 +470,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
 
               // Perecível
               Container(
+                key: _keyPerishableToggle,
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(AppRadius.card),
