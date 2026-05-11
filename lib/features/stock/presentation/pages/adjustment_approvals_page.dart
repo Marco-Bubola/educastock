@@ -4,7 +4,9 @@ import '../../../../core/design_system/design_system.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../data/datasources/stock_remote_datasource.dart';
 
-final _stockDatasourceProvider = Provider<StockRemoteDatasource>(
+final _keyApprovalCard = GlobalKey();
+
+final _stockDatasourceProvider= Provider<StockRemoteDatasource>(
   (_) => StockRemoteDatasource(),
 );
 
@@ -23,10 +25,33 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
     if (currentUser == null || !currentUser.canApproveAdjustments) {
       return Scaffold(
         backgroundColor: cs.surface,
-        appBar: const ModernProfileAppBar(
+        appBar: ModernProfileAppBar(
           title: 'Aprovações de Ajuste',
           subtitle: 'Acesso restrito',
           showBackButton: true,
+          actions: [
+            buildHelpButton(
+              context: context,
+              onPressed: () => showCasaTutorial(
+                context: context,
+                steps: [
+                  TutorialStep(
+                    key: _keyApprovalCard,
+                    title: 'Aprovação de Ajustes',
+                    description: 'Ajustes de estoque realizados por colaboradores ficam pendentes de aprovação pelo administrador. Revise cada ajuste, verifique o motivo e aprove ou rejeite.',
+                    icon: Icons.approval_rounded,
+                    align: ContentAlign.bottom,
+                    hints: const [
+                      'Ajustes incluem correções de quantidade e descarte por avaria',
+                      'Verifique o motivo informado pelo colaborador',
+                      'Aprovações ficam registradas no log de auditoria',
+                      'Rejeições devolvem o estoque ao valor original',
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         body: const SafeArea(
           child: CasaEmptyState(
@@ -42,10 +67,33 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: const ModernProfileAppBar(
+      appBar: ModernProfileAppBar(
         title: 'Aprovações de Ajuste',
         subtitle: 'Solicitações pendentes de revisão',
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyApprovalCard,
+                  title: 'Aprovação de Ajustes',
+                  description: 'Ajustes de estoque realizados por colaboradores ficam pendentes de aprovação pelo administrador. Revise cada ajuste, verifique o motivo e aprove ou rejeite.',
+                  icon: Icons.approval_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Ajustes incluem correções de quantidade e descarte por avaria',
+                    'Verifique o motivo informado pelo colaborador',
+                    'Aprovações ficam registradas no log de auditoria',
+                    'Rejeições devolvem o estoque ao valor original',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: requestsAsync.when(
@@ -70,7 +118,7 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
                 final requestedByName = req['requestedByName'] as String? ?? '-';
                 final reason = req['reason'] as String? ?? 'Sem motivo';
 
-                return _AdjustmentCard(
+                final card = _AdjustmentCard(
                   productName: productName,
                   qty: qty,
                   requestedByName: requestedByName,
@@ -105,6 +153,10 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
                     }
                   },
                 );
+                if (i == 0) {
+                  return KeyedSubtree(key: _keyApprovalCard, child: card);
+                }
+                return card;
               },
             );
           },
