@@ -36,6 +36,8 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
   bool _showLevel = false;
   bool _showCapacity = false;
   bool _showExtras = false;
+  final _keySaveBtn = GlobalKey();
+  final _keyNameField = GlobalKey();
 
   @override
   void dispose() {
@@ -182,6 +184,38 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
           ],
         ),
         actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyNameField,
+                  title: 'Nome da Localização',
+                  description: 'Informe um nome claro e único para identificar este local de armazenamento. Use um sistema de nomenclatura consistente para toda a instituição.',
+                  icon: Icons.edit_location_alt_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Seja específico: "Prateleira B-2" é melhor que "Prateleira"',
+                    'Inclua referências físicas: sala, corredor, nível',
+                    'Ex: "Despensa Principal", "Armário Cozinha", "Galpão Fundo"',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keySaveBtn,
+                  title: 'Salvar Localização',
+                  description: 'Salve a nova localização para que ela fique disponível ao cadastrar lotes de estoque. A localização aparece imediatamente nas opções de seleção.',
+                  icon: Icons.save_as_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Localizações ficam disponíveis para toda a equipe',
+                    'Você pode criar quantas localizações precisar',
+                    'Edite o nome posteriormente se necessário',
+                  ],
+                ),
+              ],
+            ),
+          ),
           if (_hasSection && _hasShelf)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -192,6 +226,7 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
                       child: CircularProgressIndicator(
                           color: accent, strokeWidth: 2))
                   : GestureDetector(
+                      key: _keySaveBtn,
                       onTap: _save,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -250,6 +285,7 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
               subtitle: 'Opcional — identifica com facilidade',
               color: AppColors.brandPrimary600,
               child: CasaTextField(
+                key: _keyNameField,
                 label: '',
                 hint: 'Ex: Depósito Principal, Sala Fria...',
                 controller: _nameCtrl,
