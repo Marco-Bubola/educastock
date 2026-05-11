@@ -18,6 +18,8 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
   final _warningCtrl = TextEditingController();
   bool _expiryEnabled = true;
   bool _initialized = false;
+  final _keyCriticalField = GlobalKey();
+  final _keyWarningField = GlobalKey();
 
   @override
   void dispose() {
@@ -41,6 +43,40 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyCriticalField,
+                  title: 'Prazo Crítico (Dias)',
+                  description: 'Define quantos dias antes do vencimento um produto passa para situação crítica (vermelha). Lotes nesta faixa exigem ação imediata de distribuição ou descarte.',
+                  icon: Icons.emergency_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Recomendado: 7 dias para alimentos perecíveis',
+                    'Alertas críticos aparecem no dashboard com prioridade máxima',
+                    'Ajuste conforme o ritmo de distribuição da sua instituição',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyWarningField,
+                  title: 'Prazo de Atenção (Dias)',
+                  description: 'Define quantos dias antes do vencimento um produto entra em situação de atenção (amarela). Use este prazo para planejar distribuições antes que se tornem críticos.',
+                  icon: Icons.warning_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Recomendado: 30 dias para planejamento adequado',
+                    'Deve ser maior que o prazo crítico',
+                    'Produtos nesta faixa aparecem nos alertas com prioridade média',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: configState.when(
@@ -190,6 +226,7 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       CasaTextField(
+                        key: _keyCriticalField,
                         label: 'Dias para alerta crítico',
                         hint: 'Ex: 7',
                         controller: _criticalCtrl,
@@ -217,6 +254,7 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       CasaTextField(
+                        key: _keyWarningField,
                         label: 'Dias para alerta de atenção',
                         hint: 'Ex: 30',
                         controller: _warningCtrl,
