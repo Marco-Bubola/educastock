@@ -22,6 +22,9 @@ class ProductReviewPage extends ConsumerStatefulWidget {
 }
 
 class _ProductReviewPageState extends ConsumerState<ProductReviewPage> {
+  final _keyReviewInfo = GlobalKey();
+  final _keyReviewAction = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -46,12 +49,47 @@ class _ProductReviewPageState extends ConsumerState<ProductReviewPage> {
               .copyWith(statusBarColor: Colors.transparent),
       child: Scaffold(
         backgroundColor: cs.surface,
-        appBar: const ModernProfileAppBar(
+        appBar: ModernProfileAppBar(
           title: 'Revisão de Dados',
           subtitle: 'Confirme as informações do produto',
           showBackButton: true,
+          actions: [
+            buildHelpButton(
+              context: context,
+              onPressed: () => showCasaTutorial(
+                context: context,
+                steps: [
+                  TutorialStep(
+                    key: _keyReviewInfo,
+                    title: 'Dados do Produto Escaneado',
+                    description: 'Verifique as informações do produto identificado pelo código de barras. Confirme que o nome, categoria e demais dados estão corretos antes de registrar a entrada.',
+                    icon: Icons.fact_check_rounded,
+                    align: ContentAlign.bottom,
+                    hints: const [
+                      'Se o produto não existir no cadastro, será criado automaticamente',
+                      'Confira o nome do produto com a embalagem física',
+                      'Você pode editar os dados antes de confirmar',
+                    ],
+                  ),
+                  TutorialStep(
+                    key: _keyReviewAction,
+                    title: 'Confirmar Entrada',
+                    description: 'Informe a quantidade recebida e confirme a entrada no estoque. Para produtos perecíveis, informe também a data de validade da embalagem.',
+                    icon: Icons.add_box_rounded,
+                    align: ContentAlign.top,
+                    hints: const [
+                      'Registre a quantidade exata da embalagem recebida',
+                      'Não agrupe lotes com validades diferentes',
+                      'A entrada é registrada imediatamente no estoque',
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         body: SafeArea(
+          key: _keyReviewInfo,
           child: localProductAsync.when(
             loading: () => _buildLoading(cs, 'Verificando produto...'),
             error: (e, _) => _buildError(cs, e.toString()),
