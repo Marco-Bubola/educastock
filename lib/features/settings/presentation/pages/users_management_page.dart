@@ -7,6 +7,8 @@ import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../controllers/system_settings_provider.dart';
 
+final _keyUserCard = GlobalKey();
+
 class UsersManagementPage extends ConsumerWidget {
   const UsersManagementPage({super.key});
 
@@ -17,10 +19,33 @@ class UsersManagementPage extends ConsumerWidget {
 
     if (currentUser == null || !currentUser.canManageUsers) {
       return Scaffold(
-        appBar: const ModernProfileAppBar(
+        appBar: ModernProfileAppBar(
           title: 'Gerenciar usuárias',
           subtitle: 'Acesso restrito',
           showBackButton: true,
+          actions: [
+            buildHelpButton(
+              context: context,
+              onPressed: () => showCasaTutorial(
+                context: context,
+                steps: [
+                  TutorialStep(
+                    key: _keyUserCard,
+                    title: 'Cartão de Usuário',
+                    description: 'Cada cartão representa um usuário cadastrado no sistema. Veja nome, e-mail, função (admin ou colaborador) e status de atividade de cada membro da equipe.',
+                    icon: Icons.badge_rounded,
+                    align: ContentAlign.bottom,
+                    hints: const [
+                      '🟢 Ativo: usuário com acesso habilitado',
+                      '⚫ Inativo: acesso desabilitado temporariamente',
+                      'Toque no cartão para editar permissões ou desativar',
+                      'Admins têm acesso completo — cuidado ao promover',
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         body: const Center(
           child: Text('Acesso restrito a administradoras.'),
@@ -37,6 +62,29 @@ class UsersManagementPage extends ConsumerWidget {
         profileName: currentUser.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyUserCard,
+                  title: 'Cartão de Usuário',
+                  description: 'Cada cartão representa um usuário cadastrado no sistema. Veja nome, e-mail, função (admin ou colaborador) e status de atividade de cada membro da equipe.',
+                  icon: Icons.badge_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🟢 Ativo: usuário com acesso habilitado',
+                    '⚫ Inativo: acesso desabilitado temporariamente',
+                    'Toque no cartão para editar permissões ou desativar',
+                    'Admins têm acesso completo — cuidado ao promover',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: usersState.when(
@@ -47,7 +95,7 @@ class UsersManagementPage extends ConsumerWidget {
             itemBuilder: (_, i) {
               final user = users[i];
               final cs = Theme.of(context).colorScheme;
-              return Container(
+              final card = Container(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerLow,
@@ -159,6 +207,10 @@ class UsersManagementPage extends ConsumerWidget {
                   ],
                 ),
               );
+              if (i == 0) {
+                return KeyedSubtree(key: _keyUserCard, child: card);
+              }
+              return card;
             },
           ),
           loading: () => ListView.separated(
