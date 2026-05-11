@@ -12,6 +12,7 @@ import '../../../recipes/presentation/controllers/recipes_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../data/datasources/stock_remote_datasource.dart';
 import '../../domain/entities/stock_movement.dart';
+import 'output_view_page.dart';
 
 enum _OutputMode { products, recipes }
 
@@ -37,6 +38,8 @@ class _MovementPageState extends ConsumerState<MovementPage> {
   String? _selectedRecipeId;
   final Map<String, int> _selectedQtyByProduct = {};
   bool _isLoading = false;
+  final _keyConfirmFab = GlobalKey();
+  final _keySearchBar = GlobalKey();
 
   static const _reasonLabels = {
     'uso': 'Uso/Distribuição',
@@ -240,7 +243,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
 
     setState(() => _isLoading = true);
     try {
-      await ref.read(stockDatasourceProvider).registerBulkOutputFefo(
+      final result = await ref.read(stockDatasourceProvider).registerBulkOutputFefo(
             items: requests,
             performedBy: user.id,
             performedByName: user.name,
@@ -255,7 +258,9 @@ class _MovementPageState extends ConsumerState<MovementPage> {
         isSuccess: true,
       );
       setState(() => _selectedQtyByProduct.clear());
-      context.go('/dashboard');
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => OutputViewPage(output: result),
+      ));
     } catch (error) {
       if (!mounted) return;
       showCasaSnackbar(
@@ -306,13 +311,52 @@ class _MovementPageState extends ConsumerState<MovementPage> {
         title: 'Distribuição',
         subtitle: 'Produtos avulsos ou por receita',
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keySearchBar,
+                  title: 'Buscar Produto para Saída',
+                  description: 'Digite o nome do produto ou receita que deseja distribuir. O sistema mostrará os itens disponíveis em estoque com suas quantidades e validades.',
+                  icon: Icons.search_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Busca em tempo real enquanto você digita',
+                    'Lotes com borda vermelha já estão vencidos',
+                    '🟡 Amarelo = vence em até 30 dias — distribua primeiro!',
+                    'Quantidade disponível aparece abaixo de cada produto',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyConfirmFab,
+                  title: 'Confirmar Distribuição',
+                  description: 'Após selecionar as quantidades de cada produto, toque aqui para confirmar a saída. O sistema registra automaticamente quem distribuiu, quando e para qual finalidade.',
+                  icon: Icons.send_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Revise os itens e quantidades antes de confirmar',
+                    'A saída deduz automaticamente do estoque disponível',
+                    'O histórico de saídas fica registrado em "Histórico"',
+                    'Não é possível desfazer uma saída confirmada',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       floatingActionButton: _mode == _OutputMode.products
-          ? _ConfirmFab(
-              isLoading: _isLoading,
-              label: 'Confirmar Distribuição',
-              icon: Icons.outbound_rounded,
-              onPressed: () => _openSummary(productsAsync.valueOrNull ?? []),
+          ? KeyedSubtree(
+              key: _keyConfirmFab,
+              child: _ConfirmFab(
+                isLoading: _isLoading,
+                label: 'Confirmar Distribuição',
+                icon: Icons.outbound_rounded,
+                onPressed: () => _openSummary(productsAsync.valueOrNull ?? []),
+              ),
             )
           : recipesAsync.valueOrNull?.any((r) => r.id == _selectedRecipeId) == true
               ? _ConfirmFab(
@@ -376,6 +420,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                   const SizedBox(height: AppSpacing.md),
                   // ─── Busca + filtro ───────────────────────────────
                   Row(
+                    key: _keySearchBar,
                     children: [
                       Expanded(
                         child: Container(
@@ -785,27 +830,22 @@ class _ProductOutputCard extends StatelessWidget {
     required this.onIncrement,
   });
 
-  static const _palettes = [
-    [Color(0xFF2563EB), Color(0xFF1D4ED8)],
-    [Color(0xFF0891B2), Color(0xFF0E7490)],
-    [Color(0xFF059669), Color(0xFF047857)],
-    [Color(0xFF7C3AED), Color(0xFF6D28D9)],
-    [Color(0xFFDB2777), Color(0xFFC026D3)],
-    [Color(0xFFEA580C), Color(0xFFDC2626)],
-    [Color(0xFF0284C7), Color(0xFF0369A1)],
-    [Color(0xFF65A30D), Color(0xFF4D7C0F)],
-  ];
-
-  List<Color> _palette() => _palettes[index % _palettes.length];
+  static const _paletteRed    = [Color(0xFFDC2626), Color(0xFFB91C1C)];
+  static const _paletteYellow = [Color(0xFFD97706), Color(0xFFB45309)];
+  static const _paletteGreen  = [Color(0xFF059669), Color(0xFF047857)];
 
   @override
   Widget build(BuildContext context) {
-    final palette = _palette();
-    final accent = expiredBatch
-        ? const Color(0xFFF87171)
-        : nearExpiry
-            ? const Color(0xFFFBBF24)
-            : palette[0];
+    // Cores de alerta conforme status de validade
+    final List<Color> palette;
+    if (expiredBatch) {
+      palette = _paletteRed;
+    } else if (nearExpiry) {
+      palette = _paletteYellow;
+    } else {
+      palette = _paletteGreen;
+    }
+    final accent = palette[0];
     final selected = qty > 0;
     final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
     final onCard = isDark ? const Color(0xFFE5E7EB) : const Color(0xFF111827);
@@ -840,11 +880,7 @@ class _ProductOutputCard extends StatelessWidget {
             height: 52,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: expiredBatch
-                    ? [const Color(0xFFF87171), const Color(0xFFDC2626)]
-                    : nearExpiry
-                        ? [const Color(0xFFFBBF24), const Color(0xFFD97706)]
-                        : palette,
+                colors: palette,
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
