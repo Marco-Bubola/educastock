@@ -6,6 +6,9 @@ import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../controllers/system_settings_provider.dart';
 
+final _keyCategorySummary = GlobalKey();
+final _keyCategoryList = GlobalKey();
+
 class CategoriesSettingsPage extends ConsumerWidget {
   const CategoriesSettingsPage({super.key});
 
@@ -24,6 +27,40 @@ class CategoriesSettingsPage extends ConsumerWidget {
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyCategorySummary,
+                  title: 'Resumo por Categoria',
+                  description: 'Visão geral das categorias existentes com total de produtos em cada uma. Use para entender a composição do estoque e identificar categorias com baixo volume.',
+                  icon: Icons.donut_small_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'O número mostra total de produtos (não lotes)',
+                    'Toque para filtrar o estoque por categoria',
+                    'Crie categorias específicas para sua realidade',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyCategoryList,
+                  title: 'Lista de Categorias',
+                  description: 'Gerencie as categorias de produtos disponíveis no sistema. Adicione, edite ou remova categorias conforme a necessidade da sua instituição.',
+                  icon: Icons.category_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Categorias são compartilhadas com todos os usuários',
+                    'Evite muitas categorias — mantenha organizado',
+                    'Categorias padrão: Alimento, Higiene, Material Escolar',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: categories.when(
@@ -35,6 +72,7 @@ class CategoriesSettingsPage extends ConsumerWidget {
               children: [
                 // ─── Resumo
                 Container(
+                  key: _keyCategorySummary,
                   padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
@@ -87,8 +125,11 @@ class CategoriesSettingsPage extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.xl),
 
                 // ─── Lista
-                ...items.map((item) {
+                ...items.asMap().entries.map((entry) {
+                  final item = entry.value;
+                  final idx = entry.key;
                   return Padding(
+                    key: idx == 0 ? _keyCategoryList : null,
                     padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                     child: Container(
                       decoration: BoxDecoration(
