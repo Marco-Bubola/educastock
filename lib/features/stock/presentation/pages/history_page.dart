@@ -20,6 +20,8 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   String _search = '';
   String? _filterReason; // null = todos
   DateTimeRange? _filterDateRange;
+  final _keyFilterRow = GlobalKey();
+  final _keyHistoryList = GlobalKey();
 
   static const _reasonColors = <String, List<Color>>{
     'uso': [Color(0xFF2563EB), Color(0xFF1D4ED8)],
@@ -365,6 +367,41 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
         title: 'Histórico',
         subtitle: 'Registro completo de saídas',
         actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyFilterRow,
+                  title: 'Filtros do Histórico',
+                  description: 'Filtre as movimentações por tipo (distribuição, receita, vencimento, avaria, doação) e por período. Ideal para auditorias e prestação de contas.',
+                  icon: Icons.filter_alt_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Selecione um período específico para relatórios mensais',
+                    'Filtre por "Vencimento" para ver produtos descartados',
+                    'Filtre por "Distribuição" para controle de saídas por uso',
+                    'Exporte como CSV para planilhas Excel',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyHistoryList,
+                  title: 'Registro de Movimentações',
+                  description: 'Lista completa de todas as entradas e saídas do estoque em ordem cronológica. Cada registro mostra produto, quantidade, usuário responsável e motivo da movimentação.',
+                  icon: Icons.history_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🔵 Azul: distribuição por uso',
+                    '🟣 Roxo: saída por receita',
+                    '🟡 Amarelo: descarte por vencimento',
+                    '🔴 Vermelho: baixa por avaria',
+                    '🟢 Verde: doação registrada',
+                  ],
+                ),
+              ],
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.download_rounded),
             tooltip: 'Exportar CSV',
@@ -418,6 +455,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
 
             // ─── Search + Filtros ────────────────────────────────────────────
             Padding(
+              key: _keyFilterRow,
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Row(
                 children: [
@@ -515,6 +553,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
 
             // ─── Lista ─────────────────────────────────────────────────────
             Expanded(
+              key: _keyHistoryList,
               child: movementsAsync.when(
                 loading: () => const Center(
                     child: CircularProgressIndicator(
