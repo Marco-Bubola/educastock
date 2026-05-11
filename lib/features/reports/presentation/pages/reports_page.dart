@@ -22,6 +22,9 @@ import '../../../ml/presentation/widgets/risk_widgets.dart';
 import '../controllers/reports_provider.dart';
 import '../../../stock/domain/entities/stock_movement.dart';
 
+final _keyTrendChart = GlobalKey();
+final _keyExpiryChart = GlobalKey();
+final _keyCategoryChart = GlobalKey();
 
 Future<void> _exportCsv({
   required BuildContext context,
@@ -128,6 +131,53 @@ class ReportsPage extends ConsumerWidget {
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyTrendChart,
+                  title: 'Tendência Mensal de Entrada',
+                  description: 'Gráfico de linha mostrando a evolução de entradas de itens no estoque nos últimos 6 meses. Identifique padrões sazonais e planeje compras futuras.',
+                  icon: Icons.show_chart_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Toque nos pontos do gráfico para ver o valor exato',
+                    'Picos indicam meses com grande volume de doações',
+                    'Vales indicam meses com baixa entrada — alerte doadores!',
+                    'Use para planejar campanhas de doação no período certo',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyExpiryChart,
+                  title: 'Distribuição por Prazo de Validade',
+                  description: 'Gráfico de barras mostrando quantos lotes estão em cada faixa de vencimento. Priorize a distribuição dos itens nas barras vermelha e laranja.',
+                  icon: Icons.bar_chart_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🔴 Vermelho = vencidos — descarte imediato',
+                    '🟠 Laranja = vence em até 7 dias — distribua urgente!',
+                    '🟡 Amarelo = vence em até 30 dias — atenção',
+                    '🟢 Verde = prazo seguro (>30 dias)',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyCategoryChart,
+                  title: 'Distribuição por Origem',
+                  description: 'Gráfico de pizza mostrando a proporção de lotes por origem (doação, compra, parceiro, transferência). Entenda de onde vêm os recursos do estoque.',
+                  icon: Icons.pie_chart_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Toque em cada fatia para ver o percentual exato',
+                    'Doações tendem a ser sazonais — planeje com antecedência',
+                    'Use para justificar origens de recursos em relatórios oficiais',
+                    'Exportar PDF gera um relatório completo para prestação de contas',
+                  ],
+                ),
+              ],
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.picture_as_pdf_outlined),
             tooltip: 'Exportar PDF',
@@ -281,8 +331,11 @@ class ReportsPage extends ConsumerWidget {
                   color: AppColors.brandPrimary600,
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                _MonthlyTrendChart(
-                    monthTrend: monthTrend, isDark: isDark, cs: cs),
+                KeyedSubtree(
+                  key: _keyTrendChart,
+                  child: _MonthlyTrendChart(
+                      monthTrend: monthTrend, isDark: isDark, cs: cs),
+                ),
                 const _ChartNote(
                   text: 'Soma total de itens cadastrados em cada mês. Toque nos pontos para ver o valor exato.',
                 ),
@@ -296,8 +349,11 @@ class ReportsPage extends ConsumerWidget {
                   color: AppColors.warning600,
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                _ExpiryBarChart(
-                    buckets: expiryBuckets, isDark: isDark, cs: cs),
+                KeyedSubtree(
+                  key: _keyExpiryChart,
+                  child: _ExpiryBarChart(
+                      buckets: expiryBuckets, isDark: isDark, cs: cs),
+                ),
                 const _ChartNote(
                   text: 'Vermelho = vencidos ou críticos (≤7d). Laranja = atenção (8–30d). Verde = seguros (>30d). Sem val. = itens sem data de vencimento.',
                 ),
@@ -312,11 +368,14 @@ class ReportsPage extends ConsumerWidget {
                     color: AppColors.secondaryBlue600,
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  _CategoryPieChart(
-                    catCount: originCount,
-                    labelMap: originLabels,
-                    isDark: isDark,
-                    cs: cs,
+                  KeyedSubtree(
+                    key: _keyCategoryChart,
+                    child: _CategoryPieChart(
+                      catCount: originCount,
+                      labelMap: originLabels,
+                      isDark: isDark,
+                      cs: cs,
+                    ),
                   ),
                   const _ChartNote(
                     text: 'Toque em cada fatia para ver o percentual. Ajuda a entender quais são as principais fontes de entrada no estoque.',
