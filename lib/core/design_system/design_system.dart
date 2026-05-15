@@ -15,6 +15,7 @@ export 'components/casa_loading_skeleton.dart';
 export 'components/casa_dialog.dart';
 export 'components/casa_search_bar.dart';
 export 'components/casa_fab_scan.dart';
+export 'components/casa_help_modal.dart';
 export 'components/modern_profile_app_bar.dart';
 export 'components/expiry_ocr_button.dart';
 export 'components/casa_tutorial.dart';
