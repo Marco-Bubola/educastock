@@ -1,10 +1,13 @@
 import * as admin from 'firebase-admin';
-import {onDocumentCreated, onDocumentWritten} from 'firebase-functions/v2/firestore';
-import {onSchedule} from 'firebase-functions/v2/scheduler';
+import express, {Request, Response} from 'express';
 
 admin.initializeApp();
 
 const db = admin.firestore();
+const app = express();
+app.use(express.json());
+
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 async function sendPushForAlert(params: {
   title: string;
@@ -23,10 +26,7 @@ async function sendPushForAlert(params: {
 
   await admin.messaging().sendEachForMulticast({
     tokens,
-    notification: {
-      title: params.title,
-      body: params.body,
-    },
+    notification: {title: params.title, body: params.body},
     data: {
       route: 'alerts',
       type: params.type,
@@ -36,13 +36,56 @@ async function sendPushForAlert(params: {
   });
 }
 
-export const generateExpiryAlerts = onSchedule(
-  {
-    schedule: 'every day 07:00',
-    timeZone: 'America/Sao_Paulo',
-    region: 'southamerica-east1',
-  },
-  async () => {
+/**
+ * Converte um campo no formato REST do Firestore para valor JS nativo.
+ * Eventarc envia o documento neste formato (ex: { "stringValue": "foo" }).
+ */
+function firestoreFieldToValue(field: Record<string, unknown>): unknown {
+  if ('stringValue' in field) return field.stringValue;
+  if ('integerValue' in field) return Number(field.integerValue);
+  if ('doubleValue' in field) return field.doubleValue;
+  if ('booleanValue' in field) return field.booleanValue;
+  if ('nullValue' in field) return null;
+  if ('timestampValue' in field) return field.timestampValue;
+  if ('arrayValue' in field) {
+    const arr = (field.arrayValue as {values?: Record<string, unknown>[]}).values ?? [];
+    return arr.map(firestoreFieldToValue);
+  }
+  if ('mapValue' in field) {
+    const mapFields =
+      (field.mapValue as {fields?: Record<string, Record<string, unknown>>}).fields ?? {};
+    return firestoreDocToObject(mapFields);
+  }
+  return null;
+}
+
+function firestoreDocToObject(
+  fields: Record<string, Record<string, unknown>>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(fields)) {
+    result[key] = firestoreFieldToValue(val);
+  }
+  return result;
+}
+
+/** Extrai collectionId e docId a partir do resource name do Firestore.
+ *  Formato: projects/{proj}/databases/{db}/documents/{collection}/{docId}
+ */
+function parseDocumentName(name: string): {collectionId: string; docId: string} {
+  const segment = name.split('/documents/')[1] ?? '';
+  const parts = segment.split('/');
+  return {collectionId: parts[0] ?? '', docId: parts[1] ?? ''};
+}
+
+// ── health check ──────────────────────────────────────────────────────────────
+
+app.get('/', (_req, res) => res.send('OK'));
+
+// ── POST /generate-expiry-alerts  (chamado pelo Cloud Scheduler) ──────────────
+
+app.post('/generate-expiry-alerts', async (_req: Request, res: Response) => {
+  try {
     const settingsDoc = await db.collection('settings').doc('alerts').get();
     const criticalDays = (settingsDoc.data()?.criticalDays as number | undefined) ?? 7;
     const warningDays = (settingsDoc.data()?.warningDays as number | undefined) ?? 30;
@@ -70,8 +113,8 @@ export const generateExpiryAlerts = onSchedule(
 
       const daysToExpiry = Math.ceil((expiry.getTime() - today.getTime()) / 86400000);
       const severity = daysToExpiry <= criticalDays ? 'critical' : 'warning';
-
       const alertId = `${doc.id}_${severity}`;
+
       writes.push(
         db.collection('alerts').doc(alertId).set(
           {
@@ -90,18 +133,23 @@ export const generateExpiryAlerts = onSchedule(
     }
 
     await Promise.all(writes);
-  },
-);
+    res.json({success: true, processed: writes.length});
+  } catch (err) {
+    console.error('generateExpiryAlerts error', err);
+    res.status(500).json({error: String(err)});
+  }
+});
 
-export const generateLowStockAlerts = onSchedule(
-  {
-    schedule: 'every day 07:10',
-    timeZone: 'America/Sao_Paulo',
-    region: 'southamerica-east1',
-  },
-  async () => {
+// ── POST /generate-low-stock-alerts  (chamado pelo Cloud Scheduler) ───────────
+
+app.post('/generate-low-stock-alerts', async (_req: Request, res: Response) => {
+  try {
     const productsSnap = await db.collection('products').where('isActive', '==', true).get();
-    const batchesSnap = await db.collection('batches').where('status', '==', 'disponivel').where('quantity', '>', 0).get();
+    const batchesSnap = await db
+      .collection('batches')
+      .where('status', '==', 'disponivel')
+      .where('quantity', '>', 0)
+      .get();
 
     const stockByProduct = new Map<string, number>();
     for (const batch of batchesSnap.docs) {
@@ -138,23 +186,38 @@ export const generateLowStockAlerts = onSchedule(
     }
 
     await Promise.all(writes);
-  },
-);
+    res.json({success: true, processed: writes.length});
+  } catch (err) {
+    console.error('generateLowStockAlerts error', err);
+    res.status(500).json({error: String(err)});
+  }
+});
 
-export const auditSensitiveChanges = onDocumentWritten(
-  {
-    document: '{collectionId}/{docId}',
-    region: 'southamerica-east1',
-  },
-  async (event) => {
-    const collectionId = event.params.collectionId as string;
-    const docId = event.params.docId as string;
+// ── POST /audit-sensitive-changes  (chamado pelo Eventarc — document.written) ─
+
+app.post('/audit-sensitive-changes', async (req: Request, res: Response) => {
+  try {
+    // Eventarc envia DocumentEventData: { value, oldValue, updateMask }
+    const eventData = req.body as {
+      value?: {name?: string; fields?: Record<string, Record<string, unknown>>};
+      oldValue?: {name?: string; fields?: Record<string, Record<string, unknown>>};
+    };
+
+    const docName = eventData.value?.name ?? eventData.oldValue?.name ?? '';
+    const {collectionId, docId} = parseDocumentName(docName);
 
     const watched = new Set(['products', 'batches', 'users', 'settings']);
-    if (!watched.has(collectionId)) return;
+    if (!watched.has(collectionId)) {
+      res.json({skipped: true});
+      return;
+    }
 
-    const before = event.data?.before?.data() ?? null;
-    const after = event.data?.after?.data() ?? null;
+    const before = eventData.oldValue?.fields
+      ? firestoreDocToObject(eventData.oldValue.fields)
+      : null;
+    const after = eventData.value?.fields
+      ? firestoreDocToObject(eventData.value.fields)
+      : null;
 
     await db.collection('audit_logs').add({
       collection: collectionId,
@@ -162,22 +225,36 @@ export const auditSensitiveChanges = onDocumentWritten(
       action: before == null ? 'create' : after == null ? 'delete' : 'update',
       before,
       after,
-      performedBy: 'cloud_function',
-      performedByName: 'Cloud Function',
+      performedBy: 'cloud_run',
+      performedByName: 'Cloud Run',
       performedAt: new Date().toISOString(),
     });
-  },
-);
 
-export const notifyOnAlertCreated = onDocumentCreated(
-  {
-    document: 'alerts/{alertId}',
-    region: 'southamerica-east1',
-  },
-  async (event) => {
-    const alertId = event.params.alertId as string;
-    const data = event.data?.data();
-    if (!data) return;
+    res.json({success: true});
+  } catch (err) {
+    console.error('auditSensitiveChanges error', err);
+    res.status(500).json({error: String(err)});
+  }
+});
+
+// ── POST /notify-on-alert-created  (chamado pelo Eventarc — document.created) ─
+
+app.post('/notify-on-alert-created', async (req: Request, res: Response) => {
+  try {
+    const eventData = req.body as {
+      value?: {name?: string; fields?: Record<string, Record<string, unknown>>};
+    };
+
+    const docName = eventData.value?.name ?? '';
+    const alertId = docName.split('/').pop() ?? '';
+    const data = eventData.value?.fields
+      ? firestoreDocToObject(eventData.value.fields)
+      : null;
+
+    if (!data) {
+      res.json({skipped: true});
+      return;
+    }
 
     const type = (data.type as 'expiry' | 'low_stock' | undefined) ?? 'expiry';
     const severity = (data.severity as string | undefined) ?? 'warning';
@@ -192,17 +269,26 @@ export const notifyOnAlertCreated = onDocumentCreated(
         severity,
         alertId,
       });
-      return;
+    } else {
+      const currentStock = (data.currentStock as number | undefined) ?? 0;
+      const minimumStock = (data.minimumStock as number | undefined) ?? 0;
+      await sendPushForAlert({
+        title: 'Estoque baixo',
+        body: `${productName}: ${currentStock} em estoque (mínimo ${minimumStock}).`,
+        type: 'low_stock',
+        severity,
+        alertId,
+      });
     }
 
-    const currentStock = (data.currentStock as number | undefined) ?? 0;
-    const minimumStock = (data.minimumStock as number | undefined) ?? 0;
-    await sendPushForAlert({
-      title: 'Estoque baixo',
-      body: `${productName}: ${currentStock} em estoque (mínimo ${minimumStock}).`,
-      type: 'low_stock',
-      severity,
-      alertId,
-    });
-  },
-);
+    res.json({success: true});
+  } catch (err) {
+    console.error('notifyOnAlertCreated error', err);
+    res.status(500).json({error: String(err)});
+  }
+});
+
+// ── start ─────────────────────────────────────────────────────────────────────
+
+const PORT = process.env.PORT ?? 8080;
+app.listen(PORT, () => console.log(`educastock-functions listening on port ${PORT}`));
