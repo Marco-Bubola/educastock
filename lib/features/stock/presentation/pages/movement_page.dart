@@ -40,6 +40,9 @@ class _MovementPageState extends ConsumerState<MovementPage> {
   bool _isLoading = false;
   final _keyConfirmFab = GlobalKey();
   final _keySearchBar = GlobalKey();
+  final _keyModeTabs = GlobalKey();
+  final _keyProductGrid = GlobalKey();
+  final _keyRecipeGrid = GlobalKey();
 
   static const _reasonLabels = {
     'uso': 'Uso/Distribuição',
@@ -314,13 +317,13 @@ class _MovementPageState extends ConsumerState<MovementPage> {
         actions: [
           buildHelpButton(
             context: context,
-            onPressed: () => showCasaTutorial(
-              context: context,
-              steps: [
+            onPressed: () {
+              final steps = <TutorialStep>[
                 TutorialStep(
                   key: _keySearchBar,
                   title: 'Buscar Produto para Saída',
-                  description: 'Digite o nome do produto ou receita que deseja distribuir. O sistema mostrará os itens disponíveis em estoque com suas quantidades e validades.',
+                  description:
+                      'Digite o nome do produto ou receita que deseja distribuir. O sistema mostrará os itens disponíveis em estoque com suas quantidades e validades.',
                   icon: Icons.search_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
@@ -331,20 +334,70 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                   ],
                 ),
                 TutorialStep(
-                  key: _keyConfirmFab,
-                  title: 'Confirmar Distribuição',
-                  description: 'Após selecionar as quantidades de cada produto, toque aqui para confirmar a saída. O sistema registra automaticamente quem distribuiu, quando e para qual finalidade.',
-                  icon: Icons.send_rounded,
-                  align: ContentAlign.top,
+                  key: _keyModeTabs,
+                  title: 'Escolha o tipo de saída',
+                  description:
+                      'Use essas abas para alternar entre produto avulso e receita. Em receitas, você seleciona um modelo pronto e o sistema distribui todos os itens da receita.',
+                  icon: Icons.swap_horiz_rounded,
+                  align: ContentAlign.bottom,
                   hints: const [
-                    'Revise os itens e quantidades antes de confirmar',
-                    'A saída deduz automaticamente do estoque disponível',
-                    'O histórico de saídas fica registrado em "Histórico"',
-                    'Não é possível desfazer uma saída confirmada',
+                    'Produto Avulso: selecione itens individualmente',
+                    'Receita Ativa: escolhe um kit completo de distribuição',
+                    'A aba selecionada fica destacada em azul',
                   ],
                 ),
-              ],
-            ),
+                if (_mode == _OutputMode.products)
+                  TutorialStep(
+                    key: _keyProductGrid,
+                    title: 'Selecionar produtos e quantidades',
+                    description:
+                        'Cada card mostra o produto, validade e a quantidade disponível. Use os botões + e - para ajustar a quantidade que será distribuída.',
+                    icon: Icons.inventory_2_rounded,
+                    align: ContentAlign.top,
+                    hints: const [
+                      '🔴 Vermelho: produto vencido — não distribuir',
+                      '🟡 Amarelo: vence em até 30 dias — prioridade',
+                      '🟢 Verde: validade ok — distribuição normal',
+                      'A quantidade escolhida aparece no canto do card',
+                    ],
+                  )
+                else
+                  TutorialStep(
+                    key: _keyRecipeGrid,
+                    title: 'Selecionar uma receita ativa',
+                    description:
+                        'Escolha um modelo de distribuição pronto. Ao selecionar, o sistema calcula automaticamente todas as quantidades necessárias.',
+                    icon: Icons.menu_book_rounded,
+                    align: ContentAlign.top,
+                    hints: const [
+                      'Toque no card para selecionar a receita',
+                      'Confira a descrição e os ingredientes',
+                      'Você pode voltar para Produto Avulso a qualquer momento',
+                    ],
+                  ),
+                if (_mode == _OutputMode.products ||
+                    (_mode == _OutputMode.recipes &&
+                        _selectedRecipeId != null))
+                  TutorialStep(
+                    key: _keyConfirmFab,
+                    title: 'Confirmar Distribuição',
+                    description:
+                        'Após selecionar as quantidades (ou escolher uma receita ativa), toque aqui para confirmar a saída. O sistema registra automaticamente quem distribuiu, quando e para qual finalidade.',
+                    icon: Icons.send_rounded,
+                    align: ContentAlign.top,
+                    hints: const [
+                      'Revise os itens e quantidades antes de confirmar',
+                      'A saída deduz automaticamente do estoque disponível',
+                      'O histórico de saídas fica registrado em "Histórico"',
+                      'Não é possível desfazer uma saída confirmada',
+                    ],
+                  ),
+              ];
+              showCasaTutorial(
+                context: context,
+                steps: steps,
+              );
+            },
           ),
         ],
       ),
@@ -359,15 +412,18 @@ class _MovementPageState extends ConsumerState<MovementPage> {
               ),
             )
           : recipesAsync.valueOrNull?.any((r) => r.id == _selectedRecipeId) == true
-              ? _ConfirmFab(
-                  isLoading: _isLoading,
-                  label: 'Executar Receita',
-                  icon: Icons.play_arrow_rounded,
-                  onPressed: () {
-                    final recipe = recipesAsync.valueOrNull!
-                        .firstWhere((r) => r.id == _selectedRecipeId);
-                    _submitRecipe(recipe);
-                  },
+              ? KeyedSubtree(
+                  key: _keyConfirmFab,
+                  child: _ConfirmFab(
+                    isLoading: _isLoading,
+                    label: 'Executar Receita',
+                    icon: Icons.play_arrow_rounded,
+                    onPressed: () {
+                      final recipe = recipesAsync.valueOrNull!
+                          .firstWhere((r) => r.id == _selectedRecipeId);
+                      _submitRecipe(recipe);
+                    },
+                  ),
                 )
               : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -393,6 +449,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                 children: [
                   // ─── Tab selector moderno ─────────────────────────
                   Container(
+                    key: _keyModeTabs,
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surfaceContainer,
@@ -508,58 +565,61 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                     ),
                   const SizedBox(height: AppSpacing.sm),
                   if (_mode == _OutputMode.products) ...[
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: filteredProducts.length,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 0.72,
+                    KeyedSubtree(
+                      key: _keyProductGrid,
+                      child: GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: filteredProducts.length,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 0.72,
+                        ),
+                        itemBuilder: (_, i) {
+                          final p = filteredProducts[i];
+                          final available = _availableForProduct(p.id, batches);
+                          final qty = _selectedQtyByProduct[p.id] ?? 0;
+                          final isDark = Theme.of(context).brightness == Brightness.dark;
+
+                          final nearExpiry = batches.any((b) =>
+                              b.productId == p.id &&
+                              b.status == BatchStatus.disponivel &&
+                              b.expiryDate != null &&
+                              b.expiryDate!.difference(DateTime.now()).inDays <= 30);
+                          final expiredBatch = batches.any((b) =>
+                              b.productId == p.id &&
+                              b.status == BatchStatus.disponivel &&
+                              b.expiryDate != null &&
+                              b.expiryDate!.isBefore(DateTime.now()));
+
+                          return _ProductOutputCard(
+                            product: p,
+                            available: available,
+                            qty: qty,
+                            isDark: isDark,
+                            index: i,
+                            nearExpiry: nearExpiry,
+                            expiredBatch: expiredBatch,
+                            onDecrement: qty > 0
+                                ? () => setState(() {
+                                      final next = qty - 1;
+                                      if (next <= 0) {
+                                        _selectedQtyByProduct.remove(p.id);
+                                      } else {
+                                        _selectedQtyByProduct[p.id] = next;
+                                      }
+                                    })
+                                : null,
+                            onIncrement: available > qty
+                                ? () => setState(
+                                      () => _selectedQtyByProduct[p.id] = qty + 1,
+                                    )
+                                : null,
+                          );
+                        },
                       ),
-                      itemBuilder: (_, i) {
-                        final p = filteredProducts[i];
-                        final available = _availableForProduct(p.id, batches);
-                        final qty = _selectedQtyByProduct[p.id] ?? 0;
-                        final isDark = Theme.of(context).brightness == Brightness.dark;
-
-                        final nearExpiry = batches.any((b) =>
-                            b.productId == p.id &&
-                            b.status == BatchStatus.disponivel &&
-                            b.expiryDate != null &&
-                            b.expiryDate!.difference(DateTime.now()).inDays <= 30);
-                        final expiredBatch = batches.any((b) =>
-                            b.productId == p.id &&
-                            b.status == BatchStatus.disponivel &&
-                            b.expiryDate != null &&
-                            b.expiryDate!.isBefore(DateTime.now()));
-
-                        return _ProductOutputCard(
-                          product: p,
-                          available: available,
-                          qty: qty,
-                          isDark: isDark,
-                          index: i,
-                          nearExpiry: nearExpiry,
-                          expiredBatch: expiredBatch,
-                          onDecrement: qty > 0
-                              ? () => setState(() {
-                                    final next = qty - 1;
-                                    if (next <= 0) {
-                                      _selectedQtyByProduct.remove(p.id);
-                                    } else {
-                                      _selectedQtyByProduct[p.id] = next;
-                                    }
-                                  })
-                              : null,
-                          onIncrement: available > qty
-                              ? () => setState(
-                                    () => _selectedQtyByProduct[p.id] = qty + 1,
-                                  )
-                              : null,
-                        );
-                      },
                     ),
                   ] else ...[
                     recipesAsync.when(
@@ -580,77 +640,80 @@ class _MovementPageState extends ConsumerState<MovementPage> {
 
                         return Column(
                           children: [
-                            GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: filtered.length,
-                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: width >= 700 ? 4 : 2,
-                                mainAxisSpacing: AppSpacing.sm,
-                                crossAxisSpacing: AppSpacing.sm,
-                                childAspectRatio: 1.1,
-                              ),
-                              itemBuilder: (_, i) {
-                                final r = filtered[i];
-                                final selected = _selectedRecipeId == r.id;
-                                return InkWell(
-                                  onTap: () => setState(() => _selectedRecipeId = r.id),
-                                  borderRadius: BorderRadius.circular(AppRadius.card),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(AppSpacing.md),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context).colorScheme.surfaceContainerLow,
-                                      borderRadius: BorderRadius.circular(AppRadius.card),
-                                      border: Border.all(
-                                        color: selected
-                                            ? AppColors.brandPrimary600
-                                            : Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                            KeyedSubtree(
+                              key: _keyRecipeGrid,
+                              child: GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: filtered.length,
+                                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: width >= 700 ? 4 : 2,
+                                  mainAxisSpacing: AppSpacing.sm,
+                                  crossAxisSpacing: AppSpacing.sm,
+                                  childAspectRatio: 1.1,
+                                ),
+                                itemBuilder: (_, i) {
+                                  final r = filtered[i];
+                                  final selected = _selectedRecipeId == r.id;
+                                  return InkWell(
+                                    onTap: () => setState(() => _selectedRecipeId = r.id),
+                                    borderRadius: BorderRadius.circular(AppRadius.card),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(AppSpacing.md),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.surfaceContainerLow,
+                                        borderRadius: BorderRadius.circular(AppRadius.card),
+                                        border: Border.all(
+                                          color: selected
+                                              ? AppColors.brandPrimary600
+                                              : Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                                        ),
                                       ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                r.name,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: AppTypography.labelLarge.copyWith(
-                                                  color: onSurface,
-                                                  fontWeight: FontWeight.w700,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  r.name,
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: AppTypography.labelLarge.copyWith(
+                                                    color: onSurface,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                            if (selected)
-                                              const Icon(Icons.check_circle_rounded,
-                                                  color: AppColors.brandPrimary600, size: 18),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          '${r.items.length} itens',
-                                          style: AppTypography.bodySmall.copyWith(
-                                            color: onSurfaceVariant,
+                                              if (selected)
+                                                const Icon(Icons.check_circle_rounded,
+                                                    color: AppColors.brandPrimary600, size: 18),
+                                            ],
                                           ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Expanded(
-                                          child: Text(
-                                            r.description ?? 'Sem descrição',
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            '${r.items.length} itens',
                                             style: AppTypography.bodySmall.copyWith(
                                               color: onSurfaceVariant,
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(height: 6),
+                                          Expanded(
+                                            child: Text(
+                                              r.description ?? 'Sem descrição',
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: AppTypography.bodySmall.copyWith(
+                                                color: onSurfaceVariant,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
                           ],
                         );
