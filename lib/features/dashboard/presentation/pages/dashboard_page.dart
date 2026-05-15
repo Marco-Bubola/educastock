@@ -14,8 +14,9 @@ final _keyDashQuickActions = GlobalKey();
 final _keyDashExpiring = GlobalKey();
 final _keyDashHeader = GlobalKey();
 final _keyDashMlRisk = GlobalKey();
+final _keyDashKpis = GlobalKey();
 
-class DashboardPageextends ConsumerWidget {
+class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
 
   @override
@@ -41,6 +42,7 @@ class DashboardPageextends ConsumerWidget {
               allBatches: allBatches,
               expiringCritical: expiringCritical,
               expiringWarning: expiringWarning,
+              kpiKey: _keyDashKpis,
               onSettingsTap: () => context.push(AppRoutes.settings),
               onLotesTap: () => context.go(AppRoutes.productList),
               onAlertsTap: () => context.go(AppRoutes.alerts),
@@ -48,8 +50,8 @@ class DashboardPageextends ConsumerWidget {
                 context: context,
                 steps: [
                   TutorialStep(
-                    key: _keyDashHeader,
-                    title: 'Visão Geral do Estoque',
+                    key: _keyDashKpis,
+                    title: 'Indicadores do Estoque',
                     description: 'Os três cards coloridos mostram os indicadores mais importantes: total de lotes, itens que vencem em 7 dias (crítico) e itens com atenção em 30 dias.',
                     icon: Icons.dashboard_rounded,
                     align: ContentAlign.bottom,
@@ -65,6 +67,7 @@ class DashboardPageextends ConsumerWidget {
                     description: 'Toque nos cartões coloridos para acessar rapidamente as principais funções: Escanear, Estoque, Saída, Receitas, Alertas e Localizações.',
                     icon: Icons.grid_view_rounded,
                     align: ContentAlign.bottom,
+                    verticalOffset: -18,
                     hints: const [
                       'Escanear: registre entradas pelo código de barras',
                       'Saída: distribua produtos manualmente',
@@ -77,7 +80,7 @@ class DashboardPageextends ConsumerWidget {
                     title: 'Análise de Risco por IA',
                     description: 'O sistema usa Inteligência Artificial para prever quais produtos têm maior risco de vencer sem ser distribuídos, baseado no histórico de saídas e validade.',
                     icon: Icons.psychology_rounded,
-                    align: ContentAlign.bottom,
+                    align: ContentAlign.top,
                     hints: const [
                       '🔴 Alto risco: distribua com urgência',
                       '🟡 Médio risco: monitore de perto',
@@ -253,6 +256,7 @@ class _DashboardHeader extends ConsumerWidget {
   final AsyncValue<List<dynamic>> allBatches;
   final AsyncValue<List<dynamic>> expiringCritical;
   final AsyncValue<List<dynamic>> expiringWarning;
+  final GlobalKey kpiKey;
   final VoidCallback onSettingsTap;
   final VoidCallback onLotesTap;
   final VoidCallback onAlertsTap;
@@ -263,6 +267,7 @@ class _DashboardHeader extends ConsumerWidget {
     required this.allBatches,
     required this.expiringCritical,
     required this.expiringWarning,
+    required this.kpiKey,
     required this.onSettingsTap,
     required this.onLotesTap,
     required this.onAlertsTap,
@@ -287,6 +292,8 @@ class _DashboardHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final width = MediaQuery.of(context).size.width;
+    final isCompact = width < 360;
     final alertCount = ref.watch(allAvailableBatchesProvider).when(
           data: (list) =>
               list.where((b) => !b.noExpiry && (b.isExpired || b.daysToExpiry <= 30)).length,
@@ -307,6 +314,8 @@ class _DashboardHeader extends ConsumerWidget {
         ? 'U'
         : normalizedName.substring(0, 1).toUpperCase();
 
+    final avatarSize = isCompact ? 38.0 : 44.0;
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -324,7 +333,7 @@ class _DashboardHeader extends ConsumerWidget {
             children: [
               // ── Top row: saudação + avatar ────────────────────────────
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Column(
@@ -351,44 +360,49 @@ class _DashboardHeader extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  // ── Botões de ação: sino + dark/light ─────────────
-                  IconButton(
-                    icon: const Icon(Icons.help_outline_rounded, color: Colors.white),
-                    tooltip: 'Dicas desta página',
-                    onPressed: onHelpTap,
-                  ),
-                  CasaAlertsBellButton(
-                    alertCount: alertCount,
-                    onDarkBg: true,
-                  ),
-                  const SizedBox(width: 6),
-                  const CasaThemeToggleButton(),
-                  const SizedBox(width: 8),
-                  // Avatar + settings
-                  GestureDetector(
-                    onTap: onSettingsTap,
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.3),
-                          width: 1.5,
-                        ),
+                  const SizedBox(width: 10),
+                  // ── Botões de ação: dicas + sino + dark/light + avatar ─────────────
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      buildHelpButton(
+                        context: context,
+                        onPressed: onHelpTap,
                       ),
-                      child: Center(
-                        child: Text(
-                          initial,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
+                      CasaAlertsBellButton(
+                        alertCount: alertCount,
+                        onDarkBg: true,
+                      ),
+                      const CasaThemeToggleButton(),
+                      // Avatar + settings
+                      GestureDetector(
+                        onTap: onSettingsTap,
+                        child: Container(
+                          width: avatarSize,
+                          height: avatarSize,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.14),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              initial,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: isCompact ? 16 : 18,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -412,49 +426,52 @@ class _DashboardHeader extends ConsumerWidget {
               const SizedBox(height: 18),
 
               // ── KPI cards ─────────────────────────────────────────────
-              Row(
-                children: [
-                  Expanded(
-                    child: _HeaderKpiCard(
-                      icon: Icons.inventory_2_rounded,
-,                       value: lotesCount,
-                      label: 'Lotes',
-                      gradientColors: const [
-                        Color(0xFF1A56C4),
-                        Color(0xFF2F74D0)
-                      ],
-                      onTap: onLotesTap,
+              KeyedSubtree(
+                key: kpiKey,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _HeaderKpiCard(
+                        icon: Icons.inventory_2_rounded,
+                        value: lotesCount,
+                        label: 'Lotes',
+                        gradientColors: const [
+                          Color(0xFF1A56C4),
+                          Color(0xFF2F74D0)
+                        ],
+                        onTap: onLotesTap,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _HeaderKpiCard(
-                      icon: Icons.warning_rounded,
-                      value: critCount,
-                      label: 'Vencem 7d',
-                      gradientColors: const [
-                        Color(0xFFC53030),
-                        Color(0xFFE53E3E)
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _HeaderKpiCard(
+                        icon: Icons.warning_rounded,
+                        value: critCount,
+                        label: 'Vencem 7d',
+                        gradientColors: const [
+                          Color(0xFFC53030),
+                          Color(0xFFE53E3E)
+                        ],
+                        badge: hasCritical ? critCount : null,
+                        onTap: onAlertsTap,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _HeaderKpiCard(
+                        icon: Icons.schedule_rounded,
+                        value: warnCount,
+                        label: 'Atenção 30d',
+                        gradientColors: const [
+                          Color(0xFFB7791F),
+                          Color(0xFFD69E2E)
                       ],
-                      badge: hasCritical ? critCount : null,
                       onTap: onAlertsTap,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _HeaderKpiCard(
-                      icon: Icons.schedule_rounded,
-                      value: warnCount,
-                      label: 'Atenção 30d',
-                      gradientColors: const [
-                        Color(0xFFB7791F),
-                        Color(0xFFD69E2E)
-                      ],
-                      onTap: onAlertsTap,
-                    ),
-                  ),
-                ],
-              ),
+                 ],
+               ),
+             ),
             ],
           ),
         ),
