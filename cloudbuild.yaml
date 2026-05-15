@@ -1,0 +1,13 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - -t
+      - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:$COMMIT_SHA
+      - -t
+      - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:latest
+      - functions
+
+images:
+  - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:$COMMIT_SHA
+  - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:latest
