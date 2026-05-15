@@ -22,6 +22,7 @@ class TutorialStep {
   final IconData icon;
   final ShapeLightFocus shape;
   final ContentAlign align;
+  final double verticalOffset;
   final double paddingFocus;
   /// Optional bullet-point hints shown below the main description
   final List<String> hints;
@@ -33,6 +34,7 @@ class TutorialStep {
     required this.icon,
     this.shape = ShapeLightFocus.RRect,
     this.align = ContentAlign.bottom,
+    this.verticalOffset = 0,
     this.paddingFocus = 8.0,
     this.hints = const [],
   });
@@ -45,6 +47,44 @@ void showCasaTutorial({
   VoidCallback? onSkip,
 }) {
   if (steps.isEmpty) return;
+
+  // Scroll to a step's target widget before showing it.
+  // Uses `alignmentPolicy: explicit` so it ALWAYS repositions to the top
+  // even if the element is already partially visible.
+  Future<void> scrollTo(int index) async {
+    if (index < 0 || index >= steps.length) return;
+    final ctx = steps[index].key.currentContext;
+    if (ctx == null) return;
+    try {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeInOut,
+        alignment: 0.05,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+      );
+      // Extra buffer so the scroll settles before coach mark repositions
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    } catch (_) {}
+  }
+
+  bool isTransitioning = false;
+
+  Future<void> handleNext(TutorialCoachMarkController ctrl, int nextIndex) async {
+    if (isTransitioning) return;
+    isTransitioning = true;
+    await scrollTo(nextIndex);
+    isTransitioning = false;
+    ctrl.next();
+  }
+
+  Future<void> handlePrevious(TutorialCoachMarkController ctrl, int prevIndex) async {
+    if (isTransitioning) return;
+    isTransitioning = true;
+    await scrollTo(prevIndex);
+    isTransitioning = false;
+    ctrl.previous();
+  }
 
   final targets = steps.asMap().entries.map((entry) {
     final i = entry.key;
@@ -63,16 +103,25 @@ void showCasaTutorial({
             type: MaterialType.transparency,
             child: Directionality(
               textDirection: TextDirection.ltr,
-              child: _TutorialCard(
-                step: step,
-                stepIndex: i,
-                totalSteps: steps.length,
-                onNext: () => controller.next(),
-                onPrevious: i > 0 ? () => controller.previous() : null,
-                onSkip: () {
-                  controller.skip();
-                  onSkip?.call();
-                },
+              child: Transform.translate(
+                offset: Offset(0, step.verticalOffset),
+                child: _TutorialCard(
+                  step: step,
+                  stepIndex: i,
+                  totalSteps: steps.length,
+                  onNext: () {
+                    handleNext(controller, i + 1);
+                  },
+                  onPrevious: i > 0
+                      ? () {
+                          handlePrevious(controller, i - 1);
+                        }
+                      : null,
+                  onSkip: () {
+                    controller.skip();
+                    onSkip?.call();
+                  },
+                ),
               ),
             ),
           ),
@@ -81,7 +130,7 @@ void showCasaTutorial({
     );
   }).toList();
 
-  TutorialCoachMark(
+  final coachMark = TutorialCoachMark(
     targets: targets,
     colorShadow: const Color(0xFF050D1A),
     opacityShadow: 0.90,
@@ -95,7 +144,10 @@ void showCasaTutorial({
       onSkip?.call();
       return true;
     },
-  ).show(context: context);
+  );
+
+  // Scroll to step 0 first, then show the tutorial
+  scrollTo(0).then((_) => coachMark.show(context: context));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,95 +336,95 @@ class _TutorialCard extends StatelessWidget {
               ),
 
               // ── Corpo ──────────────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'O que fazer',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        letterSpacing: 0.8,
-                        color: _kSkyBlue.withValues(alpha: 0.85),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    // Descrição principal
-                    Text(
-                      step.description,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: _kTextMid,
-                        height: 1.6,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-
-                    // ── Hints soltos, sem container ─────────────────────────
-                    if (step.hints.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        height: 1,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.transparent,
-                              _kSkyBlue.withValues(alpha: 0.25),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 260),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        'Dicas rápidas',
+                        'O que fazer',
                         style: TextStyle(
                           fontSize: 10.5,
-                          letterSpacing: 0.6,
+                          letterSpacing: 0.8,
                           color: _kSkyBlue.withValues(alpha: 0.85),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      ...step.hints.map(
-                        (h) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                margin: const EdgeInsets.only(top: 5, right: 8),
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: _kSkyBlue,
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  h,
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    color: _kTextMid,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                      const SizedBox(height: 6),
+                      Text(
+                        step.description,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _kTextMid,
+                          height: 1.5,
+                          fontWeight: FontWeight.w400,
                         ),
                       ),
+                      if (step.hints.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          height: 1,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.transparent,
+                                _kSkyBlue.withValues(alpha: 0.25),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Dicas rápidas',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            letterSpacing: 0.6,
+                            color: _kSkyBlue.withValues(alpha: 0.85),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        ...step.hints.map(
+                          (h) => Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  margin: const EdgeInsets.only(top: 5, right: 8),
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _kSkyBlue,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    h,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: _kTextMid,
+                                      height: 1.45,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
-
-              // ── Navegação ──────────────────────────────────────────────────
+                // ── Navegação ──────────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+
                 child: Row(
                   children: [
                     if (onPrevious != null)
@@ -442,7 +494,7 @@ class _NavBtn extends StatelessWidget {
                     color: _kSkyBlue.withValues(alpha: 0.25),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
-                  )
+                  ),
                 ]
               : [],
         ),
@@ -472,58 +524,4 @@ class _NavBtn extends StatelessWidget {
       ),
     );
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: help button for AppBar
-// ─────────────────────────────────────────────────────────────────────────────
-Widget buildHelpButton({
-  required BuildContext context,
-  required VoidCallback onPressed,
-}) {
-  return Padding(
-    padding: const EdgeInsets.only(right: 6),
-    child: Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(18),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1D5FA8), Color(0xFF38BDF8)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF38BDF8).withValues(alpha: 0.35),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.help_rounded, size: 16, color: Colors.white),
-              SizedBox(width: 6),
-              Text(
-                'Dicas',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
 }
