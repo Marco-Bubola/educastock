@@ -5,14 +5,14 @@ WORKDIR /app
 COPY package*.json tsconfig.json ./
 COPY src/ ./src/
 
-RUN npm ci && npm run build
+RUN npm install && npm run build
 
 # ── stage 2: imagem de produção ───────────────────────────────────────────────
 FROM node:20-slim
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 COPY --from=builder /app/lib ./lib
 
