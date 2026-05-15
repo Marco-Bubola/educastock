@@ -1,4 +1,5 @@
 steps:
+  # Build do backend (functions)
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - build
@@ -8,9 +9,21 @@ steps:
       - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:latest
       - functions
 
+  # Build do frontend (Flutter web)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - -t
+      - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:$COMMIT_SHA
+      - -t
+      - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:latest
+      - .
+
 images:
   - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:$COMMIT_SHA
   - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:latest
+  - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:$COMMIT_SHA
+  - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:latest
 
 options:
   logging: CLOUD_LOGGING_ONLY
