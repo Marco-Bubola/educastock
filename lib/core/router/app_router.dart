@@ -81,6 +81,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.register,
         builder: (_, __) => const RegisterPage(),
       ),
+      // Scanner e revisão de produto ficam fora do ShellRoute
+      // para não exibir a tabbar de navegação na câmera.
+      GoRoute(
+        path: AppRoutes.scanner,
+        builder: (_, __) => const ScannerPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.productReview,
+        builder: (_, state) {
+          final barcode = state.uri.queryParameters['barcode'] ?? '';
+          return ProductReviewPage(barcode: barcode);
+        },
+      ),
       ShellRoute(
         builder: (context, state, child) {
           return AppNavigationShell(
@@ -92,17 +105,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.dashboard,
             builder: (_, __) => const DashboardPage(),
-          ),
-          GoRoute(
-            path: AppRoutes.scanner,
-            builder: (_, __) => const ScannerPage(),
-          ),
-          GoRoute(
-            path: AppRoutes.productReview,
-            builder: (_, state) {
-              final barcode = state.uri.queryParameters['barcode'] ?? '';
-              return ProductReviewPage(barcode: barcode);
-            },
           ),
           GoRoute(
             path: AppRoutes.productList,
