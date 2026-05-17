@@ -18,6 +18,7 @@ As 4 rotas disponíveis após o deploy:
 | `POST /generate-low-stock-alerts` | Cloud Scheduler | 07:10 todos os dias |
 | `POST /audit-sensitive-changes` | Eventarc (Firestore) | A cada escrita em documents monitorados |
 | `POST /notify-on-alert-created` | Eventarc (Firestore) | A cada novo alerta criado |
+| `POST /send-weekly-report` | Cloud Scheduler | Conforme configurado pelo admin no app |
 
 ---
 
@@ -103,6 +104,12 @@ As 4 rotas disponíveis após o deploy:
    - **CPU:** `1`
    - **Tempo limite das solicitações:** `120 segundos`
    - **Instâncias mínimas:** `0`
+   - **Variáveis de ambiente** *(para envio de e-mail do relatório semanal)*:
+     - `SMTP_HOST` → ex: `smtp.gmail.com`
+     - `SMTP_PORT` → ex: `587`
+     - `SMTP_USER` → e-mail remetente (ex: `educastock@gmail.com`)
+     - `SMTP_PASS` → senha de app do Gmail (ou senha do SMTP)
+     - `SMTP_SENDER_NAME` → ex: `EducaStock`
    - **Instâncias máximas:** `5`
 7. Em **Segurança → Conta de serviço**, selecione `educastock-run`
 8. Clique em **Criar**
@@ -181,6 +188,15 @@ Repita os mesmos passos do Job 1, mudando apenas:
 - **Frequência:** `10 7 * * *`
 - **URL:** `https://SUA-URL-AQUI/generate-low-stock-alerts`
 
+### Job 3 — Relatório semanal por e-mail
+
+Repita os mesmos passos do Job 1, mudando apenas:
+- **Nome:** `send-weekly-report`
+- **Frequência:** `0 8 * * 1` *(toda segunda-feira às 08:00 — ajuste conforme a configuração do admin)*
+- **URL:** `https://SUA-URL-AQUI/send-weekly-report`
+
+> **Obs:** A frequência real é configurada pelo admin no app (Relatórios → Agendar relatório). O Scheduler deve ter uma frequência genérica; o endpoint verifica o Firestore e pula se não for o dia correto — ou configure o job exatamente no horário/dia que o admin escolheu.
+
 ---
 
 ## PARTE 8 — Criar os triggers do Eventarc
@@ -241,7 +257,7 @@ Quando fizer alterações no código:
 ```
 functions/
 ├── src/
-│   └── index.ts      ← servidor Express (4 rotas HTTP)
+│   └── index.ts      ← servidor Express (5 rotas HTTP)
 ├── Dockerfile        ← build multi-stage Node 20 (usado pelo Cloud Build)
 ├── .dockerignore
 ├── package.json      ← express + firebase-admin
