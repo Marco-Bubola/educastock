@@ -32,11 +32,17 @@ class AlertsConfig {
   final int criticalDays;
   final int warningDays;
   final bool expiryEnabled;
+  final bool silentModeEnabled;
+  final String? silentFrom; // "HH:mm"
+  final String? silentUntil; // "HH:mm"
 
   const AlertsConfig({
     required this.criticalDays,
     required this.warningDays,
     required this.expiryEnabled,
+    this.silentModeEnabled = false,
+    this.silentFrom,
+    this.silentUntil,
   });
 
   factory AlertsConfig.fromMap(Map<String, dynamic> map) {
@@ -46,6 +52,9 @@ class AlertsConfig {
       criticalDays: critical,
       warningDays: warning < critical ? critical + 1 : warning,
       expiryEnabled: map['expiryEnabled'] as bool? ?? true,
+      silentModeEnabled: map['silentModeEnabled'] as bool? ?? false,
+      silentFrom: map['silentFrom'] as String?,
+      silentUntil: map['silentUntil'] as String?,
     );
   }
 
@@ -53,7 +62,33 @@ class AlertsConfig {
         'criticalDays': criticalDays,
         'warningDays': warningDays,
         'expiryEnabled': expiryEnabled,
+        'silentModeEnabled': silentModeEnabled,
+        if (silentFrom != null) 'silentFrom': silentFrom,
+        if (silentUntil != null) 'silentUntil': silentUntil,
       };
+
+  /// Returns true if right now falls within the silent window.
+  bool get isSilentNow {
+    if (!silentModeEnabled || silentFrom == null || silentUntil == null) {
+      return false;
+    }
+    final now = DateTime.now();
+    final fromParts = silentFrom!.split(':');
+    final untilParts = silentUntil!.split(':');
+    if (fromParts.length < 2 || untilParts.length < 2) return false;
+    final fromMinutes =
+        int.parse(fromParts[0]) * 60 + int.parse(fromParts[1]);
+    final untilMinutes =
+        int.parse(untilParts[0]) * 60 + int.parse(untilParts[1]);
+    final nowMinutes = now.hour * 60 + now.minute;
+
+    // Handle overnight range (e.g. 22:00 → 07:00)
+    if (fromMinutes <= untilMinutes) {
+      return nowMinutes >= fromMinutes && nowMinutes < untilMinutes;
+    } else {
+      return nowMinutes >= fromMinutes || nowMinutes < untilMinutes;
+    }
+  }
 }
 
 class StockRulesConfig {
@@ -389,3 +424,84 @@ final stockRulesConfigNotifierProvider =
     AsyncNotifierProvider<StockRulesConfigNotifier, void>(
   StockRulesConfigNotifier.new,
 );
+
+// ─── Report Schedule Config ───────────────────────────────────────────────────
+
+class ReportScheduleConfig {
+  final bool enabled;
+  final String recipientEmail;
+  final int dayOfWeek; // 1=Monday … 7=Sunday
+  final String sendTime; // "HH:mm"
+
+  const ReportScheduleConfig({
+    required this.enabled,
+    required this.recipientEmail,
+    required this.dayOfWeek,
+    required this.sendTime,
+  });
+
+  factory ReportScheduleConfig.fromMap(Map<String, dynamic> map) {
+    return ReportScheduleConfig(
+      enabled: map['enabled'] as bool? ?? false,
+      recipientEmail: map['recipientEmail'] as String? ?? '',
+      dayOfWeek: (map['dayOfWeek'] as num?)?.toInt() ?? 1,
+      sendTime: map['sendTime'] as String? ?? '08:00',
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'enabled': enabled,
+        'recipientEmail': recipientEmail,
+        'dayOfWeek': dayOfWeek,
+        'sendTime': sendTime,
+      };
+}
+
+class ReportScheduleDatasource {
+  final FirebaseFirestore _db;
+
+  ReportScheduleDatasource({FirebaseFirestore? db})
+      : _db = db ?? FirebaseFirestore.instance;
+
+  DocumentReference<Map<String, dynamic>> get _doc =>
+      _db.collection('settings').doc('report_schedule');
+
+  Stream<ReportScheduleConfig> watchConfig() {
+    return _doc.snapshots().map((d) {
+      final data = d.data();
+      if (data == null) {
+        return const ReportScheduleConfig(
+            enabled: false, recipientEmail: '', dayOfWeek: 1, sendTime: '08:00');
+      }
+      return ReportScheduleConfig.fromMap(data);
+    });
+  }
+
+  Future<void> saveConfig(ReportScheduleConfig config) {
+    return _doc.set(config.toMap(), SetOptions(merge: true));
+  }
+}
+
+final reportScheduleDatasourceProvider = Provider<ReportScheduleDatasource>(
+  (_) => ReportScheduleDatasource(),
+);
+
+final reportScheduleConfigProvider = StreamProvider<ReportScheduleConfig>((ref) {
+  return ref.watch(reportScheduleDatasourceProvider).watchConfig();
+});
+
+class ReportScheduleNotifier extends AsyncNotifier<void> {
+  @override
+  Future<void> build() async {}
+
+  Future<void> save(ReportScheduleConfig config) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(reportScheduleDatasourceProvider).saveConfig(config);
+    });
+  }
+}
+
+final reportScheduleNotifierProvider =
+    AsyncNotifierProvider<ReportScheduleNotifier, void>(
+        ReportScheduleNotifier.new);
