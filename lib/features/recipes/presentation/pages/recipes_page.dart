@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../controllers/recipes_provider.dart';
 
 class RecipesPage extends ConsumerStatefulWidget {
@@ -391,34 +392,10 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
                                           child: GestureDetector(
                                             onTap: actionState.isLoading
                                                 ? null
-                                                : () async {
-                                                    try {
-                                                      await ref
-                                                          .read(recipesNotifierProvider
-                                                              .notifier)
-                                                          .executeRecipe(r);
-                                                      if (!context.mounted)
-                                                        return;
-                                                      showCasaSnackbar(
-                                                        context,
-                                                        message:
-                                                            'Receita executada com sucesso!',
-                                                        isSuccess: true,
-                                                      );
-                                                    } catch (e) {
-                                                      if (!context.mounted)
-                                                        return;
-                                                      showCasaSnackbar(
-                                                        context,
-                                                        message: e
-                                                            .toString()
-                                                            .replaceFirst(
-                                                                'Exception: ',
-                                                                ''),
-                                                        isError: true,
-                                                      );
-                                                    }
-                                                  },
+                                                : () => _showExecuteSheet(
+                                                    context,
+                                                    r,
+                                                    gradColors),
                                             child: Container(
                                               height: 44,
                                               decoration: BoxDecoration(
@@ -649,6 +626,245 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
       icon: const Icon(Icons.add_rounded),
       label: const Text('Nova receita',
           style: TextStyle(fontWeight: FontWeight.w700)),
+    );
+  }
+
+  void _showExecuteSheet(
+    BuildContext context,
+    dynamic recipe,
+    List<Color> gradColors,
+  ) {
+    final batches = ref.read(allAvailableBatchesProvider).valueOrNull ?? [];
+    // Group available stock by productId
+    final Map<String, int> available = {};
+    for (final b in batches) {
+      final pid = b.productId as String;
+      available[pid] = (available[pid] ?? 0) + (b.quantity as int);
+    }
+
+    final items = recipe.items as List;
+    final checks = items.map((item) {
+      final pid = item.productId as String;
+      final required = item.quantity as int;
+      final avail = available[pid] ?? 0;
+      return (
+        name: item.productName as String,
+        required: required,
+        available: avail,
+        ok: avail >= required,
+      );
+    }).toList();
+
+    final allOk = checks.every((c) => c.ok);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
+        final textPrimary =
+            isDark ? const Color(0xFFF9FAFB) : const Color(0xFF0F172A);
+        final textSub =
+            isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
+
+        return DraggableScrollableSheet(
+          initialChildSize: 0.55,
+          maxChildSize: 0.9,
+          minChildSize: 0.35,
+          expand: false,
+          builder: (_, sc) => Container(
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: textSub.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: gradColors),
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                        child: const Icon(Icons.checklist_rtl_rounded,
+                            color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(recipe.name as String,
+                                style: TextStyle(
+                                    color: textPrimary,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16)),
+                            Text(
+                              allOk
+                                  ? 'Estoque suficiente para executar'
+                                  : 'Estoque insuficiente em alguns itens',
+                              style: TextStyle(
+                                color: allOk
+                                    ? AppColors.success600
+                                    : AppColors.danger600,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Divider(color: textSub.withValues(alpha: 0.15)),
+                Expanded(
+                  child: ListView.separated(
+                    controller: sc,
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                    itemCount: checks.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: 8),
+                    itemBuilder: (_, i) {
+                      final c = checks[i];
+                      final color = c.ok
+                          ? AppColors.success600
+                          : AppColors.danger600;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: color.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              c.ok
+                                  ? Icons.check_circle_rounded
+                                  : Icons.cancel_rounded,
+                              color: color,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(c.name,
+                                      style: TextStyle(
+                                          color: textPrimary,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Necessário: ${c.required}  •  Disponível: ${c.available}',
+                                    style: TextStyle(
+                                        color: color,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: OutlinedButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: Icon(
+                            allOk
+                                ? Icons.play_arrow_rounded
+                                : Icons.warning_amber_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            allOk ? 'Executar' : 'Executar mesmo assim',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: allOk
+                                ? gradColors.first
+                                : AppColors.warning600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            try {
+                              await ref
+                                  .read(recipesNotifierProvider
+                                      .notifier)
+                                  .executeRecipe(recipe);
+                              if (!context.mounted) return;
+                              showCasaSnackbar(context,
+                                  message:
+                                      'Receita executada com sucesso!',
+                                  isSuccess: true);
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              showCasaSnackbar(context,
+                                  message: e
+                                      .toString()
+                                      .replaceFirst('Exception: ', ''),
+                                  isError: true);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
