@@ -62,6 +62,22 @@ class AlertsRemoteDatasource {
   Future<void> resolveAlert(String id) async {
     await _col.doc(id).update({'resolved': true});
   }
+
+  Future<void> createManualAlert({
+    required String productName,
+    required AlertLevel level,
+    required String message,
+  }) async {
+    await _col.add({
+      'productId': 'manual',
+      'productName': productName,
+      'batchId': null,
+      'level': level.name,
+      'message': message,
+      'createdAt': Timestamp.now(),
+      'resolved': false,
+    });
+  }
 }
 
 // ---------- Providers ----------
@@ -80,6 +96,18 @@ class AlertsNotifier extends AsyncNotifier<void> {
 
   Future<void> resolve(String alertId) async {
     await ref.read(alertsDatasourceProvider).resolveAlert(alertId);
+  }
+
+  Future<void> createManualAlert({
+    required String productName,
+    required AlertLevel level,
+    required String message,
+  }) async {
+    await ref.read(alertsDatasourceProvider).createManualAlert(
+          productName: productName,
+          level: level,
+          message: message,
+        );
   }
 
   Future<void> checkAlerts(int criticalDays, int warningDays) async {
