@@ -1,5 +1,7 @@
 # EducaStock 📦
 
+> Site de teste (temporario): https://web-929079196105.southamerica-east1.run.app
+
 Sistema de Gestão de Estoque para a ONG **Casa da Criança** — desenvolvido como Projeto Integrador do curso de **Desenvolvimento de Software Multiplataforma** da Fatec Itapira.
 
 > **Status do projeto:** ~78% concluído — V1.0 em desenvolvimento ativo
