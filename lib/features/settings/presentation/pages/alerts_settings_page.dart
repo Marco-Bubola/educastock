@@ -17,9 +17,49 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
   final _criticalCtrl = TextEditingController();
   final _warningCtrl = TextEditingController();
   bool _expiryEnabled = true;
+  bool _silentModeEnabled = false;
+  TimeOfDay _silentFrom = const TimeOfDay(hour: 22, minute: 0);
+  TimeOfDay _silentUntil = const TimeOfDay(hour: 7, minute: 0);
   bool _initialized = false;
   final _keyCriticalField = GlobalKey();
   final _keyWarningField = GlobalKey();
+
+  @override
+  void dispose() {
+    _criticalCtrl.dispose();
+    _warningCtrl.dispose();
+    super.dispose();
+  }
+
+  String _formatTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  TimeOfDay _parseTime(String? s, TimeOfDay fallback) {
+    if (s == null) return fallback;
+    final parts = s.split(':');
+    if (parts.length < 2) return fallback;
+    return TimeOfDay(
+        hour: int.tryParse(parts[0]) ?? fallback.hour,
+        minute: int.tryParse(parts[1]) ?? fallback.minute);
+  }
+
+  Future<void> _pickTime(bool isFrom) async {
+    final initial = isFrom ? _silentFrom : _silentUntil;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: isFrom ? 'Início do silêncio' : 'Fim do silêncio',
+    );
+    if (picked != null) {
+      setState(() {
+        if (isFrom) {
+          _silentFrom = picked;
+        } else {
+          _silentUntil = picked;
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -85,6 +125,11 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
               _criticalCtrl.text = config.criticalDays.toString();
               _warningCtrl.text = config.warningDays.toString();
               _expiryEnabled = config.expiryEnabled;
+              _silentModeEnabled = config.silentModeEnabled;
+              _silentFrom =
+                  _parseTime(config.silentFrom, const TimeOfDay(hour: 22, minute: 0));
+              _silentUntil =
+                  _parseTime(config.silentUntil, const TimeOfDay(hour: 7, minute: 0));
               _initialized = true;
             }
 
@@ -295,6 +340,9 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
                                 criticalDays: critical,
                                 warningDays: warning,
                                 expiryEnabled: _expiryEnabled,
+                                silentModeEnabled: _silentModeEnabled,
+                                silentFrom: _formatTime(_silentFrom),
+                                silentUntil: _formatTime(_silentUntil),
                               ));
                           if (!context.mounted) return;
                           showCasaSnackbar(context,
@@ -308,7 +356,133 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
 
                 const SizedBox(height: AppSpacing.lg),
 
-                // ─── Preview das faixas
+                // ─── Modo silencioso ─────────────────────────────────────────
+                Container(
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                    border: Border.all(
+                        color: cs.outlineVariant.withValues(alpha: 0.35)),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 6),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: _silentModeEnabled
+                                  ? AppColors.secondarySky500.withValues(alpha: 0.12)
+                                  : cs.surfaceContainer,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.small),
+                            ),
+                            child: Icon(
+                              Icons.bedtime_rounded,
+                              color: _silentModeEnabled
+                                  ? AppColors.secondarySky500
+                                  : cs.onSurfaceVariant,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Horário de silêncio',
+                                    style: AppTypography.labelLarge
+                                        .copyWith(color: cs.onSurface)),
+                                Text(
+                                  'Suspende notificações em horários específicos',
+                                  style: AppTypography.bodySmall
+                                      .copyWith(color: cs.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _silentModeEnabled,
+                            onChanged: (v) =>
+                                setState(() => _silentModeEnabled = v),
+                            activeColor: AppColors.secondarySky500,
+                          ),
+                        ],
+                      ),
+                      if (_silentModeEnabled) ...[
+                        const Padding(
+                          padding:
+                              EdgeInsets.symmetric(vertical: AppSpacing.md),
+                          child: Divider(height: 1),
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _TimeTile(
+                                label: 'Início',
+                                icon: Icons.nights_stay_rounded,
+                                iconColor: AppColors.secondarySky500,
+                                time: _silentFrom,
+                                onTap: () => _pickTime(true),
+                                cs: cs,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: _TimeTile(
+                                label: 'Fim',
+                                icon: Icons.wb_twilight_rounded,
+                                iconColor: AppColors.warning600,
+                                time: _silentUntil,
+                                onTap: () => _pickTime(false),
+                                cs: cs,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                              vertical: AppSpacing.xs),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.secondarySky500.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(AppRadius.small),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline_rounded,
+                                  size: 14, color: AppColors.secondarySky500),
+                              const SizedBox(width: AppSpacing.xs),
+                              Expanded(
+                                child: Text(
+                                  'Notificações serão suprimidas de '
+                                  '${_formatTime(_silentFrom)} às ${_formatTime(_silentUntil)}. '
+                                  'Suporta horários que cruzam a meia-noite.',
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: AppColors.secondarySky500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: AppSpacing.lg);
                 Container(
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerLow,
@@ -384,4 +558,56 @@ class _UrgencyRow extends StatelessWidget {
   }
 }
 
+class _TimeTile extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color iconColor;
+  final TimeOfDay time;
+  final VoidCallback onTap;
+  final ColorScheme cs;
 
+  const _TimeTile({
+    required this.label,
+    required this.icon,
+    required this.iconColor,
+    required this.time,
+    required this.onTap,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final display =
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: cs.outlineVariant),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 14, color: iconColor),
+                const SizedBox(width: AppSpacing.xs),
+                Text(label,
+                    style: AppTypography.labelSmall
+                        .copyWith(color: cs.onSurfaceVariant)),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(display,
+                style: AppTypography.headingSmall.copyWith(
+                    color: cs.onSurface, fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+    );
+  }
+}
