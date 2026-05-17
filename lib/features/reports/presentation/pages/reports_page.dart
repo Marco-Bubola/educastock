@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -21,6 +22,13 @@ import '../../../ml/presentation/widgets/risk_widgets.dart';
 
 import '../controllers/reports_provider.dart';
 import '../../../stock/domain/entities/stock_movement.dart';
+
+// ─── Gradient shared with ModernProfileAppBar ────────────────────────────
+const _kReportsGradient = LinearGradient(
+  colors: [Color(0xFF0F2444), Color(0xFF1A3A6B), Color(0xFF1D5FA8)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
 
 final _keyTrendChart = GlobalKey();
 final _keyExpiryChart = GlobalKey();
@@ -102,6 +110,143 @@ Future<void> _exportPdf({
   await Printing.layoutPdf(onLayout: (_) async => doc.save());
 }
 
+// ─── Custom AppBar with TabBar ────────────────────────────────────────────
+
+class _ReportsAppBar extends ConsumerWidget implements PreferredSizeWidget {
+  final List<Widget>? actions;
+  const _ReportsAppBar({this.actions});
+
+  @override
+  Size get preferredSize => const Size.fromHeight(116);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+      ),
+      child: Container(
+        decoration: const BoxDecoration(gradient: _kReportsGradient),
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Header row ─────────────────────────────────────────────
+              SizedBox(
+                height: 64,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(AppRadius.small),
+                        ),
+                        child: const Icon(Icons.analytics_rounded,
+                            color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Relatórios',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            Text(
+                              'Análise e tendências do estoque',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.65),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (user?.name != null)
+                        GestureDetector(
+                          onTap: () => context.push(AppRoutes.settings),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                user!.name.substring(0, 1).toUpperCase(),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(width: AppSpacing.xs),
+                      if (actions != null) ...actions!,
+                    ],
+                  ),
+                ),
+              ),
+              // ── TabBar ─────────────────────────────────────────────────
+              TabBar(
+                indicatorColor: Colors.white,
+                indicatorWeight: 3,
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white.withValues(alpha: 0.5),
+                labelStyle: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.1,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                ),
+                overlayColor: WidgetStateProperty.all(
+                    Colors.white.withValues(alpha: 0.1)),
+                tabs: const [
+                  Tab(
+                    icon: Icon(Icons.bar_chart_rounded, size: 18),
+                    text: 'Gráficos',
+                    height: 52,
+                  ),
+                  Tab(
+                    icon: Icon(Icons.psychology_rounded, size: 18),
+                    text: 'Risco ML',
+                    height: 52,
+                  ),
+                  Tab(
+                    icon: Icon(Icons.swap_horiz_rounded, size: 18),
+                    text: 'Movimentações',
+                    height: 52,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────
 
 class ReportsPage extends ConsumerWidget {
@@ -110,18 +255,1881 @@ class ReportsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final allBatchesAsync = ref.watch(allAvailableBatchesProvider);
+    final allList = allBatchesAsync.valueOrNull ?? [];
+    final exp7List = ref.watch(expiringBatchesProvider(7)).valueOrNull ?? [];
+    final exp30List = ref.watch(expiringBatchesProvider(30)).valueOrNull ?? [];
+
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        backgroundColor: cs.surface,
+        appBar: _ReportsAppBar(
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined,
+                  color: Colors.white, size: 20),
+              tooltip: 'Exportar PDF',
+              onPressed: () async {
+                await _exportPdf(
+                    allBatches: allList,
+                    expiring7: exp7List,
+                    expiring30: exp30List);
+                await ref.read(analyticsServiceProvider).logReportExport(
+                    format: 'pdf', reportType: 'inventory_overview');
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.table_view_outlined,
+                  color: Colors.white, size: 20),
+              tooltip: 'Exportar CSV',
+              onPressed: () async {
+                await _exportCsv(
+                    context: context,
+                    allBatches: allList,
+                    expiring30: exp30List);
+                await ref.read(analyticsServiceProvider).logReportExport(
+                    format: 'csv', reportType: 'inventory_overview');
+              },
+            ),
+          ],
+        ),
+        body: const TabBarView(
+          children: [
+            _ChartsTab(),
+            _MlRiskTab(),
+            _MovementsTab(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Tab 1: Gráficos ─────────────────────────────────────────────────────
+
+class _ChartsTab extends ConsumerWidget {
+  const _ChartsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final user = ref.watch(currentUserProvider);
     final allBatchesAsync = ref.watch(allAvailableBatchesProvider);
     final expiring7 = ref.watch(expiringBatchesProvider(7));
     final expiring30 = ref.watch(expiringBatchesProvider(30));
+    final exp7List = expiring7.valueOrNull ?? [];
+    final exp30List = expiring30.valueOrNull ?? [];
+
+    return allBatchesAsync.when(
+      loading: () => ListView.builder(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        itemCount: 6,
+        itemBuilder: (_, __) => const Padding(
+          padding: EdgeInsets.only(bottom: AppSpacing.sm),
+          child: CasaCardSkeleton(),
+        ),
+      ),
+      error: (e, _) => CasaEmptyState(
+        icon: Icons.error_outline_rounded,
+        title: 'Erro ao carregar dados',
+        description: e.toString(),
+      ),
+      data: (batches) {
+        final totalItems = batches.fold<int>(0, (s, b) => s + b.quantity);
+        final totalValue =
+            batches.fold<double>(0, (s, b) => s + (b.unitPrice ?? 0) * b.quantity);
+        final expired = batches.where((b) => b.isExpired).length;
+
+        final Map<String, int> catCount = {};
+        for (final b in batches) {
+          catCount[b.productName] = (catCount[b.productName] ?? 0) + b.quantity;
+        }
+        final topProducts =
+            (catCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
+                .take(5)
+                .toList();
+
+        final Map<String, int> originCount = {};
+        for (final b in batches) {
+          originCount[b.origin] = (originCount[b.origin] ?? 0) + 1;
+        }
+        const originLabels = {
+          'doacao': 'Doação',
+          'compra': 'Compra',
+          'parceiro': 'Parceiro',
+          'transferencia': 'Transferência',
+        };
+
+        final Map<String, int> monthTrend = {};
+        final now = DateTime.now();
+        for (int i = 5; i >= 0; i--) {
+          final d = DateTime(now.year, now.month - i);
+          final key = '${d.month.toString().padLeft(2, '0')}/${d.year % 100}';
+          monthTrend[key] = 0;
+        }
+        for (final b in batches) {
+          final key =
+              '${b.entryDate.month.toString().padLeft(2, '0')}/${b.entryDate.year % 100}';
+          if (monthTrend.containsKey(key)) {
+            monthTrend[key] = monthTrend[key]! + b.quantity;
+          }
+        }
+
+        final healthScore = (100 -
+                (expired * 10) -
+                (exp7List.length * 5) -
+                (exp30List.length - exp7List.length) * 2)
+            .clamp(0, 100);
+
+        final Map<String, int> expiryBuckets = {
+          'Vencido': 0,
+          '0–7d': 0,
+          '8–30d': 0,
+          '31–90d': 0,
+          '>90d': 0,
+          'Sem val.': 0,
+        };
+        for (final b in batches) {
+          final d = b.daysToExpiry;
+          if (b.noExpiry) {
+            expiryBuckets['Sem val.'] = expiryBuckets['Sem val.']! + 1;
+          } else if (b.isExpired) {
+            expiryBuckets['Vencido'] = expiryBuckets['Vencido']! + 1;
+          } else if (d <= 7) {
+            expiryBuckets['0–7d'] = expiryBuckets['0–7d']! + 1;
+          } else if (d <= 30) {
+            expiryBuckets['8–30d'] = expiryBuckets['8–30d']! + 1;
+          } else if (d <= 90) {
+            expiryBuckets['31–90d'] = expiryBuckets['31–90d']! + 1;
+          } else {
+            expiryBuckets['>90d'] = expiryBuckets['>90d']! + 1;
+          }
+        }
+
+        final insights = _buildInsights(
+          batches: batches,
+          exp7: exp7List.length,
+          exp30: exp30List.length,
+          expired: expired,
+          totalItems: totalItems,
+        );
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
+          children: [
+            // ─── Help tutorial button
+            Align(
+              alignment: Alignment.centerRight,
+              child: buildHelpButton(
+                context: context,
+                onPressed: () => showCasaTutorial(
+                  context: context,
+                  steps: [
+                    TutorialStep(
+                      key: _keyTrendChart,
+                      title: 'Tendência Mensal de Entrada',
+                      description:
+                          'Gráfico de linha com entradas nos últimos 6 meses. Identifique padrões sazonais.',
+                      icon: Icons.show_chart_rounded,
+                      align: ContentAlign.bottom,
+                      hints: const [
+                        'Toque nos pontos para ver o valor exato',
+                        'Picos = meses com grande volume de doações',
+                      ],
+                    ),
+                    TutorialStep(
+                      key: _keyExpiryChart,
+                      title: 'Distribuição por Prazo',
+                      description:
+                          'Barras mostrando quantos lotes estão em cada faixa de vencimento.',
+                      icon: Icons.bar_chart_rounded,
+                      align: ContentAlign.bottom,
+                      hints: const [
+                        '🔴 Vermelho = vencidos — descarte imediato',
+                        '🟢 Verde = prazo seguro (>30 dias)',
+                      ],
+                    ),
+                    TutorialStep(
+                      key: _keyCategoryChart,
+                      title: 'Lotes por Origem',
+                      description:
+                          'Pizza mostrando proporção de lotes por origem (doação, compra, etc.).',
+                      icon: Icons.pie_chart_rounded,
+                      align: ContentAlign.bottom,
+                      hints: const [
+                        'Toque em cada fatia para ver o percentual',
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+
+            // ─── Summary grid
+            _SummaryGrid(
+              totalBatches: batches.length,
+              totalItems: totalItems,
+              totalValue: totalValue,
+              expired: expired,
+              criticals: exp7List.length,
+              warnings: exp30List.length,
+              healthScore: healthScore,
+              isDark: isDark,
+              cs: cs,
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            // ─── Tendência mensal
+            _SectionHeader(
+              title: 'Entradas Mensais',
+              subtitle: 'Evolução das entradas nos últimos 6 meses',
+              icon: Icons.trending_up_rounded,
+              color: AppColors.brandPrimary600,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            KeyedSubtree(
+              key: _keyTrendChart,
+              child: _MonthlyTrendChart(
+                  monthTrend: monthTrend, isDark: isDark, cs: cs),
+            ),
+            const _ChartNote(
+              text: 'Soma total de itens cadastrados por mês. Toque nos pontos para ver o valor exato.',
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            // ─── Validade por faixa
+            _SectionHeader(
+              title: 'Distribuição por Prazo de Validade',
+              subtitle: 'Quantos lotes estão em cada faixa de vencimento',
+              icon: Icons.schedule_rounded,
+              color: AppColors.warning600,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            KeyedSubtree(
+              key: _keyExpiryChart,
+              child: _ExpiryBarChart(
+                  buckets: expiryBuckets, isDark: isDark, cs: cs),
+            ),
+            const _ChartNote(
+              text: 'Vermelho = vencidos ou críticos (≤7d). Laranja = atenção (8–30d). Verde = seguros (>30d).',
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            // ─── Origem (pizza)
+            if (originCount.isNotEmpty) ...[
+              _SectionHeader(
+                title: 'Lotes por Origem',
+                subtitle: 'Proporção de cada fonte no estoque atual',
+                icon: Icons.pie_chart_rounded,
+                color: AppColors.secondaryBlue600,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              KeyedSubtree(
+                key: _keyCategoryChart,
+                child: _CategoryPieChart(
+                  catCount: originCount,
+                  labelMap: originLabels,
+                  isDark: isDark,
+                  cs: cs,
+                ),
+              ),
+              const _ChartNote(
+                text: 'Toque em cada fatia para ver o percentual. Ajuda a entender as principais fontes de entrada.',
+              ),
+              const SizedBox(height: AppSpacing.xl),
+            ],
+
+            // ─── Top 5 produtos
+            if (topProducts.isNotEmpty) ...[
+              _SectionHeader(
+                title: 'Top 5 Produtos em Estoque',
+                subtitle: 'Produtos com maior quantidade disponível',
+                icon: Icons.inventory_2_rounded,
+                color: AppColors.success600,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _TopProductsChart(
+                products: topProducts,
+                totalItems: totalItems,
+                isDark: isDark,
+                cs: cs,
+              ),
+              const _ChartNote(
+                text: 'A barra mostra a proporção de cada produto em relação ao total.',
+              ),
+              const SizedBox(height: AppSpacing.xl),
+            ],
+
+            // ─── Insights
+            _SectionHeader(
+              title: 'Insights do Estoque',
+              subtitle: 'Alertas e recomendações automáticas',
+              icon: Icons.lightbulb_rounded,
+              color: AppColors.warning600,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _InsightsPanel(insights: insights),
+            const SizedBox(height: AppSpacing.xl),
+
+            // ─── Próximos a vencer
+            _SectionHeader(
+              title: 'Próximos a Vencer',
+              subtitle: 'Lotes vencendo nos próximos 30 dias',
+              icon: Icons.access_time_rounded,
+              color: AppColors.danger600,
+              count: exp30List.length,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            if (exp30List.isEmpty)
+              const CasaEmptyState(
+                icon: Icons.check_circle_outline_rounded,
+                title: 'Nenhum item vencendo em 30 dias',
+              )
+            else
+              _ExpiryList(batches: exp30List, cs: cs, isDark: isDark),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ─── Tab 2: Risco ML ─────────────────────────────────────────────────────
+
+class _MlRiskTab extends ConsumerWidget {
+  const _MlRiskTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final riskCountsAsync = ref.watch(riskCountsProvider);
     final riskPredictionsAsync = ref.watch(batchRiskPredictionsProvider);
     final classifierSourceAsync = ref.watch(classifierSourceProvider);
 
-    final allList = allBatchesAsync.valueOrNull ?? [];
-    final exp7List = expiring7.valueOrNull ?? [];
-    final exp30List = expiring30.valueOrNull ?? [];
+    final predictions = riskPredictionsAsync.valueOrNull ?? [];
+    final sortedPredictions = [...predictions]..sort(_sortByRisk);
+    final classifierSrc = classifierSourceAsync.valueOrNull ?? 'rule_based';
+
+    final criticals =
+        sortedPredictions.where((p) => p.level == RiskLevel.vermelho).toList();
+    final amarelos =
+        sortedPredictions.where((p) => p.level == RiskLevel.amarelo).toList();
+    final verdes =
+        sortedPredictions.where((p) => p.level == RiskLevel.verde).toList();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
+      children: [
+        // ─── Classifier badge
+        _SectionHeader(
+          title: 'Análise de Risco ML',
+          subtitle: classifierSrc == 'tflite'
+              ? 'Modelo TFLite on-device ativo'
+              : 'Classificação por regras inteligentes',
+          icon: classifierSrc == 'tflite'
+              ? Icons.memory_rounded
+              : Icons.rule_rounded,
+          color: AppColors.brandPrimary600,
+          badge: classifierSrc == 'tflite' ? 'TFLite' : 'Rules',
+        ),
+        const SizedBox(height: AppSpacing.md),
+
+        // ─── Risk score banner
+        _MlScoreBanner(
+          criticalCount: criticals.length,
+          warningCount: amarelos.length,
+          safeCount: verdes.length,
+          cs: cs,
+        ),
+        const SizedBox(height: AppSpacing.md),
+
+        // ─── Risk counts row
+        riskCountsAsync.when(
+          data: (counts) => RiskSummaryRow(counts: counts),
+          loading: () => Row(
+            children: List.generate(
+              3,
+              (_) => const Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: CasaCardSkeleton(),
+                ),
+              ),
+            ),
+          ),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+        const SizedBox(height: AppSpacing.md),
+
+        // ─── Donut chart
+        riskPredictionsAsync.when(
+          data: (_) => _MlRiskDonutChart(
+            verdeCount: verdes.length,
+            amareloCount: amarelos.length,
+            vermelhoCount: criticals.length,
+            cs: cs,
+            isDark: isDark,
+          ),
+          loading: () => const CasaCardSkeleton(),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+        const _ChartNote(
+          text: 'Visão geral da saúde do estoque por IA. Toque nas fatias para ver os percentuais.',
+        ),
+        const SizedBox(height: AppSpacing.md),
+
+        // ─── Lotes críticos
+        if (criticals.isNotEmpty) ...[
+          _SectionHeader(
+            title: 'Lotes Críticos',
+            subtitle: 'Requerem ação imediata',
+            icon: Icons.warning_rounded,
+            color: AppColors.danger600,
+            count: criticals.length,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ...criticals.take(8).map((p) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                child: RiskInsightCard(prediction: p),
+              )),
+          if (criticals.length > 8)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: AppSpacing.sm),
+              child: Center(
+                child: Text(
+                  '+ ${criticals.length - 8} lotes críticos adicionais',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.danger600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+
+        // ─── Atenção
+        if (amarelos.isNotEmpty) ...[
+          _SectionHeader(
+            title: 'Lotes em Atenção',
+            subtitle: 'Monitorar de perto',
+            icon: Icons.schedule_rounded,
+            color: AppColors.warning600,
+            count: amarelos.length,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ...amarelos.take(5).map((p) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                child: RiskInsightCard(prediction: p),
+              )),
+          if (amarelos.length > 5)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Center(
+                child: Text(
+                  '+ ${amarelos.length - 5} em atenção',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.warning600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+
+        // ─── Resumo lotes seguros
+        if (verdes.isNotEmpty)
+          _MlNonCriticalSummary(
+            amareloCount: amarelos.length,
+            verdeCount: verdes.length,
+            cs: cs,
+          ),
+        const SizedBox(height: AppSpacing.md),
+
+        // ─── Legenda
+        _SectionHeader(
+          title: 'Como Funciona a Classificação',
+          subtitle: 'Entenda os níveis de risco',
+          icon: Icons.info_outline_rounded,
+          color: AppColors.secondaryBlue600,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _MlLegend(isDark: isDark, cs: cs),
+      ],
+    );
+  }
+
+  static int _sortByRisk(RiskPrediction a, RiskPrediction b) {
+    const order = {
+      RiskLevel.vermelho: 0,
+      RiskLevel.amarelo: 1,
+      RiskLevel.verde: 2,
+    };
+    final cmp = order[a.level]!.compareTo(order[b.level]!);
+    if (cmp != 0) return cmp;
+    return b.confidence.compareTo(a.confidence);
+  }
+}
+
+// ─── ML Score Banner ──────────────────────────────────────────────────────
+
+class _MlScoreBanner extends StatelessWidget {
+  final int criticalCount;
+  final int warningCount;
+  final int safeCount;
+  final ColorScheme cs;
+
+  const _MlScoreBanner({
+    required this.criticalCount,
+    required this.warningCount,
+    required this.safeCount,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final total = criticalCount + warningCount + safeCount;
+    if (total == 0) return const SizedBox.shrink();
+
+    final safetyScore = total == 0
+        ? 100
+        : ((safeCount / total) * 100).round();
+    final Color bannerColor;
+    final IconData bannerIcon;
+    final String bannerMsg;
+
+    if (criticalCount == 0 && warningCount == 0) {
+      bannerColor = AppColors.success600;
+      bannerIcon = Icons.verified_rounded;
+      bannerMsg = 'Estoque saudável — nenhum lote em risco';
+    } else if (criticalCount > 0) {
+      bannerColor = AppColors.danger600;
+      bannerIcon = Icons.emergency_rounded;
+      bannerMsg =
+          '$criticalCount lote${criticalCount > 1 ? 's' : ''} em estado crítico — ação imediata!';
+    } else {
+      bannerColor = AppColors.warning600;
+      bannerIcon = Icons.warning_amber_rounded;
+      bannerMsg = '$warningCount lote${warningCount > 1 ? 's' : ''} em atenção — monitore de perto';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [bannerColor, bannerColor.withValues(alpha: 0.75)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        boxShadow: [
+          BoxShadow(
+            color: bannerColor.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(AppRadius.small),
+            ),
+            child: Icon(bannerIcon, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Score de Segurança: $safetyScore%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  bannerMsg,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: safetyScore / 100,
+                    minHeight: 5,
+                    backgroundColor: Colors.white.withValues(alpha: 0.3),
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Tab 3: Movimentações ────────────────────────────────────────────────
+
+class _MovementsTab extends ConsumerStatefulWidget {
+  const _MovementsTab();
+
+  @override
+  ConsumerState<_MovementsTab> createState() => _MovementsTabState();
+}
+
+class _MovementsTabState extends ConsumerState<_MovementsTab> {
+  int _days = 30;
+  DateTimeRange? _customRange;
+  Set<MovementType> _typeFilter = {};
+  bool _showAll = false;
+
+  static const _periods = [7, 30, 90, 180];
+  static const _periodLabels = {
+    7: '7 dias',
+    30: '30 dias',
+    90: '90 dias',
+    180: '6 meses',
+  };
+
+  DateTimeRange get _range {
+    if (_customRange != null) return _customRange!;
+    final now = DateTime.now();
+    return DateTimeRange(
+      start: DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: _days - 1)),
+      end: DateTime(now.year, now.month, now.day, 23, 59, 59),
+    );
+  }
+
+  void _setPeriod(int days) => setState(() {
+        _days = days;
+        _customRange = null;
+        _showAll = false;
+      });
+
+  Future<void> _pickCustomRange() async {
+    final result = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: _range,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: Theme.of(ctx)
+              .colorScheme
+              .copyWith(primary: AppColors.brandPrimary600),
+        ),
+        child: child!,
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _customRange = result;
+        _days = 0;
+        _showAll = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final summaryAsync = ref.watch(movementsSummaryProvider(_range));
+    final movementsAsync = ref.watch(movementsReportProvider(_range));
+    final lossesAsync = ref.watch(lossesByReasonProvider(_range));
+
+    final dateFmt = DateFormat('dd/MM/yy');
+    final rangeLabel =
+        '${dateFmt.format(_range.start)} – ${dateFmt.format(_range.end)}';
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
+      children: [
+        // ─── Seletor de período
+        _SectionHeader(
+          title: 'Período de Análise',
+          subtitle: rangeLabel,
+          icon: Icons.date_range_rounded,
+          color: AppColors.secondaryBlue600,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _PeriodSelector(
+          selectedDays: _customRange != null ? 0 : _days,
+          periods: _periods,
+          periodLabels: _periodLabels,
+          onPeriodSelected: _setPeriod,
+          onCustomRange: _pickCustomRange,
+          cs: cs,
+        ),
+        const SizedBox(height: AppSpacing.xl),
+
+        // ─── Resumo KPIs
+        _SectionHeader(
+          title: 'Resumo do Período',
+          subtitle: 'Totais de movimentação no período selecionado',
+          icon: Icons.summarize_rounded,
+          color: AppColors.brandPrimary600,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        summaryAsync.when(
+          loading: () => const CasaCardSkeleton(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (summary) =>
+              _MovementsSummaryGrid(summary: summary, cs: cs),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+
+        // ─── Gráfico entradas × saídas
+        _SectionHeader(
+          title: 'Entradas × Saídas',
+          subtitle: 'Comparativo por período',
+          icon: Icons.show_chart_rounded,
+          color: AppColors.brandPrimary600,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        movementsAsync.when(
+          loading: () => const CasaCardSkeleton(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (movements) {
+            final grouped = _groupByPeriod(movements, _range);
+            return _MovementsBarChart(data: grouped, cs: cs);
+          },
+        ),
+        const _ChartNote(
+          text: 'Verde = entradas. Vermelho = saídas e descartes. Toque nas barras para ver o valor.',
+        ),
+        const SizedBox(height: AppSpacing.xl),
+
+        // ─── Perdas por motivo
+        _SectionHeader(
+          title: 'Perdas por Motivo',
+          subtitle: 'Distribuição das saídas por razão',
+          icon: Icons.pie_chart_outline_rounded,
+          color: AppColors.danger600,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        lossesAsync.when(
+          loading: () => const CasaCardSkeleton(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (losses) => losses.isEmpty
+              ? const CasaEmptyState(
+                  icon: Icons.check_circle_outline_rounded,
+                  title: 'Nenhuma perda registrada no período',
+                  description: 'Ótimo! Tudo foi distribuído corretamente.',
+                )
+              : _LossesBreakdown(losses: losses, cs: cs),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+
+        // ─── Lista completa com filtro
+        _SectionHeader(
+          title: 'Lista de Movimentações',
+          subtitle: 'Detalhamento de todas as movimentações',
+          icon: Icons.list_alt_rounded,
+          color: AppColors.brandPrimary600,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _TypeFilterChips(
+          selectedTypes: _typeFilter,
+          onChanged: (types) => setState(() {
+            _typeFilter = types;
+            _showAll = false;
+          }),
+          cs: cs,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        movementsAsync.when(
+          loading: () => Column(
+            children: List.generate(
+                5,
+                (_) => const Padding(
+                      padding: EdgeInsets.only(bottom: AppSpacing.xs),
+                      child: CasaCardSkeleton(),
+                    )),
+          ),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (movements) {
+            final filtered = _typeFilter.isEmpty
+                ? movements
+                : movements
+                    .where((m) => _typeFilter.contains(m.type))
+                    .toList();
+
+            if (filtered.isEmpty) {
+              return CasaEmptyState(
+                icon: Icons.swap_horiz_rounded,
+                title: 'Sem movimentações no período',
+                description: _typeFilter.isNotEmpty
+                    ? 'Nenhuma movimentação do tipo selecionado. Limpe os filtros.'
+                    : 'Ajuste o período de análise para ver dados.',
+              );
+            }
+
+            final shown =
+                _showAll ? filtered : filtered.take(20).toList();
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _MovementsListView(
+                    movements: shown, cs: cs, isDark: isDark),
+                if (filtered.length > 20 && !_showAll) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _showAll = true),
+                    icon: const Icon(Icons.expand_more_rounded),
+                    label: Text(
+                        'Ver mais ${filtered.length - 20} movimentações'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandPrimary600,
+                      side: const BorderSide(
+                          color: AppColors.brandPrimary600),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.sm),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Period Selector ──────────────────────────────────────────────────────
+
+class _PeriodSelector extends StatelessWidget {
+  final int selectedDays;
+  final List<int> periods;
+  final Map<int, String> periodLabels;
+  final void Function(int) onPeriodSelected;
+  final VoidCallback onCustomRange;
+  final ColorScheme cs;
+
+  const _PeriodSelector({
+    required this.selectedDays,
+    required this.periods,
+    required this.periodLabels,
+    required this.onPeriodSelected,
+    required this.onCustomRange,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          ...periods.map((p) {
+            final selected = p == selectedDays;
+            return Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.xs),
+              child: FilterChip(
+                label: Text(periodLabels[p]!),
+                selected: selected,
+                onSelected: (_) => onPeriodSelected(p),
+                selectedColor:
+                    AppColors.secondaryBlue600.withValues(alpha: 0.15),
+                checkmarkColor: AppColors.secondaryBlue600,
+                labelStyle: TextStyle(
+                  color: selected
+                      ? AppColors.secondaryBlue600
+                      : cs.onSurfaceVariant,
+                  fontWeight:
+                      selected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+            );
+          }),
+          ActionChip(
+            avatar: Icon(
+              Icons.calendar_today_rounded,
+              size: 14,
+              color: selectedDays == 0
+                  ? AppColors.brandPrimary600
+                  : cs.onSurfaceVariant,
+            ),
+            label: Text(
+              selectedDays == 0 ? 'Personalizado ✓' : 'Personalizado',
+              style: TextStyle(
+                color: selectedDays == 0
+                    ? AppColors.brandPrimary600
+                    : cs.onSurfaceVariant,
+                fontWeight: selectedDays == 0
+                    ? FontWeight.w700
+                    : FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+            backgroundColor: selectedDays == 0
+                ? AppColors.brandPrimary600.withValues(alpha: 0.1)
+                : null,
+            side: selectedDays == 0
+                ? BorderSide(
+                    color:
+                        AppColors.brandPrimary600.withValues(alpha: 0.4))
+                : null,
+            onPressed: onCustomRange,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Movements Summary Grid ───────────────────────────────────────────────
+
+class _MovementsSummaryGrid extends StatelessWidget {
+  final Map<String, int> summary;
+  final ColorScheme cs;
+
+  const _MovementsSummaryGrid({required this.summary, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    final entrada = summary['entrada'] ?? 0;
+    final saida = summary['saida'] ?? 0;
+    final ajustPos = summary['ajustePositivo'] ?? 0;
+    final ajustNeg = summary['ajusteNegativo'] ?? 0;
+    final descarte = summary['descarte'] ?? 0;
+    final totalIn = entrada + ajustPos;
+    final totalOut = saida + ajustNeg + descarte;
+    final net = totalIn - totalOut;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Saldo principal
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: net >= 0
+                  ? [AppColors.success600, const Color(0xFF4CAF50)]
+                  : [AppColors.danger600, const Color(0xFFEF5350)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            boxShadow: [
+              BoxShadow(
+                color: (net >= 0 ? AppColors.success600 : AppColors.danger600)
+                    .withValues(alpha: 0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                ),
+                child: Icon(
+                  net >= 0
+                      ? Icons.trending_up_rounded
+                      : Icons.trending_down_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Saldo do Período',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      '${net >= 0 ? '+' : ''}$net unidades',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    Text(
+                      '↑ $totalIn entr.  ↓ $totalOut saíd.',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.75),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        // Cards individuais
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 3,
+          crossAxisSpacing: AppSpacing.sm,
+          mainAxisSpacing: AppSpacing.sm,
+          childAspectRatio: 1.2,
+          children: [
+            _MovKpiCard(
+                icon: Icons.add_circle_outline_rounded,
+                label: 'Entradas',
+                value: entrada,
+                color: AppColors.success600,
+                cs: cs),
+            _MovKpiCard(
+                icon: Icons.outbound_rounded,
+                label: 'Saídas',
+                value: saida,
+                color: AppColors.brandPrimary600,
+                cs: cs),
+            _MovKpiCard(
+                icon: Icons.delete_outline_rounded,
+                label: 'Descartes',
+                value: descarte,
+                color: AppColors.danger600,
+                cs: cs),
+            _MovKpiCard(
+                icon: Icons.trending_up_rounded,
+                label: 'Ajuste +',
+                value: ajustPos,
+                color: AppColors.secondarySky500,
+                cs: cs),
+            _MovKpiCard(
+                icon: Icons.trending_down_rounded,
+                label: 'Ajuste −',
+                value: ajustNeg,
+                color: AppColors.warning600,
+                cs: cs),
+            _MovKpiCard(
+                icon: Icons.swap_horiz_rounded,
+                label: 'Total',
+                value: entrada + saida + ajustPos + ajustNeg + descarte,
+                color: AppColors.brandPrimary600,
+                cs: cs),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _MovKpiCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int value;
+  final Color color;
+  final ColorScheme cs;
+
+  const _MovKpiCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04), blurRadius: 4)
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 3),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                    fontSize: 9,
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w500),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ]),
+          const SizedBox(height: 4),
+          Text(
+            '$value',
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.w900, color: color),
+          ),
+          Text('un.',
+              style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Daily/Weekly data model ──────────────────────────────────────────────
+
+class _MovDayData {
+  final String label;
+  final int inbound;
+  final int outbound;
+  const _MovDayData(this.label, this.inbound, this.outbound);
+}
+
+List<_MovDayData> _groupByPeriod(
+    List<StockMovement> movements, DateTimeRange range) {
+  final days = range.end.difference(range.start).inDays + 1;
+  if (days <= 14) return _groupByDay(movements, range);
+  if (days <= 60) return _groupByWeek(movements, range);
+  return _groupByMonth(movements, range);
+}
+
+List<_MovDayData> _groupByDay(
+    List<StockMovement> movements, DateTimeRange range) {
+  final days = range.end.difference(range.start).inDays + 1;
+  final dayFmt = days <= 7 ? DateFormat('E', 'pt_BR') : DateFormat('dd/MM');
+  final result = <String, _MovDayData>{};
+
+  for (int i = 0; i < days; i++) {
+    final day = range.start.add(Duration(days: i));
+    final key = dayFmt.format(day);
+    result[key] = _MovDayData(key, 0, 0);
+  }
+  for (final m in movements) {
+    final key = dayFmt.format(m.performedAt);
+    if (result.containsKey(key)) {
+      final curr = result[key]!;
+      if (m.isInbound) {
+        result[key] = _MovDayData(key, curr.inbound + m.quantity, curr.outbound);
+      } else {
+        result[key] = _MovDayData(key, curr.inbound, curr.outbound + m.quantity);
+      }
+    }
+  }
+  return result.values.toList();
+}
+
+List<_MovDayData> _groupByWeek(
+    List<StockMovement> movements, DateTimeRange range) {
+  final days = range.end.difference(range.start).inDays + 1;
+  final weekCount = (days / 7).ceil();
+  return List.generate(weekCount, (w) {
+    final weekStart = range.start.add(Duration(days: w * 7));
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    final label = 'S${w + 1}';
+    int inbound = 0;
+    int outbound = 0;
+    for (final m in movements) {
+      if (!m.performedAt.isBefore(weekStart) &&
+          !m.performedAt.isAfter(weekEnd)) {
+        if (m.isInbound) {
+          inbound += m.quantity;
+        } else {
+          outbound += m.quantity;
+        }
+      }
+    }
+    return _MovDayData(label, inbound, outbound);
+  });
+}
+
+List<_MovDayData> _groupByMonth(
+    List<StockMovement> movements, DateTimeRange range) {
+  final monthFmt = DateFormat('MM/yy');
+  final result = <String, _MovDayData>{};
+  var cursor = DateTime(range.start.year, range.start.month);
+  while (!cursor.isAfter(range.end)) {
+    final key = monthFmt.format(cursor);
+    result[key] = _MovDayData(key, 0, 0);
+    cursor = DateTime(cursor.year, cursor.month + 1);
+  }
+  for (final m in movements) {
+    final key = monthFmt.format(m.performedAt);
+    if (result.containsKey(key)) {
+      final curr = result[key]!;
+      if (m.isInbound) {
+        result[key] = _MovDayData(key, curr.inbound + m.quantity, curr.outbound);
+      } else {
+        result[key] = _MovDayData(key, curr.inbound, curr.outbound + m.quantity);
+      }
+    }
+  }
+  return result.values.toList();
+}
+
+// ─── Movements Bar Chart ──────────────────────────────────────────────────
+
+class _MovementsBarChart extends StatelessWidget {
+  final List<_MovDayData> data;
+  final ColorScheme cs;
+
+  const _MovementsBarChart({required this.data, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxVal = data
+        .fold(0, (prev, d) => math.max(prev, math.max(d.inbound, d.outbound)))
+        .toDouble();
+
+    if (maxVal == 0) {
+      return Container(
+        height: 160,
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border:
+              Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.bar_chart_rounded,
+                  size: 36,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Sem movimentações no período',
+                style: TextStyle(
+                    color: cs.onSurfaceVariant, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final groups = data.asMap().entries.map((e) {
+      return BarChartGroupData(
+        x: e.key,
+        barsSpace: 3,
+        barRods: [
+          BarChartRodData(
+            toY: e.value.inbound.toDouble(),
+            gradient: const LinearGradient(
+              colors: [AppColors.success600, Color(0xFF66BB6A)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            width: data.length > 12 ? 8 : 12,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(4)),
+          ),
+          BarChartRodData(
+            toY: e.value.outbound.toDouble(),
+            gradient: const LinearGradient(
+              colors: [AppColors.danger600, AppColors.warning600],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            width: data.length > 12 ? 8 : 12,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(4)),
+          ),
+        ],
+      );
+    }).toList();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xs, AppSpacing.md, AppSpacing.xs, AppSpacing.xs),
+      height: 240,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border:
+            Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              _LegendDot(
+                  color: AppColors.success600, label: 'Entradas'),
+              SizedBox(width: AppSpacing.lg),
+              _LegendDot(color: AppColors.danger600, label: 'Saídas'),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: BarChart(
+              BarChartData(
+                barGroups: groups,
+                maxY: maxVal * 1.3,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: math.max(1, maxVal / 4),
+                  getDrawingHorizontalLine: (v) => FlLine(
+                    color: cs.outlineVariant.withValues(alpha: 0.25),
+                    strokeWidth: 1,
+                    dashArray: [4, 4],
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                titlesData: FlTitlesData(
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 26,
+                      getTitlesWidget: (v, meta) {
+                        final idx = v.toInt();
+                        if (idx < 0 || idx >= data.length) {
+                          return const SizedBox.shrink();
+                        }
+                        if (data.length > 14 && idx % 2 != 0) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            data[idx].label,
+                            style: TextStyle(
+                              fontSize: 8,
+                              color: cs.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (v, _) {
+                        if (v == 0) return const SizedBox.shrink();
+                        return Text(
+                          v.toInt().toString(),
+                          style: TextStyle(
+                              fontSize: 8, color: cs.onSurfaceVariant),
+                        );
+                      },
+                    ),
+                  ),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                ),
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => cs.surfaceContainer,
+                    getTooltipItem: (group, gI, rod, rI) {
+                      final val = rod.toY.toInt();
+                      final label = rI == 0
+                          ? '$val entrada${val != 1 ? 's' : ''}'
+                          : '$val saída${val != 1 ? 's' : ''}';
+                      return BarTooltipItem(
+                        label,
+                        TextStyle(
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeInOut,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color)),
+      ],
+    );
+  }
+}
+
+// ─── Losses Breakdown ─────────────────────────────────────────────────────
+
+class _LossesBreakdown extends StatelessWidget {
+  final Map<String, int> losses;
+  final ColorScheme cs;
+
+  const _LossesBreakdown({required this.losses, required this.cs});
+
+  static const _labels = {
+    'validade': 'Vencimento',
+    'avaria': 'Avaria / Perda',
+    'uso': 'Uso / Distribuição',
+    'receita': 'Receita',
+    'ajusteInventario': 'Ajuste de Inventário',
+    'doacao': 'Doação',
+    'outro': 'Outro',
+  };
+
+  static const _reasonColors = [
+    AppColors.danger600,
+    AppColors.warning600,
+    AppColors.brandPrimary600,
+    AppColors.secondaryBlue600,
+    AppColors.success600,
+    Color(0xFF7C3AED),
+    AppColors.neutral500,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final total = losses.values.fold(0, (a, b) => a + b);
+    final sorted = losses.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border:
+            Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: sorted.asMap().entries.map((e) {
+          final color = _reasonColors[e.key % _reasonColors.length];
+          final label = _labels[e.value.key] ?? e.value.key;
+          final pct = total == 0 ? 0.0 : e.value.value / total;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                          color: color, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${e.value.value} un.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 34,
+                      child: Text(
+                        '${(pct * 100).toStringAsFixed(0)}%',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                            fontSize: 11, color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: pct.clamp(0.0, 1.0),
+                    minHeight: 6,
+                    backgroundColor:
+                        cs.outlineVariant.withValues(alpha: 0.25),
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ─── Type Filter Chips ────────────────────────────────────────────────────
+
+class _TypeFilterChips extends StatelessWidget {
+  final Set<MovementType> selectedTypes;
+  final void Function(Set<MovementType>) onChanged;
+  final ColorScheme cs;
+
+  const _TypeFilterChips({
+    required this.selectedTypes,
+    required this.onChanged,
+    required this.cs,
+  });
+
+  static const _typeData = [
+    (
+      MovementType.entrada,
+      'Entrada',
+      Icons.add_circle_outline_rounded,
+      AppColors.success600
+    ),
+    (
+      MovementType.saida,
+      'Saída',
+      Icons.outbound_rounded,
+      AppColors.brandPrimary600
+    ),
+    (
+      MovementType.ajustePositivo,
+      'Ajuste +',
+      Icons.trending_up_rounded,
+      AppColors.secondaryBlue600
+    ),
+    (
+      MovementType.ajusteNegativo,
+      'Ajuste −',
+      Icons.trending_down_rounded,
+      AppColors.warning600
+    ),
+    (
+      MovementType.descarte,
+      'Descarte',
+      Icons.delete_outline_rounded,
+      AppColors.danger600
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.xs),
+            child: FilterChip(
+              label: const Text('Todos'),
+              selected: selectedTypes.isEmpty,
+              onSelected: (_) => onChanged({}),
+              selectedColor:
+                  AppColors.brandPrimary600.withValues(alpha: 0.15),
+              checkmarkColor: AppColors.brandPrimary600,
+              labelStyle: TextStyle(
+                color: selectedTypes.isEmpty
+                    ? AppColors.brandPrimary600
+                    : cs.onSurfaceVariant,
+                fontWeight: selectedTypes.isEmpty
+                    ? FontWeight.w700
+                    : FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          ..._typeData.map((t) {
+            final selected = selectedTypes.contains(t.$1);
+            return Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.xs),
+              child: FilterChip(
+                avatar: Icon(t.$3,
+                    size: 14,
+                    color:
+                        selected ? t.$4 : cs.onSurfaceVariant),
+                label: Text(t.$2),
+                selected: selected,
+                onSelected: (val) {
+                  final newSet = Set<MovementType>.from(selectedTypes);
+                  if (val) {
+                    newSet.add(t.$1);
+                  } else {
+                    newSet.remove(t.$1);
+                  }
+                  onChanged(newSet);
+                },
+                selectedColor: t.$4.withValues(alpha: 0.15),
+                checkmarkColor: t.$4,
+                showCheckmark: false,
+                labelStyle: TextStyle(
+                  color:
+                      selected ? t.$4 : cs.onSurfaceVariant,
+                  fontWeight: selected
+                      ? FontWeight.w700
+                      : FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Movements List View ──────────────────────────────────────────────────
+
+class _MovementsListView extends StatelessWidget {
+  final List<StockMovement> movements;
+  final ColorScheme cs;
+  final bool isDark;
+
+  const _MovementsListView({
+    required this.movements,
+    required this.cs,
+    required this.isDark,
+  });
+
+  Color _typeColor(MovementType type) => switch (type) {
+        MovementType.entrada => AppColors.success600,
+        MovementType.saida => AppColors.brandPrimary600,
+        MovementType.ajustePositivo => AppColors.secondaryBlue600,
+        MovementType.ajusteNegativo => AppColors.warning600,
+        MovementType.descarte => AppColors.danger600,
+      };
+
+  IconData _typeIcon(MovementType type) => switch (type) {
+        MovementType.entrada => Icons.add_circle_outline_rounded,
+        MovementType.saida => Icons.outbound_rounded,
+        MovementType.ajustePositivo => Icons.trending_up_rounded,
+        MovementType.ajusteNegativo => Icons.trending_down_rounded,
+        MovementType.descarte => Icons.delete_outline_rounded,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = DateFormat('dd/MM HH:mm');
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border:
+            Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04), blurRadius: 6)
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: movements.asMap().entries.map((e) {
+          final m = e.value;
+          final color = _typeColor(m.type);
+          final icon = _typeIcon(m.type);
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (e.key > 0)
+                Divider(
+                    height: 1,
+                    color: cs.outlineVariant.withValues(alpha: 0.3),
+                    indent: 56,
+                    endIndent: AppSpacing.md),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Icon badge
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AppRadius.small),
+                      ),
+                      child: Icon(icon, size: 18, color: color),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    // Details
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            m.productName,
+                            style: AppTypography.labelMedium.copyWith(
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                m.typeLabel,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: color,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (m.activity != null ||
+                                  m.reasonCode != null) ...[
+                                Text(' · ',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: cs.onSurfaceVariant)),
+                                Expanded(
+                                  child: Text(
+                                    m.activity ?? m.reasonCode ?? '',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: cs.onSurfaceVariant),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          Text(
+                            '${dateFmt.format(m.performedAt)} · ${m.performedByName}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: cs.onSurfaceVariant
+                                  .withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Quantity chip
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.pill),
+                        border: Border.all(
+                            color: color.withValues(alpha: 0.25)),
+                      ),
+                      child: Text(
+                        '${m.isInbound ? '+' : '-'}${m.quantity}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ─── Sort helper (shared) ─────────────────────────────────────────────────
+
+int _sortByRisk(RiskPrediction a, RiskPrediction b) {
+  const order = {
+    RiskLevel.vermelho: 0,
+    RiskLevel.amarelo: 1,
+    RiskLevel.verde: 2,
+  };
+  final cmp = order[a.level]!.compareTo(order[b.level]!);
+  if (cmp != 0) return cmp;
+  return b.confidence.compareTo(a.confidence);
+}
+
+// ─── _buildInsights helper ────────────────────────────────────────────────
+
 
     return Scaffold(
       backgroundColor: cs.surface,
