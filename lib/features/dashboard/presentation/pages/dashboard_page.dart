@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
 import '../../../ml/presentation/widgets/risk_widgets.dart';
+import '../../../reports/presentation/controllers/reports_provider.dart';
 
 final _keyDashQuickActions = GlobalKey();
 final _keyDashExpiring = GlobalKey();
@@ -195,6 +197,9 @@ class DashboardPage extends ConsumerWidget {
                 },
               ),
             ),
+
+            const SizedBox(height: AppSpacing.xl),
+            const _DashboardChartsSection(),
 
             const SizedBox(height: AppSpacing.xl),
 
@@ -821,6 +826,516 @@ class _MlRiskSection extends ConsumerWidget {
           loading: () => const SizedBox.shrink(),
           error: (_, __) => const SizedBox.shrink(),
         ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Seção de Gráficos do Dashboard
+// ---------------------------------------------------------------------------
+
+class _DashboardChartsSection extends ConsumerStatefulWidget {
+  const _DashboardChartsSection();
+
+  @override
+  ConsumerState<_DashboardChartsSection> createState() =>
+      _DashboardChartsSectionState();
+}
+
+class _DashboardChartsSectionState
+    extends ConsumerState<_DashboardChartsSection>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CasaSectionHeader(
+          title: 'Visão Gráfica',
+          action: 'Ver relatórios',
+          onAction: () => context.push(AppRoutes.reports),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          child: Container(
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              border: Border.all(
+                  color: cs.outlineVariant.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              children: [
+                TabBar(
+                  controller: _tabController,
+                  isScrollable: false,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  dividerColor: Colors.transparent,
+                  indicator: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF0F2444),
+                        Color(0xFF1D5FA8)
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(AppRadius.card - 2),
+                  ),
+                  labelColor: Colors.white,
+                  unselectedLabelColor: cs.onSurfaceVariant,
+                  tabs: const [
+                    Tab(text: 'Categorias'),
+                    Tab(text: 'Movimentos'),
+                    Tab(text: 'Urgência'),
+                  ],
+                ),
+                SizedBox(
+                  height: 240,
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _CategoryPieChart(isDark: isDark),
+                      _MovementsLineChart(isDark: isDark),
+                      _UrgencyBarChart(isDark: isDark),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Pie chart: distribution by category ────────────────────────────────────
+
+class _CategoryPieChart extends ConsumerWidget {
+  final bool isDark;
+  const _CategoryPieChart({required this.isDark});
+
+  static const _colors = [
+    Color(0xFF1D5FA8),
+    Color(0xFF059669),
+    Color(0xFFDC2626),
+    Color(0xFFD97706),
+    Color(0xFF7C3AED),
+    Color(0xFF0891B2),
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categoryAsync = ref.watch(stockByCategoryProvider);
+    return categoryAsync.when(
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      error: (_, __) => const Center(
+          child: Icon(Icons.bar_chart_rounded, size: 40)),
+      data: (categories) {
+        if (categories.isEmpty) {
+          return const Center(child: Text('Sem dados'));
+        }
+        final total = categories.fold<int>(0, (s, c) => s + c.totalItems);
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: PieChart(
+                  PieChartData(
+                    sectionsSpace: 3,
+                    centerSpaceRadius: 36,
+                    sections: List.generate(
+                      categories.length,
+                      (i) {
+                        final cat = categories[i];
+                        final color = _colors[i % _colors.length];
+                        final pct = total > 0
+                            ? (cat.totalItems / total * 100)
+                                .toStringAsFixed(0)
+                            : '0';
+                        return PieChartSectionData(
+                          color: color,
+                          value: cat.totalItems.toDouble(),
+                          title: '$pct%',
+                          radius: 48,
+                          titleStyle: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: List.generate(
+                    categories.length > 5 ? 5 : categories.length,
+                    (i) {
+                      final cat = categories[i];
+                      final color = _colors[i % _colors.length];
+                      return Padding(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                cat.category,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color:
+                                      Theme.of(context).colorScheme.onSurface,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── Line chart: movements last 30 days ─────────────────────────────────────
+
+class _MovementsLineChart extends ConsumerWidget {
+  final bool isDark;
+  const _MovementsLineChart({required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = DateTime.now();
+    final range = DateTimeRange(
+      start: now.subtract(const Duration(days: 29)),
+      end: now,
+    );
+    final movAsync = ref.watch(movementsReportProvider(range));
+    return movAsync.when(
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      error: (_, __) => const Center(
+          child: Icon(Icons.show_chart_rounded, size: 40)),
+      data: (movements) {
+        final entriesPerDay = <int, int>{};
+        final exitsPerDay = <int, int>{};
+        for (final m in movements) {
+          final dayKey = m.performedAt.difference(range.start).inDays;
+          if (dayKey < 0 || dayKey > 29) continue;
+          if (m.type.name == 'entrada') {
+            entriesPerDay[dayKey] = (entriesPerDay[dayKey] ?? 0) + m.quantity;
+          } else if (m.type.name == 'saida' || m.type.name == 'descarte') {
+            exitsPerDay[dayKey] = (exitsPerDay[dayKey] ?? 0) + m.quantity;
+          }
+        }
+
+        List<FlSpot> entrySpots = [];
+        List<FlSpot> exitSpots = [];
+        for (int d = 0; d <= 29; d += 5) {
+          entrySpots.add(FlSpot(d.toDouble(),
+              (entriesPerDay[d] ?? 0).toDouble()));
+          exitSpots.add(
+              FlSpot(d.toDouble(), (exitsPerDay[d] ?? 0).toDouble()));
+        }
+        entrySpots.add(FlSpot(29, (entriesPerDay[29] ?? 0).toDouble()));
+        exitSpots.add(FlSpot(29, (exitsPerDay[29] ?? 0).toDouble()));
+
+        final allVals = [
+          ...entrySpots.map((s) => s.y),
+          ...exitSpots.map((s) => s.y),
+        ];
+        final maxY =
+            allVals.isEmpty ? 10.0 : (allVals.reduce((a, b) => a > b ? a : b) + 2);
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _LegendDot(
+                      color: AppColors.success600, label: 'Entradas'),
+                  const SizedBox(width: 16),
+                  _LegendDot(color: AppColors.danger600, label: 'Saídas'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: LineChart(
+                  LineChartData(
+                    minX: 0,
+                    maxX: 29,
+                    minY: 0,
+                    maxY: maxY,
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      getDrawingHorizontalLine: (_) => FlLine(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outlineVariant
+                            .withValues(alpha: 0.3),
+                        strokeWidth: 1,
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    titlesData: FlTitlesData(
+                      leftTitles: const AxisTitles(
+                          sideTitles: SideTitles(
+                              showTitles: true, reservedSize: 28)),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 22,
+                          getTitlesWidget: (val, _) {
+                            final day = range.start
+                                .add(Duration(days: val.toInt()));
+                            if (val % 10 != 0 && val != 29) {
+                              return const SizedBox.shrink();
+                            }
+                            return Text(
+                              '${day.day}/${day.month}',
+                              style: const TextStyle(fontSize: 9),
+                            );
+                          },
+                        ),
+                      ),
+                      topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                    ),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: entrySpots,
+                        isCurved: true,
+                        color: AppColors.success600,
+                        barWidth: 2.5,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color:
+                              AppColors.success600.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      LineChartBarData(
+                        spots: exitSpots,
+                        isCurved: true,
+                        color: AppColors.danger600,
+                        barWidth: 2.5,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color:
+                              AppColors.danger600.withValues(alpha: 0.08),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── Bar chart: batches by urgency ──────────────────────────────────────────
+
+class _UrgencyBarChart extends ConsumerWidget {
+  final bool isDark;
+  const _UrgencyBarChart({required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final allAsync = ref.watch(allAvailableBatchesProvider);
+    final crit7 = ref.watch(expiringBatchesProvider(7));
+    final warn30 = ref.watch(expiringBatchesProvider(30));
+
+    return allAsync.when(
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      error: (_, __) => const Center(
+          child: Icon(Icons.bar_chart_rounded, size: 40)),
+      data: (all) {
+        final critCount =
+            crit7.maybeWhen(data: (l) => l.length, orElse: () => 0);
+        final warnCount = warn30.maybeWhen(
+            data: (warnList) {
+              final critList = crit7.valueOrNull ?? [];
+              return warnList
+                  .where((b) => !critList.any((c) => c.id == b.id))
+                  .length;
+            },
+            orElse: () => 0);
+        final okCount =
+            all.where((b) => b.noExpiry || b.daysToExpiry > 30).length;
+
+        final maxY =
+            [critCount, warnCount, okCount].reduce((a, b) => a > b ? a : b);
+        final yMax = (maxY + 2).toDouble();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+          child: BarChart(
+            BarChartData(
+              alignment: BarChartAlignment.spaceAround,
+              maxY: yMax,
+              barTouchData: BarTouchData(enabled: false),
+              titlesData: FlTitlesData(
+                leftTitles: const AxisTitles(
+                    sideTitles:
+                        SideTitles(showTitles: true, reservedSize: 28)),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (val, _) {
+                      const labels = ['Crítico', 'Atenção', 'OK'];
+                      final i = val.toInt();
+                      if (i < 0 || i >= labels.length) {
+                        return const SizedBox.shrink();
+                      }
+                      return Text(labels[i],
+                          style: const TextStyle(fontSize: 11));
+                    },
+                  ),
+                ),
+                topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+              ),
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (_) => FlLine(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outlineVariant
+                      .withValues(alpha: 0.3),
+                  strokeWidth: 1,
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              barGroups: [
+                BarChartGroupData(x: 0, barRods: [
+                  BarChartRodData(
+                    toY: critCount.toDouble(),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFC53030), Color(0xFFE53E3E)],
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                    ),
+                    width: 36,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(6)),
+                  )
+                ]),
+                BarChartGroupData(x: 1, barRods: [
+                  BarChartRodData(
+                    toY: warnCount.toDouble(),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFB7791F), Color(0xFFD69E2E)],
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                    ),
+                    width: 36,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(6)),
+                  )
+                ]),
+                BarChartGroupData(x: 2, barRods: [
+                  BarChartRodData(
+                    toY: okCount.toDouble(),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF276749), Color(0xFF38A169)],
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                    ),
+                    width: 36,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(6)),
+                  )
+                ]),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── Legend dot helper ───────────────────────────────────────────────────────
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+            width: 10,
+            height: 10,
+            decoration:
+                BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ],
     );
   }
