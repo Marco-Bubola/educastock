@@ -57,11 +57,14 @@ class AuditPage extends ConsumerStatefulWidget {
 class _AuditPageState extends ConsumerState<AuditPage> {
   String? _filterAction;
   DateTimeRange? _filterDateRange;
+  String? _filterUser;
   final _keyAuditList = GlobalKey();
   final _keyFilterBtn = GlobalKey();
 
   int get _activeFilterCount =>
-      (_filterAction != null ? 1 : 0) + (_filterDateRange != null ? 1 : 0);
+      (_filterAction != null ? 1 : 0) +
+      (_filterDateRange != null ? 1 : 0) +
+      (_filterUser != null && _filterUser!.isNotEmpty ? 1 : 0);
 
   List<Map<String, dynamic>> _applyFilters(
       List<Map<String, dynamic>> logs) {
@@ -84,12 +87,22 @@ class _AuditPageState extends ConsumerState<AuditPage> {
         }
       }).toList();
     }
+    if (_filterUser != null && _filterUser!.isNotEmpty) {
+      final query = _filterUser!.toLowerCase();
+      filtered = filtered
+          .where((l) => (l['performedByName'] as String? ?? '')
+              .toLowerCase()
+              .contains(query))
+          .toList();
+    }
     return filtered;
   }
 
   Future<void> _showFilterBottomSheet(BuildContext context) async {
     String? tmpAction = _filterAction;
     DateTimeRange? tmpRange = _filterDateRange;
+    String? tmpUser = _filterUser;
+    final userController = TextEditingController(text: tmpUser ?? '');
 
     await showModalBottomSheet(
       context: context,
@@ -211,6 +224,32 @@ class _AuditPageState extends ConsumerState<AuditPage> {
                     style: AppTypography.bodySmall,
                   ),
                 ],
+                const SizedBox(height: AppSpacing.lg),
+                Text('Usuário',
+                    style: AppTypography.labelMedium.copyWith(
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: AppSpacing.sm),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Theme.of(ctx).colorScheme.outline.withValues(alpha: 0.5),
+                    ),
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                  ),
+                  child: TextField(
+                    controller: userController,
+                    onChanged: (v) {
+                      setModal(() => tmpUser = v.isEmpty ? null : v);
+                    },
+                    decoration: const InputDecoration(
+                      hintText: 'Filtrar por nome do usuário',
+                      prefixIcon: Icon(Icons.person_search_rounded),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 13),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.xl),
                 Row(
                   children: [
@@ -220,6 +259,8 @@ class _AuditPageState extends ConsumerState<AuditPage> {
                           setModal(() {
                             tmpAction = null;
                             tmpRange = null;
+                            tmpUser = null;
+                            userController.clear();
                           });
                         },
                         child: const Text('Limpar'),
@@ -232,6 +273,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
                           setState(() {
                             _filterAction = tmpAction;
                             _filterDateRange = tmpRange;
+                            _filterUser = tmpUser;
                           });
                           Navigator.pop(ctx);
                         },
@@ -246,6 +288,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
         },
       ),
     );
+    userController.dispose();
   }
 
   @override
