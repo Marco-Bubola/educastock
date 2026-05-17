@@ -9,6 +9,7 @@ class AppUser {
   final UserRole role;
   final bool isActive;
   final DateTime createdAt;
+  final bool twoFactorEnabled;
 
   const AppUser({
     required this.id,
@@ -17,6 +18,7 @@ class AppUser {
     required this.role,
     required this.isActive,
     required this.createdAt,
+    this.twoFactorEnabled = false,
   });
 
   bool get canEdit =>
@@ -46,6 +48,7 @@ class AppUser {
       ),
       isActive: map['isActive'] as bool? ?? true,
       createdAt: createdAt,
+      twoFactorEnabled: map['twoFactorEnabled'] as bool? ?? false,
     );
   }
 
@@ -55,6 +58,7 @@ class AppUser {
         'role': role.name,
         'isActive': isActive,
         'createdAt': createdAt.toIso8601String(),
+        'twoFactorEnabled': twoFactorEnabled,
       };
 
   AppUser copyWith({
@@ -62,6 +66,7 @@ class AppUser {
     String? email,
     UserRole? role,
     bool? isActive,
+    bool? twoFactorEnabled,
   }) =>
       AppUser(
         id: id,
@@ -70,5 +75,6 @@ class AppUser {
         role: role ?? this.role,
         isActive: isActive ?? this.isActive,
         createdAt: createdAt,
+        twoFactorEnabled: twoFactorEnabled ?? this.twoFactorEnabled,
       );
 }
