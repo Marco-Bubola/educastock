@@ -87,6 +87,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
+        final tt = Theme.of(ctx).textTheme;
         return Container(
           decoration: BoxDecoration(
             color: cs.surface,
@@ -126,10 +127,10 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Código detectado!',
-                          style: cs.textTheme.titleMedium
+                          style: tt.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w700)),
                       Text('Confirme antes de prosseguir',
-                          style: cs.textTheme.bodySmall
+                          style: tt.bodySmall
                               ?.copyWith(color: cs.onSurfaceVariant)),
                     ],
                   ),
@@ -247,6 +248,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
         final cs = Theme.of(sheetCtx).colorScheme;
+        final tt = Theme.of(sheetCtx).textTheme;
         return Padding(
           padding: EdgeInsets.only(
               bottom: MediaQuery.of(sheetCtx).viewInsets.bottom),
@@ -271,11 +273,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                   ),
                 ),
                 Text('Código manual',
-                    style: cs.textTheme.titleMedium
+                    style: tt.titleMedium
                         ?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
                 Text('Digite o código para buscar o produto.',
-                    style: cs.textTheme.bodySmall
+                    style: tt.bodySmall
                         ?.copyWith(color: cs.onSurfaceVariant)),
                 const SizedBox(height: 20),
                 TextField(
