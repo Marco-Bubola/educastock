@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -221,6 +222,38 @@ class AuthRemoteDatasource {
 
   Future<void> sendPasswordReset(String email) =>
       _auth.sendPasswordResetEmail(email: email);
+
+  Future<void> sendOtp(String userId) async {
+    final code = (Random.secure().nextInt(900000) + 100000).toString();
+    final expiresAt = DateTime.now().add(const Duration(minutes: 10));
+    await _firestore.collection('otp_codes').doc(userId).set({
+      'code': code,
+      'expiresAt': expiresAt.toIso8601String(),
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<bool> verifyOtp(String userId, String code) async {
+    final doc = await _firestore.collection('otp_codes').doc(userId).get();
+    if (!doc.exists || doc.data() == null) return false;
+    final data = doc.data()!;
+    final storedCode = data['code'] as String?;
+    final expiresAtRaw = data['expiresAt'] as String?;
+    if (storedCode == null || expiresAtRaw == null) return false;
+    final expiresAt = DateTime.tryParse(expiresAtRaw);
+    if (expiresAt == null) return false;
+    final valid = code == storedCode && DateTime.now().isBefore(expiresAt);
+    if (valid) {
+      await _firestore.collection('otp_codes').doc(userId).delete();
+    }
+    return valid;
+  }
+
+  Future<void> enable2FA(String userId, {required bool enabled}) async {
+    await _firestore.collection('users').doc(userId).update({
+      'twoFactorEnabled': enabled,
+    });
+  }
 
   Future<void> changePassword({
     required String currentPassword,
