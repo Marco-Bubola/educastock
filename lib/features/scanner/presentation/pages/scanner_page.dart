@@ -15,14 +15,50 @@ class ScannerPage extends ConsumerStatefulWidget {
 }
 
 class _ScannerPageState extends ConsumerState<ScannerPage> {
+  static const double _defaultZoomScale = 0.35;
+  static const double _zoomStep = 0.1;
+
   final _cameraController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     returnImage: false,
+    autoStart: false,
   );
 
   bool _navigating = false;
+  double _zoomScale = _defaultZoomScale;
   final _keyScannerArea = GlobalKey();
   final _keyScannerManual = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _startCameraWithZoom();
+  }
+
+  Future<void> _startCameraWithZoom() async {
+    try {
+      await _cameraController.start();
+      await _cameraController.setZoomScale(_zoomScale);
+    } catch (_) {
+      // Se o dispositivo nao suportar zoom inicial, mantem funcionamento padrao.
+    }
+  }
+
+  Future<void> _setZoomScale(double nextZoom) async {
+    final normalized = nextZoom.clamp(0.0, 1.0).toDouble();
+    if ((normalized - _zoomScale).abs() < 0.001) return;
+
+    setState(() => _zoomScale = normalized);
+    try {
+      await _cameraController.setZoomScale(_zoomScale);
+    } catch (_) {
+      // Mantem a experiencia mesmo em devices sem suporte a ajuste de zoom.
+    }
+  }
+
+  Future<void> _increaseZoom() => _setZoomScale(_zoomScale + _zoomStep);
+
+  Future<void> _decreaseZoom() => _setZoomScale(_zoomScale - _zoomStep);
 
   @override
   void dispose(){
@@ -174,6 +210,16 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
             ),
           ),
           IconButton(
+            tooltip: 'Diminuir zoom',
+            icon: const Icon(Icons.zoom_out_rounded, color: Colors.white),
+            onPressed: _decreaseZoom,
+          ),
+          IconButton(
+            tooltip: 'Aumentar zoom',
+            icon: const Icon(Icons.zoom_in_rounded, color: Colors.white),
+            onPressed: _increaseZoom,
+          ),
+          IconButton(
             icon: ValueListenableBuilder(
               valueListenable: _cameraController,
               builder: (_, state, __) => Icon(
@@ -187,7 +233,10 @@ class _ScannerPageState extends ConsumerState<ScannerPage> {
           ),
           IconButton(
             icon: const Icon(Icons.flip_camera_ios_outlined, color: Colors.white),
-            onPressed: _cameraController.switchCamera,
+            onPressed: () async {
+              await _cameraController.switchCamera();
+              await _cameraController.setZoomScale(_zoomScale);
+            },
           ),
         ],
       ),
