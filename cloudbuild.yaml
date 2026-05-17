@@ -19,6 +19,28 @@ steps:
       - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:latest
       - .
 
+  # Deploy automático do backend no Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - functions
+      - --image=southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:$COMMIT_SHA
+      - --region=southamerica-east1
+      - --quiet
+
+  # Deploy automático do frontend no Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - educastock-web
+      - --image=southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:$COMMIT_SHA
+      - --region=southamerica-east1
+      - --quiet
+
 images:
   - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:$COMMIT_SHA
   - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:latest
