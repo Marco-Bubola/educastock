@@ -19,6 +19,7 @@ import 'package:go_router/go_router.dart';
 import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
 import '../../../ml/domain/entities/risk_prediction.dart';
 import '../../../ml/presentation/widgets/risk_widgets.dart';
+import '../../../settings/presentation/controllers/system_settings_provider.dart';
 
 import '../controllers/reports_provider.dart';
 import '../../../stock/domain/entities/stock_movement.dart';
@@ -267,6 +268,12 @@ class ReportsPage extends ConsumerWidget {
         appBar: _ReportsAppBar(
           actions: [
             IconButton(
+              icon: const Icon(Icons.event_repeat_rounded,
+                  color: Colors.white, size: 20),
+              tooltip: 'Agendar relatório semanal',
+              onPressed: () => _showScheduleSheet(context),
+            ),
+            IconButton(
               icon: const Icon(Icons.picture_as_pdf_outlined,
                   color: Colors.white, size: 20),
               tooltip: 'Exportar PDF',
@@ -299,6 +306,297 @@ class ReportsPage extends ConsumerWidget {
             _ChartsTab(),
             _MlRiskTab(),
             _MovementsTab(),
+          ],
+        ),
+      ),
+    );
+  }
+  static void _showScheduleSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _ReportScheduleSheet(),
+    );
+  }
+}
+
+// ─── Report Schedule Bottom Sheet ────────────────────────────────────────────
+
+class _ReportScheduleSheet extends ConsumerStatefulWidget {
+  const _ReportScheduleSheet();
+
+  @override
+  ConsumerState<_ReportScheduleSheet> createState() =>
+      _ReportScheduleSheetState();
+}
+
+class _ReportScheduleSheetState extends ConsumerState<_ReportScheduleSheet> {
+  bool _enabled = false;
+  int _dayOfWeek = 1; // Monday
+  TimeOfDay _sendTime = const TimeOfDay(hour: 8, minute: 0);
+  final _emailCtrl = TextEditingController();
+  bool _initialized = false;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  String _formatTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  TimeOfDay _parseTime(String? s) {
+    if (s == null) return const TimeOfDay(hour: 8, minute: 0);
+    final parts = s.split(':');
+    if (parts.length < 2) return const TimeOfDay(hour: 8, minute: 0);
+    return TimeOfDay(
+        hour: int.tryParse(parts[0]) ?? 8,
+        minute: int.tryParse(parts[1]) ?? 0);
+  }
+
+  static const _dayLabels = [
+    '', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'
+  ];
+
+  Future<void> _save() async {
+    final email = _emailCtrl.text.trim();
+    if (_enabled && (email.isEmpty || !email.contains('@'))) {
+      showCasaSnackbar(context,
+          message: 'Informe um e-mail válido para receber o relatório.',
+          isError: true);
+      return;
+    }
+    await ref.read(reportScheduleNotifierProvider.notifier).save(
+          ReportScheduleConfig(
+            enabled: _enabled,
+            recipientEmail: email,
+            dayOfWeek: _dayOfWeek,
+            sendTime: _formatTime(_sendTime),
+          ),
+        );
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    showCasaSnackbar(context,
+        message: _enabled
+            ? 'Relatório agendado para ${_dayLabels[_dayOfWeek]} às ${_formatTime(_sendTime)}'
+            : 'Agendamento desativado.',
+        isSuccess: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final scheduleAsync = ref.watch(reportScheduleConfigProvider);
+
+    // Initialize once
+    scheduleAsync.whenData((config) {
+      if (!_initialized) {
+        _enabled = config.enabled;
+        _dayOfWeek = config.dayOfWeek;
+        _sendTime = _parseTime(config.sendTime);
+        _emailCtrl.text = config.recipientEmail;
+        _initialized = true;
+      }
+    });
+
+    final notifierState = ref.watch(reportScheduleNotifierProvider);
+    final isSaving = notifierState is AsyncLoading;
+
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: BoxDecoration(
+                    color: cs.outlineVariant,
+                    borderRadius: BorderRadius.circular(AppRadius.pill)),
+              ),
+            ),
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary600.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                  ),
+                  child: const Icon(Icons.event_repeat_rounded,
+                      color: AppColors.brandPrimary600, size: 22),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Relatório Semanal Automático',
+                          style: AppTypography.headingSmall.copyWith(
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w700)),
+                      Text(
+                        'Receba o relatório de estoque por e-mail',
+                        style: AppTypography.bodySmall
+                            .copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _enabled,
+                  onChanged: (v) => setState(() => _enabled = v),
+                  activeColor: AppColors.brandPrimary600,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            if (_enabled) ...[
+              // Email
+              TextField(
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'E-mail destinatário',
+                  hintText: 'Ex: diretor@casadacrianca.org.br',
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.input)),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Day of week
+              Text('Dia da semana',
+                  style: AppTypography.labelMedium
+                      .copyWith(color: cs.onSurface)),
+              const SizedBox(height: AppSpacing.sm),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: List.generate(7, (i) {
+                    final day = i + 1;
+                    final selected = _dayOfWeek == day;
+                    return Padding(
+                      padding:
+                          const EdgeInsets.only(right: AppSpacing.xs),
+                      child: ChoiceChip(
+                        label: Text(_dayLabels[day].substring(0, 3)),
+                        selected: selected,
+                        onSelected: (_) =>
+                            setState(() => _dayOfWeek = day),
+                        selectedColor: AppColors.brandPrimary600,
+                        labelStyle: AppTypography.labelSmall.copyWith(
+                          color: selected
+                              ? Colors.white
+                              : cs.onSurfaceVariant,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Time
+              Text('Horário de envio',
+                  style: AppTypography.labelMedium
+                      .copyWith(color: cs.onSurface)),
+              const SizedBox(height: AppSpacing.sm),
+              InkWell(
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: _sendTime,
+                    helpText: 'Horário de envio do relatório',
+                  );
+                  if (picked != null) setState(() => _sendTime = picked);
+                },
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                    border: Border.all(color: cs.outlineVariant),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time_rounded,
+                          color: AppColors.brandPrimary600),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(_formatTime(_sendTime),
+                          style: AppTypography.headingSmall.copyWith(
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w700)),
+                      const Spacer(),
+                      Icon(Icons.chevron_right_rounded,
+                          color: cs.onSurfaceVariant),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Info banner
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.warning600.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(
+                      color: AppColors.warning600.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 14, color: AppColors.warning600),
+                    const SizedBox(width: AppSpacing.xs),
+                    const Expanded(
+                      child: Text(
+                        'O envio automático requer que a Cloud Function '
+                        '"scheduledReport" esteja implantada no Firebase.',
+                        style: TextStyle(
+                            fontSize: 11, color: AppColors.warning600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: isSaving ? null : _save,
+                icon: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.save_rounded),
+                label: Text(isSaving ? 'Salvando...' : 'Salvar agendamento'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brandPrimary600,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.button)),
+                ),
+              ),
+            ),
           ],
         ),
       ),
