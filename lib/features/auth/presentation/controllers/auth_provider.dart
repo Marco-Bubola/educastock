@@ -91,9 +91,12 @@ class AuthNotifier extends Notifier<AsyncValue<AppUser?>> {
   Future<void> signOut() async {
     final ds = ref.read(authDatasourceProvider);
     await ds.signOut();
+    ref.read(pendingOtpProvider.notifier).state = false;
     state = const AsyncValue.data(null);
   }
 }
 
 final authNotifierProvider =
     NotifierProvider<AuthNotifier, AsyncValue<AppUser?>>(() => AuthNotifier());
+
+final pendingOtpProvider = StateProvider<bool>((_) => false);
