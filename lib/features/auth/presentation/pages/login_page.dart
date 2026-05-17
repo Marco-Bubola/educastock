@@ -59,10 +59,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final state = ref.read(authNotifierProvider);
     if (!mounted) return;
     state.when(
-      data: (user) {
+      data: (user) async {
         if (user != null) {
           ref.read(analyticsServiceProvider).logAuthLogin(method: 'password');
-          context.go(AppRoutes.dashboard);
+          if (user.twoFactorEnabled) {
+            try {
+              await ref.read(authDatasourceProvider).sendOtp(user.id);
+            } catch (_) {
+              if (!mounted) return;
+              showCasaSnackbar(
+                context,
+                message: 'Não foi possível enviar o código 2FA.',
+                isError: true,
+              );
+              return;
+            }
+            if (!mounted) return;
+            ref.read(pendingOtpProvider.notifier).state = true;
+            context.go(AppRoutes.otpVerification);
+          } else {
+            ref.read(pendingOtpProvider.notifier).state = false;
+            context.go(AppRoutes.dashboard);
+          }
         } else {
           showCasaSnackbar(
             context,
@@ -87,10 +105,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final state = ref.read(authNotifierProvider);
     if (!mounted) return;
     state.when(
-      data: (user) {
+      data: (user) async {
         if (user != null) {
           ref.read(analyticsServiceProvider).logAuthLogin(method: 'google');
-          context.go(AppRoutes.dashboard);
+          if (user.twoFactorEnabled) {
+            try {
+              await ref.read(authDatasourceProvider).sendOtp(user.id);
+            } catch (_) {
+              if (!mounted) return;
+              showCasaSnackbar(
+                context,
+                message: 'Não foi possível enviar o código 2FA.',
+                isError: true,
+              );
+              return;
+            }
+            if (!mounted) return;
+            ref.read(pendingOtpProvider.notifier).state = true;
+            context.go(AppRoutes.otpVerification);
+          } else {
+            ref.read(pendingOtpProvider.notifier).state = false;
+            context.go(AppRoutes.dashboard);
+          }
         }
         if (user == null) {
           showCasaSnackbar(
