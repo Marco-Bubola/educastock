@@ -173,7 +173,174 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
           },
         ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showCreateAlertSheet(context),
+        icon: const Icon(Icons.add_alert_rounded),
+        label: const Text('Alerta manual'),
+        tooltip: 'Criar alerta manual',
+      ),
     );
+  }
+
+  Future<void> _showCreateAlertSheet(BuildContext context) async {
+    final nameController = TextEditingController();
+    final msgController = TextEditingController();
+    AlertLevel selectedLevel = AlertLevel.warning;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.modal)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg + MediaQuery.of(ctx).viewInsets.bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFDC2626), Color(0xFFEF4444)],
+                        ),
+                        borderRadius: BorderRadius.circular(AppRadius.small),
+                      ),
+                      child: const Icon(Icons.add_alert_rounded,
+                          color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Text('Criar Alerta Manual',
+                        style: AppTypography.headingSmall),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Text('Produto / Descrição',
+                    style: AppTypography.labelMedium
+                        .copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    hintText: 'Ex: Arroz, Feijão…',
+                    prefixIcon: const Icon(Icons.inventory_2_rounded),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 13),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text('Nível de urgência',
+                    style: AppTypography.labelMedium
+                        .copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  children: AlertLevel.values.map((lvl) {
+                    final color = switch (lvl) {
+                      AlertLevel.critical => AppColors.danger600,
+                      AlertLevel.warning => AppColors.warning600,
+                      AlertLevel.info => AppColors.brandPrimary600,
+                    };
+                    final label = switch (lvl) {
+                      AlertLevel.critical => '🔴 Crítico',
+                      AlertLevel.warning => '🟡 Atenção',
+                      AlertLevel.info => '🔵 Info',
+                    };
+                    return ChoiceChip(
+                      label: Text(label),
+                      selected: selectedLevel == lvl,
+                      selectedColor: color.withValues(alpha: 0.18),
+                      onSelected: (_) => setModal(() => selectedLevel = lvl),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text('Mensagem',
+                    style: AppTypography.labelMedium
+                        .copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: msgController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Descreva o motivo do alerta…',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 13),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Cancelar'),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: FilledButton.icon(
+                        icon: const Icon(Icons.add_alert_rounded, size: 18),
+                        label: const Text('Criar alerta'),
+                        onPressed: () async {
+                          final name = nameController.text.trim();
+                          final msg = msgController.text.trim();
+                          if (name.isEmpty || msg.isEmpty) {
+                            showCasaSnackbar(ctx,
+                                message:
+                                    'Preencha todos os campos.',
+                                isError: true);
+                            return;
+                          }
+                          Navigator.pop(ctx);
+                          try {
+                            await ref
+                                .read(alertsNotifierProvider.notifier)
+                                .createManualAlert(
+                                  productName: name,
+                                  level: selectedLevel,
+                                  message: msg,
+                                );
+                            if (!context.mounted) return;
+                            showCasaSnackbar(context,
+                                message: 'Alerta criado com sucesso!',
+                                isSuccess: true);
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            showCasaSnackbar(context,
+                                message: 'Erro ao criar alerta.',
+                                isError: true);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    nameController.dispose();
+    msgController.dispose();
   }
 }
 
