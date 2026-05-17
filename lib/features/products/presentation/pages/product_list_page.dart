@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -266,6 +267,11 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
             onPressed: () => context.push('${AppRoutes.movement}?batchId='),
             tooltip: 'Registrar saída',
           ),
+          IconButton(
+            icon: const Icon(Icons.upload_file_rounded),
+            onPressed: () => _showCsvImportSheet(context),
+            tooltip: 'Importar CSV',
+          ),
         ],
       ),
       body: SafeArea(
@@ -403,9 +409,292 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
       ),
     );
   }
+
+  void _showCsvImportSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CsvImportSheet(parentRef: ref),
+    );
+  }
 }
 
-// ─── Campo de busca ───────────────────────────────────────────────────────
+// ─── CSV Import Bottom Sheet ──────────────────────────────────────────────────
+
+class _CsvImportSheet extends ConsumerStatefulWidget {
+  final WidgetRef parentRef;
+  const _CsvImportSheet({required this.parentRef});
+
+  @override
+  ConsumerState<_CsvImportSheet> createState() => _CsvImportSheetState();
+}
+
+class _CsvImportSheetState extends ConsumerState<_CsvImportSheet> {
+  String? _fileName;
+  String? _csvContent;
+  bool _picking = false;
+
+  Future<void> _pickFile() async {
+    setState(() => _picking = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'txt'],
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final bytes = file.bytes;
+        if (bytes != null) {
+          setState(() {
+            _fileName = file.name;
+            _csvContent = String.fromCharCodes(bytes);
+          });
+        }
+      }
+    } finally {
+      setState(() => _picking = false);
+    }
+  }
+
+  Future<void> _doImport() async {
+    if (_csvContent == null) return;
+    final user = ref.read(currentUserProvider);
+    final notifier = ref.read(csvImportProvider.notifier);
+    final count =
+        await notifier.importFromCsvString(_csvContent!, user?.uid ?? 'system');
+    if (!mounted) return;
+    if (count > 0) {
+      Navigator.of(context).pop();
+      showCasaSnackbar(
+        context,
+        message: '$count produto(s) importado(s) com sucesso!',
+        isError: false,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final importState = ref.watch(csvImportProvider);
+
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary600.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                  ),
+                  child: const Icon(Icons.upload_file_rounded,
+                      color: AppColors.brandPrimary600, size: 22),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Importar Produtos via CSV',
+                          style: AppTypography.headingSmall.copyWith(
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w700)),
+                      Text(
+                        'Formato: nome, categoria, código_barras, perecível',
+                        style: AppTypography.bodySmall
+                            .copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            // Instructions card
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: AppColors.secondaryBlue600.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border: Border.all(
+                    color: AppColors.secondaryBlue600.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('📋 Formato esperado do CSV:',
+                      style: AppTypography.labelMedium
+                          .copyWith(color: AppColors.secondaryBlue600)),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'nome,categoria,codigo_barras,perecivel\n'
+                    'Arroz Integral,alimento,7891234567890,sim\n'
+                    'Detergente Liq.,limpeza,,nao\n\n'
+                    'Categorias: alimento, bebida, limpeza,\n'
+                    'higiene, escolar, roupas, outro',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontFamily: 'monospace',
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            // File picker
+            InkWell(
+              onTap: _picking ? null : _pickFile,
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                  border: Border.all(
+                    color: _csvContent != null
+                        ? AppColors.success600
+                        : cs.outlineVariant,
+                    width: _csvContent != null ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _csvContent != null
+                          ? Icons.check_circle_rounded
+                          : Icons.attach_file_rounded,
+                      color: _csvContent != null
+                          ? AppColors.success600
+                          : cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        _picking
+                            ? 'Selecionando arquivo...'
+                            : _fileName ?? 'Toque para selecionar arquivo CSV',
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: _csvContent != null
+                              ? AppColors.success600
+                              : cs.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (_csvContent != null)
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        onPressed: () =>
+                            setState(() {
+                              _fileName = null;
+                              _csvContent = null;
+                            }),
+                        color: cs.onSurfaceVariant,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            // Progress / error
+            if (importState.loading)
+              Column(
+                children: [
+                  LinearProgressIndicator(
+                    backgroundColor: cs.surfaceContainerHigh,
+                    color: AppColors.brandPrimary600,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Importando produtos...',
+                    style: AppTypography.bodySmall
+                        .copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            if (importState.error != null)
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.danger600.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_rounded,
+                        color: AppColors.danger600, size: 16),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: Text(importState.error!,
+                          style: AppTypography.bodySmall
+                              .copyWith(color: AppColors.danger600)),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: AppSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: (_csvContent == null || importState.loading)
+                    ? null
+                    : _doImport,
+                icon: importState.loading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.cloud_upload_rounded),
+                label: Text(importState.loading
+                    ? 'Importando...'
+                    : 'Importar Produtos'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.brandPrimary600,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.button)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _SearchField extends StatelessWidget {
   final TextEditingController controller;
