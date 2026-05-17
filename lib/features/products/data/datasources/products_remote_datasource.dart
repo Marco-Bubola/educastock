@@ -74,4 +74,24 @@ class ProductsRemoteDatasource {
   Future<void> deleteProduct(String id) async {
     await _col.doc(id).update({'isActive': false});
   }
+
+  /// Cria múltiplos produtos em lote usando WriteBatch.
+  /// Retorna a lista de IDs criados.
+  Future<List<String>> batchCreateProducts(List<Product> products) async {
+    const chunkSize = 400; // Firestore limite: 500 ops por batch
+    final ids = <String>[];
+    for (var i = 0; i < products.length; i += chunkSize) {
+      final chunk = products.sublist(
+          i, (i + chunkSize).clamp(0, products.length));
+      final batch = _db.batch();
+      for (final p in chunk) {
+        final ref = _col.doc();
+        batch.set(ref, p.copyWith().toMap()
+          ..['createdAt'] = DateTime.now().toIso8601String());
+        ids.add(ref.id);
+      }
+      await batch.commit();
+    }
+    return ids;
+  }
 }
