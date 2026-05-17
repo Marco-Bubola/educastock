@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/auth/presentation/controllers/auth_provider.dart';
 import 'app_navigation_shell.dart';
+import '../../features/auth/presentation/pages/otp_verification_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
@@ -30,6 +31,7 @@ import '../../features/stock/presentation/pages/history_page.dart';
 abstract class AppRoutes {
   static const login = '/login';
   static const register = '/register';
+  static const otpVerification = '/otp-verify';
   static const dashboard = '/dashboard';
   static const scanner = '/scanner';
   static const productReview = '/scanner/review';
@@ -56,6 +58,7 @@ abstract class AppRoutes {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authStateProvider);
+  ref.watch(pendingOtpProvider);
 
   return GoRouter(
     initialLocation: AppRoutes.login,
@@ -63,10 +66,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (auth.isLoading) return null;
 
       final isLoggedIn = auth.valueOrNull != null;
+      final location = state.matchedLocation;
+      final pendingOtp = ref.read(pendingOtpProvider);
+
       final isPublicRoute = {
         AppRoutes.login,
         AppRoutes.register,
-      }.contains(state.matchedLocation);
+      }.contains(location);
+
+      // Guard: OTP page
+      if (location == AppRoutes.otpVerification) {
+        if (!isLoggedIn) return AppRoutes.login;
+        if (!pendingOtp) return AppRoutes.dashboard;
+        return null;
+      }
+
+      // If authenticated with pending OTP, force to OTP page
+      if (isLoggedIn && pendingOtp) return AppRoutes.otpVerification;
 
       if (!isLoggedIn && !isPublicRoute) return AppRoutes.login;
       if (isLoggedIn && isPublicRoute) return AppRoutes.dashboard;
@@ -80,6 +96,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.register,
         builder: (_, __) => const RegisterPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.otpVerification,
+        builder: (_, __) => const OtpVerificationPage(),
       ),
       // Scanner e revisão de produto ficam fora do ShellRoute
       // para não exibir a tabbar de navegação na câmera.
