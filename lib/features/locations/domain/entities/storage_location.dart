@@ -8,6 +8,7 @@ class StorageLocation {
   final int? shelvesCount;
   final int? levelsCount;
   final int? productsPerLevel;
+  final int? capacity;
   final bool isActive;
   final DateTime createdAt;
   final String normalizedKey;
@@ -22,6 +23,7 @@ class StorageLocation {
     this.shelvesCount,
     this.levelsCount,
     this.productsPerLevel,
+    this.capacity,
     this.isActive = true,
     required this.createdAt,
     required this.normalizedKey,
@@ -49,6 +51,7 @@ class StorageLocation {
       shelvesCount: (map['shelvesCount'] as num?)?.toInt(),
       levelsCount: (map['levelsCount'] as num?)?.toInt(),
       productsPerLevel: (map['productsPerLevel'] as num?)?.toInt(),
+      capacity: (map['capacity'] as num?)?.toInt(),
       isActive: map['isActive'] as bool? ?? true,
       createdAt: DateTime.parse(map['createdAt'] as String),
       normalizedKey: map['normalizedKey'] as String,
@@ -64,6 +67,7 @@ class StorageLocation {
         'shelvesCount': shelvesCount,
         'levelsCount': levelsCount,
         'productsPerLevel': productsPerLevel,
+        'capacity': capacity,
         'isActive': isActive,
         'createdAt': createdAt.toIso8601String(),
         'normalizedKey': normalizedKey,
