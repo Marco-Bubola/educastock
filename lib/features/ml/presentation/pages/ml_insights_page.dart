@@ -83,6 +83,64 @@ class MlInsightsPage extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
           children: [
+            // --- TFLite badge ---
+            sourceAsync.maybeWhen(
+              data: (src) => src == 'tflite'
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md,
+                            vertical: AppSpacing.sm),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              AppColors.brandPrimary600.withOpacity(0.12),
+                              AppColors.secondaryBlue600.withOpacity(0.06),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.card),
+                          border: Border.all(
+                              color: AppColors.brandPrimary600
+                                  .withOpacity(0.25)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.memory_rounded,
+                                color: AppColors.brandPrimary600, size: 18),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text('TFLite ativo',
+                                style: AppTypography.labelMedium.copyWith(
+                                    color: AppColors.brandPrimary600,
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(width: AppSpacing.xs),
+                            Text('— inferência on-device',
+                                style: AppTypography.bodySmall.copyWith(
+                                    color: AppColors.brandPrimary600
+                                        .withOpacity(0.7))),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.sm,
+                                  vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.success600.withOpacity(0.15),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.pill),
+                              ),
+                              child: Text('On-device',
+                                  style: AppTypography.labelSmall.copyWith(
+                                      color: AppColors.success600)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+              orElse: () => const SizedBox.shrink(),
+            ),
+
             // --- Resumo dos contadores ---
             const CasaSectionHeader(title: 'Resumo de Risco'),
             const SizedBox(height: AppSpacing.sm),
