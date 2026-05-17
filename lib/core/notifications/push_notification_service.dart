@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/domain/entities/app_user.dart';
 import '../../features/auth/presentation/controllers/auth_provider.dart';
+import '../../features/settings/presentation/controllers/system_settings_provider.dart';
 import '../router/app_router.dart';
 
 class PushNotificationService {
@@ -16,12 +17,19 @@ class PushNotificationService {
   bool _navigationBound = false;
   String? _lastUserId;
   StreamSubscription<String>? _tokenSub;
+  StreamSubscription<RemoteMessage>? _foregroundSub;
+
+  AlertsConfig? _alertsConfig;
 
   PushNotificationService({
     FirebaseMessaging? messaging,
     FirebaseFirestore? firestore,
   })  : _messaging = messaging ?? FirebaseMessaging.instance,
         _firestore = firestore ?? FirebaseFirestore.instance;
+
+  void updateAlertsConfig(AlertsConfig config) {
+    _alertsConfig = config;
+  }
 
   Future<void> configure({
     required GoRouter router,
@@ -43,6 +51,18 @@ class PushNotificationService {
       if (initialMessage != null) {
         router.go(AppRoutes.alerts);
       }
+
+      // Suppress foreground notifications during silent hours
+      await _foregroundSub?.cancel();
+      _foregroundSub = FirebaseMessaging.onMessage.listen((message) {
+        final config = _alertsConfig;
+        if (config != null && config.isSilentNow) {
+          debugPrint('[PNS] Silent mode active — suppressing foreground message');
+          return;
+        }
+        // Navigate to alerts so user sees the new alert
+        router.go(AppRoutes.alerts);
+      });
     }
 
     if (user == null) {
@@ -117,10 +137,16 @@ final pushNotificationServiceProvider = Provider<PushNotificationService>(
 final pushNotificationsBootstrapProvider = Provider<void>((ref) {
   final user = ref.watch(currentUserProvider);
   final router = ref.watch(routerProvider);
+  // Feed silent-mode config into the service whenever it changes
+  final alertsConfig = ref.watch(alertsConfigProvider).valueOrNull;
+  final service = ref.read(pushNotificationServiceProvider);
+  if (alertsConfig != null) {
+    service.updateAlertsConfig(alertsConfig);
+  }
   unawaited(
-    ref.read(pushNotificationServiceProvider).configure(
-          router: router,
-          user: user,
-        ),
+    service.configure(
+      router: router,
+      user: user,
+    ),
   );
 });
