@@ -4,7 +4,6 @@
 > Completude atual estimada: **~75%**
 
 ---
-
 ## Contexto
 
 O EducaStock é um app Flutter de controle de estoque para a ONG Casa da Criança. Já possui:
@@ -77,10 +76,6 @@ O código está em `lib/` organizado por `features/` e `core/`.
 - Testar com o modelo `assets/models/expiry_risk.tflite`
 - Mostrar badge "TFLite ativo" na `ml_insights_page.dart`
 
-#### 10. Settings — Internacionalização (i18n)
-- Adicionar suporte a inglês como segundo idioma
-- Usar `flutter_localizations` + `intl`
-- Começar com as telas mais críticas (login, dashboard, alertas)
 
 #### 11. Auth — 2FA básico
 - Adicionar autenticação de dois fatores via e-mail (OTP simples)
