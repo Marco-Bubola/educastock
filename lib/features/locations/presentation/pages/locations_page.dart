@@ -543,6 +543,13 @@ class _LocationCard extends StatelessWidget {
                       color: AppColors.warning600,
                       isDark: isDark,
                     ),
+                  if (location.capacity != null)
+                    _InfoChip(
+                      icon: Icons.straighten_rounded,
+                      label: 'Cap.: ${location.capacity}',
+                      color: AppColors.secondaryBlue600,
+                      isDark: isDark,
+                    ),
                 ],
               ),
             ),
