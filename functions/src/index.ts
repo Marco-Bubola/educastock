@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as nodemailer from 'nodemailer';
 import express, {Request, Response} from 'express';
 
 admin.initializeApp();
@@ -284,6 +285,195 @@ app.post('/notify-on-alert-created', async (req: Request, res: Response) => {
     res.json({success: true});
   } catch (err) {
     console.error('notifyOnAlertCreated error', err);
+    res.status(500).json({error: String(err)});
+  }
+});
+
+// ── start ─────────────────────────────────────────────────────────────────────
+
+// ── POST /send-weekly-report  (chamado pelo Cloud Scheduler semanal) ──────────
+
+interface ReportScheduleConfig {
+  enabled: boolean;
+  recipientEmail: string;
+  dayOfWeek: number; // 0=Dom … 6=Sáb
+  hour: number;
+  minute: number;
+}
+
+async function buildReportHtml(db: FirebaseFirestore.Firestore): Promise<string> {
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  // Parallel data fetches
+  const [productsSnap, batchesSnap, alertsSnap, movementsSnap] = await Promise.all([
+    db.collection('products').where('isActive', '==', true).get(),
+    db.collection('batches').where('status', '==', 'disponivel').where('quantity', '>', 0).get(),
+    db.collection('alerts').where('status', '==', 'open').get(),
+    db
+      .collection('movements')
+      .where('performedAt', '>=', weekAgo.toISOString())
+      .orderBy('performedAt', 'desc')
+      .limit(50)
+      .get(),
+  ]);
+
+  const totalProducts = productsSnap.size;
+  const totalBatches = batchesSnap.size;
+  const totalStock = batchesSnap.docs.reduce(
+    (sum, d) => sum + ((d.data().quantity as number | undefined) ?? 0),
+    0,
+  );
+
+  const criticalAlerts = alertsSnap.docs.filter(
+    (d) => d.data().severity === 'critical',
+  ).length;
+  const warningAlerts = alertsSnap.docs.filter(
+    (d) => d.data().severity === 'warning',
+  ).length;
+
+  const totalMovements = movementsSnap.size;
+  const movementRows = movementsSnap.docs
+    .slice(0, 10)
+    .map((d) => {
+      const m = d.data();
+      const date = new Date(m.performedAt as string).toLocaleDateString('pt-BR');
+      return `<tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee">${date}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee">${m.productName ?? '—'}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee">${m.type ?? '—'}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right">${m.quantity ?? 0}</td>
+      </tr>`;
+    })
+    .join('');
+
+  const dateStr = now.toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>Relatório Semanal — EducaStock</title></head>
+<body style="margin:0;padding:0;background:#f4f6fb;font-family:Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:32px 16px">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+        <!-- Header -->
+        <tr><td style="background:linear-gradient(135deg,#1976D2 0%,#42A5F5 100%);padding:32px 40px;color:#fff">
+          <h1 style="margin:0;font-size:24px;font-weight:700">📦 Relatório Semanal</h1>
+          <p style="margin:8px 0 0;font-size:14px;opacity:.85">EducaStock — Casa da Criança</p>
+          <p style="margin:4px 0 0;font-size:13px;opacity:.7">${dateStr}</p>
+        </td></tr>
+        <!-- KPI cards -->
+        <tr><td style="padding:32px 40px">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td width="25%" style="text-align:center;padding:16px 8px;background:#f0f7ff;border-radius:8px">
+                <div style="font-size:28px;font-weight:700;color:#1976D2">${totalProducts}</div>
+                <div style="font-size:12px;color:#666;margin-top:4px">Produtos ativos</div>
+              </td>
+              <td width="4%"></td>
+              <td width="25%" style="text-align:center;padding:16px 8px;background:#f0fff4;border-radius:8px">
+                <div style="font-size:28px;font-weight:700;color:#2e7d32">${totalStock}</div>
+                <div style="font-size:12px;color:#666;margin-top:4px">Itens em estoque</div>
+              </td>
+              <td width="4%"></td>
+              <td width="25%" style="text-align:center;padding:16px 8px;background:#fff8e1;border-radius:8px">
+                <div style="font-size:28px;font-weight:700;color:#f57c00">${warningAlerts}</div>
+                <div style="font-size:12px;color:#666;margin-top:4px">Alertas aviso</div>
+              </td>
+              <td width="4%"></td>
+              <td width="25%" style="text-align:center;padding:16px 8px;background:#fff0f0;border-radius:8px">
+                <div style="font-size:28px;font-weight:700;color:#c62828">${criticalAlerts}</div>
+                <div style="font-size:12px;color:#666;margin-top:4px">Alertas críticos</div>
+              </td>
+            </tr>
+          </table>
+          <!-- Movements summary -->
+          <h2 style="margin:32px 0 12px;font-size:16px;color:#1a1a2e">Movimentações da semana (${totalMovements} no total)</h2>
+          ${
+            movementRows
+              ? `<table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px">
+              <thead>
+                <tr style="background:#f4f6fb">
+                  <th style="padding:8px 10px;text-align:left;color:#555">Data</th>
+                  <th style="padding:8px 10px;text-align:left;color:#555">Produto</th>
+                  <th style="padding:8px 10px;text-align:left;color:#555">Tipo</th>
+                  <th style="padding:8px 10px;text-align:right;color:#555">Qtd</th>
+                </tr>
+              </thead>
+              <tbody>${movementRows}</tbody>
+            </table>`
+              : '<p style="color:#999;font-size:13px">Nenhuma movimentação esta semana.</p>'
+          }
+          <!-- Footer -->
+          <p style="margin:32px 0 0;font-size:12px;color:#aaa;text-align:center">
+            Este relatório foi gerado automaticamente pelo EducaStock.<br>
+            Para desativar, acesse Relatórios → Agendar relatório.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+app.post('/send-weekly-report', async (_req: Request, res: Response) => {
+  try {
+    // 1. Read schedule config
+    const scheduleDoc = await db.collection('settings').doc('report_schedule').get();
+    if (!scheduleDoc.exists) {
+      res.json({skipped: true, reason: 'no schedule config'});
+      return;
+    }
+    const config = scheduleDoc.data() as ReportScheduleConfig | undefined;
+    if (!config?.enabled) {
+      res.json({skipped: true, reason: 'schedule disabled'});
+      return;
+    }
+    if (!config.recipientEmail) {
+      res.json({skipped: true, reason: 'no recipient email'});
+      return;
+    }
+
+    // 2. Build report
+    const html = await buildReportHtml(db);
+
+    // 3. Send email via SMTP (configured via Cloud Run env vars)
+    const smtpHost = process.env.SMTP_HOST ?? 'smtp.gmail.com';
+    const smtpPort = parseInt(process.env.SMTP_PORT ?? '587', 10);
+    const smtpUser = process.env.SMTP_USER ?? '';
+    const smtpPass = process.env.SMTP_PASS ?? '';
+    const senderName = process.env.SMTP_SENDER_NAME ?? 'EducaStock';
+
+    if (!smtpUser || !smtpPass) {
+      console.warn('[sendWeeklyReport] SMTP_USER/SMTP_PASS not configured');
+      res.status(500).json({error: 'SMTP credentials not configured'});
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: {user: smtpUser, pass: smtpPass},
+    });
+
+    await transporter.sendMail({
+      from: `"${senderName}" <${smtpUser}>`,
+      to: config.recipientEmail,
+      subject: `📦 Relatório Semanal EducaStock — ${new Date().toLocaleDateString('pt-BR')}`,
+      html,
+    });
+
+    console.log(`[sendWeeklyReport] Sent to ${config.recipientEmail}`);
+    res.json({success: true, sentTo: config.recipientEmail});
+  } catch (err) {
+    console.error('sendWeeklyReport error', err);
     res.status(500).json({error: String(err)});
   }
 });
