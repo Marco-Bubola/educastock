@@ -9,6 +9,13 @@ steps:
       - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:latest
       - functions
 
+  # Push do backend
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - --all-tags
+      - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions
+
   # Build do frontend (Flutter web)
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -18,6 +25,13 @@ steps:
       - -t
       - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:latest
       - .
+
+  # Push do frontend
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - --all-tags
+      - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web
 
   # Deploy automático do backend no Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -40,12 +54,6 @@ steps:
       - --image=southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:$COMMIT_SHA
       - --region=southamerica-east1
       - --quiet
-
-images:
-  - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:$COMMIT_SHA
-  - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/functions:latest
-  - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:$COMMIT_SHA
-  - southamerica-east1-docker.pkg.dev/educastock-20a98/educastock/web:latest
 
 options:
   logging: CLOUD_LOGGING_ONLY
