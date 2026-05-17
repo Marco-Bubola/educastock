@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/theme_mode_controller.dart';
+import '../../../auth/data/datasources/auth_remote_datasource.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../auth/presentation/utils/auth_error_mapper.dart';
 
@@ -367,6 +368,15 @@ class SettingsPage extends ConsumerWidget {
                 onTap: () => _showChangePasswordDialog(context, ref),
               ),
             ),
+            const SizedBox(height: AppSpacing.lg),
+
+            const CasaSectionHeader(title: 'Segurança'),
+            const SizedBox(height: AppSpacing.sm),
+            const _TwoFASwitchTile(),
+            const SizedBox(height: AppSpacing.lg),
+
+            const CasaSectionHeader(title: 'Sessão'),
+            const SizedBox(height: AppSpacing.sm),
             _SettingsTile(
               icon: Icons.logout_rounded,
               label: 'Sair',
@@ -526,6 +536,136 @@ class _SettingsSwitchTile extends StatelessWidget {
             Switch(
               value: value,
               onChanged: onChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TwoFASwitchTile extends ConsumerStatefulWidget {
+  const _TwoFASwitchTile();
+
+  @override
+  ConsumerState<_TwoFASwitchTile> createState() => _TwoFASwitchTileState();
+}
+
+class _TwoFASwitchTileState extends ConsumerState<_TwoFASwitchTile> {
+  bool _loading = false;
+
+  Future<void> _toggle(bool enabled) async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+
+    if (!enabled) {
+      final confirmed = await CasaDialogConfirmacao.show(
+        context: context,
+        title: 'Desativar autenticação de dois fatores',
+        message:
+            'Tem certeza? Sua conta ficará menos protegida sem o segundo fator.',
+        confirmLabel: 'Desativar',
+        isDanger: true,
+      );
+      if (confirmed != true) return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      await ref
+          .read(authDatasourceProvider)
+          .enable2FA(user.id, enabled: enabled);
+      ref.invalidate(authStateProvider);
+      if (!mounted) return;
+      showCasaSnackbar(
+        context,
+        message: enabled
+            ? 'Autenticação de dois fatores ativada. Será exigida no próximo login.'
+            : 'Autenticação de dois fatores desativada.',
+        isSuccess: true,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      showCasaSnackbar(
+        context,
+        message: 'Não foi possível atualizar a configuração.',
+        isError: true,
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider);
+    final cs = Theme.of(context).colorScheme;
+    final enabled = user?.twoFactorEnabled ?? false;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border:
+              Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03), blurRadius: 4),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary600.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                  ),
+                  child: const Icon(
+                    Icons.security_rounded,
+                    color: AppColors.brandPrimary600,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Text(
+                    'Autenticação de dois fatores',
+                    style: AppTypography.bodyLarge.copyWith(
+                      color: cs.onSurface,
+                    ),
+                  ),
+                ),
+                if (_loading)
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  Switch(
+                    value: enabled,
+                    onChanged: _loading ? null : _toggle,
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              enabled
+                  ? 'Ativo — um código será exigido no próximo login.'
+                  : 'Inativo — ative para exigir um código OTP a cada login.',
+              style: AppTypography.bodySmall.copyWith(
+                color: enabled
+                    ? AppColors.success600
+                    : cs.onSurfaceVariant,
+              ),
             ),
           ],
         ),
