@@ -463,7 +463,7 @@ class _CsvImportSheetState extends ConsumerState<_CsvImportSheet> {
     final user = ref.read(currentUserProvider);
     final notifier = ref.read(csvImportProvider.notifier);
     final count =
-        await notifier.importFromCsvString(_csvContent!, user?.uid ?? 'system');
+        await notifier.importFromCsvString(_csvContent!, user?.id ?? 'system');
     if (!mounted) return;
     if (count > 0) {
       Navigator.of(context).pop();
