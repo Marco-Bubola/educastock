@@ -256,12 +256,14 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     final productAsync = ref.watch(productByIdProvider(widget.productId));
     final productName = productAsync.valueOrNull?.name;
     if (!_prefilledProductName && productName != null) {
-      _productNameController.text = productName;
       _prefilledProductName = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _productNameController.text = productName;
+      });
     }
 
     return Scaffold(
-      backgroundColor: cs.surface,
+      backgroundColor: AppColors.background,
       appBar: ModernProfileAppBar(
         title: 'Cadastrar Lote',
         subtitle: productName != null ? 'Produto: $productName' : 'Adicionar ao estoque',
@@ -707,42 +709,41 @@ class _BatchSaveFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: isLoading
-              ? null
-              : const LinearGradient(colors: [
-                  AppColors.brandPrimary600,
-                  AppColors.secondaryBlue600
-                ]),
-          color: isLoading ? AppColors.neutral500 : null,
-          borderRadius: BorderRadius.circular(AppRadius.button),
-          boxShadow: [
-            BoxShadow(
-                color: AppColors.brandPrimary600.withValues(alpha: 0.35),
-                blurRadius: 10,
-                offset: const Offset(0, 3))
-          ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: isLoading
+            ? null
+            : const LinearGradient(colors: [
+                AppColors.brandPrimary600,
+                AppColors.secondaryBlue600
+              ]),
+        color: isLoading ? AppColors.neutral500 : null,
+        borderRadius: BorderRadius.circular(AppRadius.button),
+        boxShadow: [
+          BoxShadow(
+              color: AppColors.brandPrimary600.withValues(alpha: 0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 3))
+        ],
+      ),
+      child: ElevatedButton.icon(
+        onPressed: isLoading ? null : onSave,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          minimumSize: const Size(180, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.button)),
         ),
-        child: ElevatedButton.icon(
-          onPressed: isLoading ? null : onSave,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.button)),
-          ),
-          icon: isLoading
-              ? const SizedBox(
-                  width: 16, height: 16,
-                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : const Icon(Icons.inventory_2_rounded, size: 18, color: Colors.white),
-          label: const Text(
-            'Cadastrar',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
-          ),
+        icon: isLoading
+            ? const SizedBox(
+                width: 16, height: 16,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : const Icon(Icons.inventory_2_rounded, size: 18, color: Colors.white),
+        label: const Text(
+          'Cadastrar',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
         ),
       ),
     );
