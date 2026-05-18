@@ -16,6 +16,10 @@ class ProductFormPage extends ConsumerStatefulWidget {
   final String? prefillName;
   final String? prefillBrand;
   final String? prefillCategory;
+  final String? prefillImageUrl;
+  final String? prefillIsPerishable;
+  final String? prefillUnit;
+  final String? prefillUnitSize;
 
   const ProductFormPage({
     super.key,
@@ -24,6 +28,10 @@ class ProductFormPage extends ConsumerStatefulWidget {
     this.prefillName,
     this.prefillBrand,
     this.prefillCategory,
+    this.prefillImageUrl,
+    this.prefillIsPerishable,
+    this.prefillUnit,
+    this.prefillUnitSize,
   });
 
   @override
@@ -96,6 +104,23 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
           (c) => c.name == widget.prefillCategory,
         );
       } catch (_) {}
+    }
+    // Pre-fill extra fields from API result (only for new products)
+    if (widget.productId == null) {
+      if (widget.prefillImageUrl != null && widget.prefillImageUrl!.isNotEmpty) {
+        _existingImageUrl = widget.prefillImageUrl;
+      }
+      if (widget.prefillIsPerishable != null) {
+        _isPerishable = widget.prefillIsPerishable == 'true';
+      }
+      if (widget.prefillUnit != null &&
+          widget.prefillUnit!.isNotEmpty &&
+          _units.contains(widget.prefillUnit)) {
+        _unit = widget.prefillUnit!;
+      }
+      if (widget.prefillUnitSize != null && widget.prefillUnitSize!.isNotEmpty) {
+        _unitSizeController.text = widget.prefillUnitSize!;
+      }
     }
     // Carregar produto existente para editar
     if (widget.productId != null) {
