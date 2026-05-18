@@ -62,13 +62,6 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
   }
 
   @override
-  void dispose() {
-    _criticalCtrl.dispose();
-    _warningCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     ref.watch(alertsConfigNotifierProvider);
@@ -482,7 +475,7 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
                   ),
                 ),
 
-                const SizedBox(height: AppSpacing.lg);
+                const SizedBox(height: AppSpacing.lg),
                 Container(
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerLow,
