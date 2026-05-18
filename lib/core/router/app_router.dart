@@ -101,8 +101,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.otpVerification,
         builder: (_, __) => const OtpVerificationPage(),
       ),
-      // Scanner e revisão de produto ficam fora do ShellRoute
-      // para não exibir a tabbar de navegação na câmera.
+      // Rotas fora do ShellRoute — não exibem TabBar nem AppNavigationShell.
+      // Isso evita conflitos de GlobalKey ao navegar entre rotas de shell e
+      // não-shell (erro: '!keyReservation.contains(key)': is not true).
       GoRoute(
         path: AppRoutes.scanner,
         builder: (_, __) => const ScannerPage(),
@@ -112,6 +113,33 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) {
           final barcode = state.uri.queryParameters['barcode'] ?? '';
           return ProductReviewPage(barcode: barcode);
+        },
+      ),
+      // productForm e batchForm também fora do ShellRoute: são formulários
+      // de tela cheia que não precisam da TabBar, e são acessados a partir
+      // de ProductReviewPage (fora do shell), evitando o conflito de keys.
+      GoRoute(
+        path: AppRoutes.productForm,
+        builder: (_, state) {
+          final productId = state.uri.queryParameters['id'];
+          final barcode = state.uri.queryParameters['barcode'];
+          final prefillName = state.uri.queryParameters['name'];
+          final prefillBrand = state.uri.queryParameters['brand'];
+          final prefillCategory = state.uri.queryParameters['category'];
+          return ProductFormPage(
+            productId: productId,
+            barcode: barcode,
+            prefillName: prefillName,
+            prefillBrand: prefillBrand,
+            prefillCategory: prefillCategory,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.batchForm,
+        builder: (_, state) {
+          final productId = state.uri.queryParameters['productId'] ?? '';
+          return BatchFormPage(productId: productId);
         },
       ),
       ShellRoute(
@@ -131,34 +159,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const ProductListPage(),
           ),
           GoRoute(
-            path: AppRoutes.productForm,
-            builder: (_, state) {
-              final productId = state.uri.queryParameters['id'];
-              final barcode = state.uri.queryParameters['barcode'];
-              final prefillName = state.uri.queryParameters['name'];
-              final prefillBrand = state.uri.queryParameters['brand'];
-              final prefillCategory = state.uri.queryParameters['category'];
-              return ProductFormPage(
-                productId: productId,
-                barcode: barcode,
-                prefillName: prefillName,
-                prefillBrand: prefillBrand,
-                prefillCategory: prefillCategory,
-              );
-            },
-          ),
-          GoRoute(
             path: AppRoutes.productDetail,
             builder: (_, state) {
               final id = state.pathParameters['id'] ?? '';
               return ProductDetailPage(productId: id);
-            },
-          ),
-          GoRoute(
-            path: AppRoutes.batchForm,
-            builder: (_, state) {
-              final productId = state.uri.queryParameters['productId'] ?? '';
-              return BatchFormPage(productId: productId);
             },
           ),
           GoRoute(
