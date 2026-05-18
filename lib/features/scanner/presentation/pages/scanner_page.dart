@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,10 +10,11 @@ import '../controllers/scanner_provider.dart';
 
 // ── Constantes do scanner ────────────────────────────────────────────────────
 const _kScanBoxSize = 260.0;
-// 0.0 = zoom mínimo do device (1×), 1.0 = zoom máximo.
-// 0.45 ≈ 3× na maioria dos dispositivos Android/iOS.
-const _kInitialZoom = 0.45;
-const _kZoomStep    = 0.1;
+// Escala interna do mobile_scanner: 0.0 = mín, 1.0 = máx do device.
+// 0.45 ≈ ~3× na maioria dos devices Android/iOS. Na web o zoom não é
+// exposto pelo browser, então iniciamos em 0 e ocultamos os botões.
+const _kInitialZoomMobile = 0.45;
+const _kZoomStep          = 0.1;
 
 // ── Página ───────────────────────────────────────────────────────────────────
 class ScannerPage extends ConsumerStatefulWidget {
@@ -28,11 +30,16 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   final _camera = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     returnImage: false,
-    autoStart: false,           // iniciamos manualmente pós-frame
+    autoStart: false, // iniciamos manualmente pós-frame
   );
 
-  bool   _navigating = false;
-  double _zoom       = _kInitialZoom;
+  bool   _navigating    = false;
+  // Zoom só é controlável em mobile (Android/iOS). Na web o browser
+  // não expõe a API de zoom de câmera — ocultamos os botões nesses casos.
+  bool   _zoomSupported = !kIsWeb;
+  double _zoom          = kIsWeb ? 0.0 : _kInitialZoomMobile;
+  // Piscar os cantos ao detectar
+  bool   _detected      = false;
 
   // Animação da linha de scan ──────────────────────────────────────────────
   late final AnimationController _lineCtrl;
@@ -56,9 +63,17 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   Future<void> _startCamera() async {
     try {
       await _camera.start();
-      await _camera.setZoomScale(_zoom);
+      // Zoom só aplicável em mobile — na web lança UnsupportedError.
+      if (!kIsWeb) {
+        try {
+          await _camera.setZoomScale(_zoom);
+        } catch (_) {
+          // Device não suporta controle de zoom programático.
+          if (mounted) setState(() => _zoomSupported = false);
+        }
+      }
     } catch (_) {
-      // Fallback: câmera abre no zoom padrão do sistema.
+      // Câmera não disponível — usuário vai usar código manual.
     }
   }
 
@@ -75,8 +90,18 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     final raw = capture.barcodes.firstOrNull?.rawValue;
     if (raw == null || raw.isEmpty) return;
     _navigating = true;
+    // Feedback tátil imediato (somente mobile)
+    if (!kIsWeb) HapticFeedback.mediumImpact();
+    // Piscar cantos verdes
+    setState(() => _detected = true);
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _detected = false);
+    });
     _camera.stop();
-    _showConfirmation(raw);
+    // Pequena pausa para o usuário ver o flash antes do sheet
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (mounted) _showConfirmation(raw);
+    });
   }
 
   void _showConfirmation(String barcode) {
@@ -225,17 +250,23 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
   // ── Zoom ─────────────────────────────────────────────────────────────────
   Future<void> _adjustZoom(double delta) async {
+    if (!_zoomSupported) return;
     final next = (_zoom + delta).clamp(0.0, 1.0);
+    // Evita chamada redundante
     if ((next - _zoom).abs() < 0.005) return;
+    // Atualiza estado primeiro para o label responder imediatamente
     setState(() => _zoom = next);
     try {
-      await _camera.setZoomScale(_zoom);
-    } catch (_) {}
+      await _camera.setZoomScale(next);
+    } catch (_) {
+      // Se falhar numa tentativa real de ajuste, marca como não suportado
+      if (mounted) setState(() => _zoomSupported = false);
+    }
   }
 
   String get _zoomLabel {
-    // Aproximação visual: 0.0 → 1× … 1.0 → 8×
-    final v = (1.0 + _zoom * 7.0);
+    // Escala aproximada: 0.0 → 1.0× … 1.0 → 8.0×
+    final v = 1.0 + _zoom * 7.0;
     return '${v.toStringAsFixed(1)}×';
   }
 
@@ -345,10 +376,13 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
           children: [
 
             // ── Câmera ───────────────────────────────────────────────────
+            // IMPORTANTE: NÃO passamos scanWindow ao MobileScanner.
+            // O parâmetro scanWindow não é suportado na web (mobile_scanner v5)
+            // e em algumas versões do Android pode bloquear toda a detecção.
+            // O quadrado verde é apenas visual — a detecção roda no frame inteiro.
             MobileScanner(
               controller: _camera,
               onDetect: _onDetect,
-              scanWindow: scanWin,
             ),
 
             // ── Overlay escuro + cantos + linha de scan ──────────────────
@@ -359,6 +393,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                 painter: _ScanOverlayPainter(
                   scanWindow: scanWin,
                   lineProgress: _lineAnim.value,
+                  detected: _detected,
                 ),
               ),
             ),
@@ -375,36 +410,63 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                     onTap: () => context.pop(),
                   ),
                   const Spacer(),
-                  // Zoom –
-                  _FabBtn(
-                    icon: Icons.remove_rounded,
-                    onTap: () => _adjustZoom(-_kZoomStep),
-                  ),
-                  const SizedBox(width: 6),
-                  // Rótulo de zoom
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
+                  // ── Controles de Zoom ─────────────────────────────
+                  if (_zoomSupported) ...[
+                    _FabBtn(
+                      icon: Icons.remove_rounded,
+                      onTap: () => _adjustZoom(-_kZoomStep),
                     ),
-                    child: Text(
-                      _zoomLabel,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _zoomLabel,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  // Zoom +
-                  _FabBtn(
-                    icon: Icons.add_rounded,
-                    onTap: () => _adjustZoom(_kZoomStep),
-                  ),
-                  const SizedBox(width: 10),
+                    const SizedBox(width: 6),
+                    _FabBtn(
+                      icon: Icons.add_rounded,
+                      onTap: () => _adjustZoom(_kZoomStep),
+                    ),
+                    const SizedBox(width: 10),
+                  ] else ...[
+                    // Na web o browser não expõe controle de zoom de câmera
+                    Tooltip(
+                      message: 'Zoom indisponível no navegador',
+                      child: Opacity(
+                        opacity: 0.4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.zoom_in_rounded,
+                                  color: Colors.white, size: 14),
+                              SizedBox(width: 4),
+                              Text('zoom',
+                                  style: TextStyle(
+                                      color: Colors.white, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
                   // Lanterna
                   ValueListenableBuilder(
                     valueListenable: _camera,
@@ -529,10 +591,12 @@ class _FabBtn extends StatelessWidget {
 class _ScanOverlayPainter extends CustomPainter {
   final Rect   scanWindow;
   final double lineProgress;
+  final bool   detected;
 
   const _ScanOverlayPainter({
     required this.scanWindow,
     required this.lineProgress,
+    this.detected = false,
   });
 
   @override
@@ -546,10 +610,11 @@ class _ScanOverlayPainter extends CustomPainter {
       ..fillType = PathFillType.evenOdd;
     canvas.drawPath(path, shadow);
 
-    // Cantos verdes
+    // Cantos: branco piscante ao detectar, verde normal
+    final cornerColor = detected ? Colors.white : Colors.greenAccent;
     final corner = Paint()
-      ..color      = Colors.greenAccent
-      ..strokeWidth = 3.5
+      ..color      = cornerColor
+      ..strokeWidth = detected ? 5.0 : 3.5
       ..style       = PaintingStyle.stroke
       ..strokeCap   = StrokeCap.round;
     const cl = 30.0;
@@ -586,5 +651,5 @@ class _ScanOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ScanOverlayPainter old) =>
-      old.lineProgress != lineProgress;
+      old.lineProgress != lineProgress || old.detected != detected;
 }
