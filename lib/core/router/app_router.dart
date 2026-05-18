@@ -126,12 +126,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           final prefillName = state.uri.queryParameters['name'];
           final prefillBrand = state.uri.queryParameters['brand'];
           final prefillCategory = state.uri.queryParameters['category'];
+          final prefillImageUrl = state.uri.queryParameters['imageUrl'];
+          final prefillIsPerishable = state.uri.queryParameters['isPerishable'];
+          final prefillUnit = state.uri.queryParameters['unit'];
+          final prefillUnitSize = state.uri.queryParameters['unitSize'];
           return ProductFormPage(
             productId: productId,
             barcode: barcode,
             prefillName: prefillName,
             prefillBrand: prefillBrand,
             prefillCategory: prefillCategory,
+            prefillImageUrl: prefillImageUrl,
+            prefillIsPerishable: prefillIsPerishable,
+            prefillUnit: prefillUnit,
+            prefillUnitSize: prefillUnitSize,
           );
         },
       ),
