@@ -570,7 +570,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text(
-                    'EAN-13 · QR Code · Code 128',
+                    'EAN-8 · EAN-13 · QR Code · Code 128',
                     style: TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 ),
