@@ -390,12 +390,22 @@ class _ApiSearchView extends StatelessWidget {
                   CasaButton(
                     label: 'Confirmar e Cadastrar Produto',
                     icon: Icons.check_rounded,
-                    onPressed: () => context.push(
-                      '${AppRoutes.productForm}?barcode=$barcode'
-                      '&name=${Uri.encodeComponent(apiResult.name ?? '')}'
-                      '&brand=${Uri.encodeComponent(apiResult.brand ?? '')}'
-                      '&category=${apiResult.category ?? ''}',
-                    ),
+                    onPressed: () {
+                      final (unit, unitSize) =
+                          _extractUnitFromName(apiResult.name ?? '');
+                      final isPerishable =
+                          _inferIsPerishable(apiResult.category);
+                      context.push(
+                        '${AppRoutes.productForm}?barcode=$barcode'
+                        '&name=${Uri.encodeComponent(apiResult.name ?? '')}'
+                        '&brand=${Uri.encodeComponent(apiResult.brand ?? '')}'
+                        '&category=${apiResult.category ?? ''}'
+                        '&imageUrl=${Uri.encodeComponent(apiResult.imageUrl ?? '')}'
+                        '&isPerishable=$isPerishable'
+                        '&unit=$unit'
+                        '&unitSize=$unitSize',
+                      );
+                    },
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   CasaButton(
@@ -1236,6 +1246,29 @@ class _BarcodeChip extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─── Helpers para inferência de dados de produto ───────────────────────────
+
+/// Infere se o produto é perecível com base na categoria.
+bool _inferIsPerishable(String? category) {
+  const nonPerishable = {'limpeza', 'higienePessoal', 'escolar', 'outros'};
+  return !nonPerishable.contains(category);
+}
+
+/// Extrai unidade e tamanho do nome do produto (ex: "Coca-Cola 350mL" → ('mL', '350')).
+(String, String) _extractUnitFromName(String name) {
+  final patterns = <(RegExp, String)>[
+    (RegExp(r'(\d+(?:[.,]\d+)?)\s*mL', caseSensitive: false), 'mL'),
+    (RegExp(r'(\d+(?:[.,]\d+)?)\s*L\b'), 'L'),
+    (RegExp(r'(\d+(?:[.,]\d+)?)\s*kg', caseSensitive: false), 'kg'),
+    (RegExp(r'(\d+(?:[.,]\d+)?)\s*g\b'), 'g'),
+  ];
+  for (final (pattern, unit) in patterns) {
+    final m = pattern.firstMatch(name);
+    if (m != null) return (unit, m.group(1)!);
+  }
+  return ('un', '');
 }
 
 // ─── Botão de quantidade ──────────────────────────────────────────────────
