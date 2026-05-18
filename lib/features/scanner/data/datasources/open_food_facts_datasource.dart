@@ -50,39 +50,46 @@ class OpenFoodFactsDatasource {
 
   Future<ProductApiResult> lookupBarcode(String barcode) async {
     // 1) Open Food Facts (prioridade)
+    // IMPORTANTE: só retornamos aqui se de fato encontrarmos o produto
+    // (status == 1 E nome preenchido). Se o produto não estiver no banco do
+    // Open Food Facts, deixamos cair para os fallbacks abaixo — NÃO retornamos
+    // found:false prematuramente, pois UPCItemDB pode ter o produto.
     try {
       final response =
           await _dio.get('/api/v0/product/$barcode.json');
       final data = response.data as Map<String, dynamic>;
 
-      if (data['status'] != 1) {
-        return ProductApiResult(barcode: barcode, found: false);
+      if (data['status'] == 1) {
+        final product = data['product'] as Map<String, dynamic>;
+        final name = _firstNonEmpty([
+          product['product_name_pt'] as String?,
+          product['product_name'] as String?,
+          product['generic_name_pt'] as String?,
+          product['generic_name'] as String?,
+        ]);
+
+        // Só retornamos se o nome não for vazio — senão cairemos nos fallbacks
+        if (name != null && name.trim().isNotEmpty) {
+          final brand = product['brands'] as String?;
+          final categoryTags =
+              (product['categories_tags'] as List?)?.cast<String>() ?? [];
+          final category = _mapCategory(categoryTags);
+          final imageUrl = product['image_front_url'] as String?;
+
+          return ProductApiResult(
+            barcode: barcode,
+            found: true,
+            name: name,
+            brand: brand?.split(',').first.trim(),
+            category: category,
+            imageUrl: imageUrl,
+          );
+        }
+        // status == 1 mas sem nome → cai nos fallbacks
       }
-
-      final product = data['product'] as Map<String, dynamic>;
-      final name = _firstNonEmpty([
-        product['product_name_pt'] as String?,
-        product['product_name'] as String?,
-        product['generic_name_pt'] as String?,
-        product['generic_name'] as String?,
-      ]);
-
-      final brand = product['brands'] as String?;
-      final categoryTags =
-          (product['categories_tags'] as List?)?.cast<String>() ?? [];
-      final category = _mapCategory(categoryTags);
-      final imageUrl = product['image_front_url'] as String?;
-
-      return ProductApiResult(
-        barcode: barcode,
-        found: name != null,
-        name: name,
-        brand: brand?.split(',').first.trim(),
-        category: category,
-        imageUrl: imageUrl,
-      );
+      // status != 1 (produto não cadastrado no OFF) → cai nos fallbacks
     } on DioException {
-      // continua no fallback
+      // erro de rede → cai nos fallbacks
     }
 
     // 2) UPCItemDB (fallback)
