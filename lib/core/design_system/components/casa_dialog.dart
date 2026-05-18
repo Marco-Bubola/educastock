@@ -20,6 +20,7 @@ class CasaDialogConfirmacao extends StatelessWidget {
     this.cancelLabel = 'Cancelar',
     this.isDanger = false,
   });
+  
   static Future<bool?> show({
     required BuildContext context,
     required String title,
