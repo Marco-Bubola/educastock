@@ -34,10 +34,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   );
 
   bool   _navigating    = false;
-  // Zoom só é controlável em mobile (Android/iOS). Na web o browser
-  // não expõe a API de zoom de câmera — ocultamos os botões nesses casos.
-  bool   _zoomSupported = !kIsWeb;
-  double _zoom          = kIsWeb ? 0.0 : _kInitialZoomMobile;
+  // Na web: zoom digital via Transform.scale (1.0× a 4.0×), inicia em 2.0×.
+  // No app nativo: zoom óptico/digital via setZoomScale (0.0 a 1.0).
+  // _zoomSupported fica false somente se setZoomScale falhar no device.
+  bool   _zoomSupported = true;
+  double _zoom          = kIsWeb ? 2.0 : _kInitialZoomMobile;
   // Piscar os cantos ao detectar
   bool   _detected      = false;
 
@@ -249,25 +250,39 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   }
 
   // ── Zoom ─────────────────────────────────────────────────────────────────
+  // Safari/Web: zoom digital via Transform.scale (1.0× a 4.0×, passo 0.5×).
+  // App nativo: zoom via setZoomScale da câmera  (0.0 a 1.0, passo 0.1).
   Future<void> _adjustZoom(double delta) async {
     if (!_zoomSupported) return;
+
+    if (kIsWeb) {
+      // Zoom digital — apenas escala o widget Flutter, não a câmera.
+      // Funciona em qualquer browser incluindo Safari iOS.
+      final step = delta > 0 ? 0.5 : -0.5;
+      final next = (_zoom + step).clamp(1.0, 4.0);
+      if ((next - _zoom).abs() < 0.01) return;
+      setState(() => _zoom = next);
+      return;
+    }
+
+    // App nativo: zoom real da câmera
     final next = (_zoom + delta).clamp(0.0, 1.0);
-    // Evita chamada redundante
     if ((next - _zoom).abs() < 0.005) return;
-    // Atualiza estado primeiro para o label responder imediatamente
     setState(() => _zoom = next);
     try {
       await _camera.setZoomScale(next);
     } catch (_) {
-      // Se falhar numa tentativa real de ajuste, marca como não suportado
       if (mounted) setState(() => _zoomSupported = false);
     }
   }
 
   String get _zoomLabel {
-    // Escala aproximada: 0.0 → 1.0× … 1.0 → 8.0×
-    final v = 1.0 + _zoom * 7.0;
-    return '${v.toStringAsFixed(1)}×';
+    if (kIsWeb) {
+      // Web: _zoom já é o fator de escala real (ex: 2.0 = 2×)
+      return '${_zoom.toStringAsFixed(1)}×';
+    }
+    // App nativo: 0.0 → 1.0×  …  1.0 → 8.0×
+    return '${(1.0 + _zoom * 7.0).toStringAsFixed(1)}×';
   }
 
   // ── Código manual ────────────────────────────────────────────────────────
@@ -376,14 +391,28 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
           children: [
 
             // ── Câmera ───────────────────────────────────────────────────
-            // IMPORTANTE: NÃO passamos scanWindow ao MobileScanner.
-            // O parâmetro scanWindow não é suportado na web (mobile_scanner v5)
-            // e em algumas versões do Android pode bloquear toda a detecção.
-            // O quadrado verde é apenas visual — a detecção roda no frame inteiro.
-            MobileScanner(
-              controller: _camera,
-              onDetect: _onDetect,
-            ),
+            // NÃO usamos scanWindow — não é suportado na web e em algumas
+            // versões Android pode bloquear toda a detecção.
+            // Na WEB: envolvemos com ClipRect + Transform.scale para zoom digital.
+            // Isso funciona em Safari iOS onde a API de zoom de câmera não existe.
+            // A detecção roda no frame nativo (sem corte), o zoom é só visual.
+            if (kIsWeb)
+              ClipRect(
+                child: Transform.scale(
+                  scale: _zoom,
+                  alignment: Alignment.center,
+                  child: MobileScanner(
+                    controller: _camera,
+                    onDetect: _onDetect,
+                  ),
+                ),
+              )
+            else
+              MobileScanner(
+                controller: _camera,
+                onDetect: _onDetect,
+              ),
+
 
             // ── Overlay escuro + cantos + linha de scan ──────────────────
             AnimatedBuilder(
@@ -467,23 +496,30 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                     ),
                     const SizedBox(width: 10),
                   ],
-                  // Lanterna
-                  ValueListenableBuilder(
-                    valueListenable: _camera,
-                    builder: (_, state, __) => _FabBtn(
-                      icon: state.torchState == TorchState.on
-                          ? Icons.flashlight_on_rounded
-                          : Icons.flashlight_off_rounded,
-                      onTap: _camera.toggleTorch,
+                  // Lanterna — indisponível no browser (Safari/Chrome iOS
+                  // não expõem a API de torch via WebRTC).
+                  if (!kIsWeb) ...[
+                    ValueListenableBuilder(
+                      valueListenable: _camera,
+                      builder: (_, state, __) => _FabBtn(
+                        icon: state.torchState == TorchState.on
+                            ? Icons.flashlight_on_rounded
+                            : Icons.flashlight_off_rounded,
+                        onTap: _camera.toggleTorch,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
+                    const SizedBox(width: 6),
+                  ],
                   // Virar câmera
                   _FabBtn(
                     icon: Icons.flip_camera_ios_outlined,
                     onTap: () async {
                       await _camera.switchCamera();
-                      await _camera.setZoomScale(_zoom);
+                      // Na web o zoom é digital (Transform.scale), não precisa
+                      // reaplicar setZoomScale após troca de câmera.
+                      if (!kIsWeb) {
+                        try { await _camera.setZoomScale(_zoom); } catch (_) {}
+                      }
                     },
                   ),
                 ],
