@@ -9,6 +9,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../controllers/scanner_provider.dart';
+// Interop de scan direto para web (polyfill BarcodeDetector via JS bridge)
+import 'web_scan_interop_stub.dart'
+    if (dart.library.html) 'web_scan_interop.dart';
 
 // ── Constantes do scanner ────────────────────────────────────────────────────
 const _kScanBoxSize = 260.0;
@@ -50,6 +53,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   bool _scanningFromPhoto = false;
   int  _frameCount       = 0;
   Timer? _heartbeat;
+  Timer? _webScanTimer;  // loop de scan ZXing para web (iOS Safari)
   final List<_LogEntry> _logs = [];
 
   void _log(String msg, {bool isError = false}) {
@@ -69,10 +73,34 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     _heartbeat?.cancel();
     _heartbeat = Timer.periodic(const Duration(seconds: 3), (_) {
       final state = _camera.value;
+      final label = kIsWeb ? 'tentativas ZXing' : 'frames processados';
       _log('💓 Scanner: running=${state.isRunning} | '
-           'frames processados=$_frameCount');
+           '$label=$_frameCount');
       _frameCount = 0;
     });
+  }
+
+  // ── Loop de scan ZXing via JS bridge (somente web / iOS Safari) ──────────
+  void _startWebScanLoop() {
+    if (!kIsWeb) return;
+    _webScanTimer?.cancel();
+    _log('🔁 Iniciando loop ZXing direto (iOS Safari mode)');
+    _webScanTimer = Timer.periodic(const Duration(milliseconds: 800), (_) {
+      if (_navigating || !mounted) return;
+      _doWebScan();
+    });
+  }
+
+  Future<void> _doWebScan() async {
+    _frameCount++;
+    try {
+      final barcode = await callWebScanFrame();
+      if (barcode != null && barcode.isNotEmpty && !_navigating && mounted) {
+        _log('🎯 ZXing detectou: $barcode');
+        _webScanTimer?.cancel();
+        _processBarcode(barcode);
+      }
+    } catch (_) {}
   }
 
   // Animação da linha de scan ──────────────────────────────────────────────
@@ -110,6 +138,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       await _camera.start();
       _log('✅ Câmera iniciada com sucesso');
       _startHeartbeat();
+      if (kIsWeb) _startWebScanLoop();
       if (!kIsWeb) {
         try {
           await _camera.setZoomScale(_zoom);
@@ -150,6 +179,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   @override
   void dispose() {
     _heartbeat?.cancel();
+    _webScanTimer?.cancel();
     _lineCtrl.dispose();
     _camera.dispose();
     super.dispose();
@@ -174,6 +204,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     if (_navigating) return;
     _navigating = true;
     _heartbeat?.cancel();
+    _webScanTimer?.cancel();
     _log('🎯 Código aceito: $raw');
     if (!kIsWeb) HapticFeedback.mediumImpact();
     setState(() => _detected = true);
