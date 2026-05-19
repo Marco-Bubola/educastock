@@ -40,6 +40,7 @@
   -->
   <script>
     async function _bootstrapApp() {
+      // 1. Garante BarcodeDetector (polyfill para iOS Safari)
       if (!('BarcodeDetector' in window)) {
         try {
           const mod = await import(
@@ -53,7 +54,40 @@
       } else {
         console.log('[EducaStock] BarcodeDetector nativo disponível ✅');
       }
-      // Carrega Flutter SOMENTE após o polyfill estar pronto
+
+      // 2. Inicializa instância do BarcodeDetector para uso direto via Dart
+      try {
+        window._barcodeDetector = new window['BarcodeDetector']({
+          formats: [
+            'ean_13', 'ean_8', 'code_128', 'qr_code',
+            'upc_a', 'upc_e', 'code_39', 'code_93', 'itf'
+          ]
+        });
+        console.log('[EducaStock] _barcodeDetector pronto ✅');
+      } catch (e) {
+        console.warn('[EducaStock] _barcodeDetector init falhou:', e);
+        window._barcodeDetector = null;
+      }
+
+      // 3. Expõe função de scan de frame para o Dart via js_util
+      //    Retorna Promise<String|null> — Dart usa promiseToFuture()
+      window._zxingScanFrame = async function() {
+        if (!window._barcodeDetector) return null;
+        // Pega o elemento <video> criado pelo mobile_scanner
+        const video = document.querySelector('video');
+        if (!video || video.readyState < 2 || !video.videoWidth) return null;
+        try {
+          const results = await window._barcodeDetector.detect(video);
+          if (results && results.length > 0) {
+            return results[0].rawValue;
+          }
+          return null;
+        } catch (_) {
+          return null;
+        }
+      };
+
+      // 4. Carrega Flutter SOMENTE após tudo estar pronto
       const s = document.createElement('script');
       s.src = 'flutter_bootstrap.js';
       document.body.appendChild(s);
