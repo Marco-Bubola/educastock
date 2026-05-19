@@ -42,6 +42,23 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   // Piscar os cantos ao detectar
   bool   _detected      = false;
 
+  // ── Log visual de diagnóstico ─────────────────────────────────────────
+  bool _showDebugLog   = false;
+  final List<_LogEntry> _logs = [];
+
+  void _log(String msg, {bool isError = false}) {
+    final now = DateTime.now();
+    final ts  = '${now.hour.toString().padLeft(2,'0')}:'
+                '${now.minute.toString().padLeft(2,'0')}:'
+                '${now.second.toString().padLeft(2,'0')}';
+    if (mounted) {
+      setState(() {
+        _logs.insert(0, _LogEntry(ts: ts, msg: msg, isError: isError));
+        if (_logs.length > 40) _logs.removeLast();
+      });
+    }
+  }
+
   // Animação da linha de scan ──────────────────────────────────────────────
   late final AnimationController _lineCtrl;
   late final Animation<double>   _lineAnim;
@@ -62,18 +79,21 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   }
 
   Future<void> _startCamera() async {
+    _log('📷 Iniciando câmera...');
     try {
       await _camera.start();
-      // Zoom só aplicável em mobile — na web lança UnsupportedError.
+      _log('✅ Câmera iniciada com sucesso');
       if (!kIsWeb) {
         try {
           await _camera.setZoomScale(_zoom);
-        } catch (_) {
-          // Device não suporta controle de zoom programático.
+          _log('🔍 Zoom inicial: ${(_zoom * 7 + 1).toStringAsFixed(1)}×');
+        } catch (e) {
+          _log('⚠️ Zoom indisponível: $e', isError: true);
           if (mounted) setState(() => _zoomSupported = false);
         }
       }
-    } catch (_) {
+    } catch (e) {
+      _log('❌ Falha ao iniciar câmera: $e', isError: true);
       // Câmera não disponível — usuário vai usar código manual.
     }
   }
@@ -87,10 +107,20 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
   // ── Detecção ─────────────────────────────────────────────────────────────
   void _onDetect(BarcodeCapture capture) {
-    if (_navigating) return;
     final raw = capture.barcodes.firstOrNull?.rawValue;
-    if (raw == null || raw.isEmpty) return;
+    _log('📡 Frame detectado | barcodes: ${capture.barcodes.length}'
+        '${raw != null ? " | valor: $raw" : " | sem valor"}');
+
+    if (_navigating) {
+      _log('⏸️ Ignorado — navegação em andamento');
+      return;
+    }
+    if (raw == null || raw.isEmpty) {
+      _log('⚠️ rawValue vazio/nulo');
+      return;
+    }
     _navigating = true;
+    _log('🎯 Código aceito: $raw');
     // Feedback tátil imediato (somente mobile)
     if (!kIsWeb) HapticFeedback.mediumImpact();
     // Piscar cantos verdes
@@ -234,15 +264,18 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       },
     ).then((confirmed) {
       if (confirmed == true) {
+        _log('✔️ Confirmado → navegando para revisão');
         ref.read(scannerProvider.notifier).onBarcodeDetected(barcode);
         context
             .push('${AppRoutes.productReview}?barcode=$barcode')
             .then((_) {
+          _log('↩️ Voltou da revisão — reiniciando câmera');
           _navigating = false;
           ref.read(scannerProvider.notifier).reset();
           _startCamera();
         });
       } else {
+        _log('🔄 Cancelado — reiniciando câmera');
         _navigating = false;
         _startCamera();
       }
@@ -593,8 +626,145 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
               ),
             ),
 
+            // ── Botão de log de diagnóstico ──────────────────────────────
+            Positioned(
+              bottom: botPad + 66,
+              right: 16,
+              child: _FabBtn(
+                icon: Icons.bug_report_rounded,
+                onTap: () => setState(() => _showDebugLog = !_showDebugLog),
+              ),
+            ),
+
+            // ── Painel de log visual ─────────────────────────────────────
+            if (_showDebugLog)
+              Positioned(
+                bottom: botPad + 110,
+                left: 12,
+                right: 12,
+                child: _DebugLogPanel(
+                  logs: _logs,
+                  onClear: () => setState(() => _logs.clear()),
+                ),
+              ),
+
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Modelo de entrada de log ─────────────────────────────────────────────────
+class _LogEntry {
+  final String ts;
+  final String msg;
+  final bool   isError;
+  const _LogEntry({required this.ts, required this.msg, this.isError = false});
+}
+
+// ── Painel de log visual ──────────────────────────────────────────────────────
+class _DebugLogPanel extends StatelessWidget {
+  final List<_LogEntry> logs;
+  final VoidCallback onClear;
+  const _DebugLogPanel({required this.logs, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 220,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.88),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.greenAccent.withOpacity(0.4)),
+      ),
+      child: Column(
+        children: [
+          // Cabeçalho
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              children: [
+                const Icon(Icons.bug_report_rounded,
+                    color: Colors.greenAccent, size: 14),
+                const SizedBox(width: 6),
+                const Text(
+                  'Log de diagnóstico',
+                  style: TextStyle(
+                    color: Colors.greenAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: onClear,
+                  child: const Text(
+                    'limpar',
+                    style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: Colors.white12, height: 1),
+          // Lista de eventos
+          Expanded(
+            child: logs.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Aguardando eventos...',
+                      style: TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: logs.length,
+                    itemBuilder: (_, i) {
+                      final e = logs[i];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 1),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              e.ts,
+                              style: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 10,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                e.msg,
+                                style: TextStyle(
+                                  color: e.isError
+                                      ? Colors.redAccent
+                                      : Colors.white70,
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
