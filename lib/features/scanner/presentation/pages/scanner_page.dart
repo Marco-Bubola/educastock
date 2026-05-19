@@ -94,16 +94,16 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     WidgetsBinding.instance.addPostFrameCallback((_) => _startCamera());
   }
 
-  Future<void> _startCamera({int _attempt = 0}) async {
+  Future<void> _startCamera({int attempt = 0}) async {
     if (!mounted) return;
     if (mounted) setState(() => _cameraFailed = false);
-    _log('📷 Iniciando câmera... (tentativa ${_attempt + 1})');
+    _log('📷 Iniciando câmera... (tentativa ${attempt + 1})');
 
     // No iOS/web, parar câmera antes de reiniciar evita
     // que o browser trave o stream após a permissão ser concedida.
-    if (kIsWeb && _attempt > 0) {
+    if (kIsWeb && attempt > 0) {
       try { await _camera.stop(); } catch (_) {}
-      await Future.delayed(Duration(milliseconds: 400 * _attempt));
+      await Future.delayed(Duration(milliseconds: 400 * attempt));
     }
 
     try {
@@ -121,7 +121,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       }
     } catch (e) {
       final err = e.toString().toLowerCase();
-      _log('❌ Erro (tentativa ${_attempt + 1}): $e', isError: true);
+      _log('❌ Erro (tentativa ${attempt + 1}): $e', isError: true);
 
       // Permissão negada — não adianta tentar novamente automaticamente
       if (err.contains('notallowed') ||
@@ -134,15 +134,15 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
       // iOS Safari: após conceder permissão, o stream é interrompido.
       // Aguardamos e tentamos até 3 vezes.
-      if (kIsWeb && _attempt < 3 && mounted) {
+      if (kIsWeb && attempt < 3 && mounted) {
         _log('🔄 Aguardando iOS liberar câmera...');
-        await Future.delayed(Duration(milliseconds: 600 + _attempt * 400));
-        if (mounted) await _startCamera(_attempt: _attempt + 1);
+        await Future.delayed(Duration(milliseconds: 600 + attempt * 400));
+        if (mounted) await _startCamera(attempt: attempt + 1);
         return;
       }
 
       // Falha definitiva
-      _log('❌ Não foi possível iniciar câmera após ${_attempt + 1} tentativas', isError: true);
+      _log('❌ Não foi possível iniciar câmera após ${attempt + 1} tentativas', isError: true);
       if (mounted) setState(() => _cameraFailed = true);
     }
   }
