@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
@@ -43,7 +45,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   bool   _detected      = false;
 
   // ── Log visual de diagnóstico ─────────────────────────────────────────
-  bool _showDebugLog   = false;
+  bool _showDebugLog     = false;
+  bool _cameraFailed     = false;  // permissão negada ou erro irrecuperável
+  bool _scanningFromPhoto = false;
+  int  _frameCount       = 0;
+  Timer? _heartbeat;
   final List<_LogEntry> _logs = [];
 
   void _log(String msg, {bool isError = false}) {
@@ -57,6 +63,16 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         if (_logs.length > 40) _logs.removeLast();
       });
     }
+  }
+
+  void _startHeartbeat() {
+    _heartbeat?.cancel();
+    _heartbeat = Timer.periodic(const Duration(seconds: 3), (_) {
+      final state = _camera.value;
+      _log('💓 Scanner: running=${state.isRunning} | '
+           'frames processados=$_frameCount');
+      _frameCount = 0;
+    });
   }
 
   // Animação da linha de scan ──────────────────────────────────────────────
@@ -78,11 +94,22 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     WidgetsBinding.instance.addPostFrameCallback((_) => _startCamera());
   }
 
-  Future<void> _startCamera() async {
-    _log('📷 Iniciando câmera...');
+  Future<void> _startCamera({int _attempt = 0}) async {
+    if (!mounted) return;
+    if (mounted) setState(() => _cameraFailed = false);
+    _log('📷 Iniciando câmera... (tentativa ${_attempt + 1})');
+
+    // No iOS/web, parar câmera antes de reiniciar evita
+    // que o browser trave o stream após a permissão ser concedida.
+    if (kIsWeb && _attempt > 0) {
+      try { await _camera.stop(); } catch (_) {}
+      await Future.delayed(Duration(milliseconds: 400 * _attempt));
+    }
+
     try {
       await _camera.start();
       _log('✅ Câmera iniciada com sucesso');
+      _startHeartbeat();
       if (!kIsWeb) {
         try {
           await _camera.setZoomScale(_zoom);
@@ -93,46 +120,112 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         }
       }
     } catch (e) {
-      _log('❌ Falha ao iniciar câmera: $e', isError: true);
-      // Câmera não disponível — usuário vai usar código manual.
+      final err = e.toString().toLowerCase();
+      _log('❌ Erro (tentativa ${_attempt + 1}): $e', isError: true);
+
+      // Permissão negada — não adianta tentar novamente automaticamente
+      if (err.contains('notallowed') ||
+          err.contains('permission') ||
+          err.contains('denied')) {
+        _log('🚫 Permissão de câmera negada pelo usuário', isError: true);
+        if (mounted) setState(() => _cameraFailed = true);
+        return;
+      }
+
+      // iOS Safari: após conceder permissão, o stream é interrompido.
+      // Aguardamos e tentamos até 3 vezes.
+      if (kIsWeb && _attempt < 3 && mounted) {
+        _log('🔄 Aguardando iOS liberar câmera...');
+        await Future.delayed(Duration(milliseconds: 600 + _attempt * 400));
+        if (mounted) await _startCamera(_attempt: _attempt + 1);
+        return;
+      }
+
+      // Falha definitiva
+      _log('❌ Não foi possível iniciar câmera após ${_attempt + 1} tentativas', isError: true);
+      if (mounted) setState(() => _cameraFailed = true);
     }
   }
 
   @override
   void dispose() {
+    _heartbeat?.cancel();
     _lineCtrl.dispose();
     _camera.dispose();
     super.dispose();
   }
 
-  // ── Detecção ─────────────────────────────────────────────────────────────
+  // ── Detecção contínua ────────────────────────────────────────────────────
   void _onDetect(BarcodeCapture capture) {
+    _frameCount++;
     final raw = capture.barcodes.firstOrNull?.rawValue;
-    _log('📡 Frame detectado | barcodes: ${capture.barcodes.length}'
-        '${raw != null ? " | valor: $raw" : " | sem valor"}');
+    // Só loga eventos com barcode para não poluir o log com frames vazios
+    if (capture.barcodes.isNotEmpty || _frameCount % 10 == 0) {
+      _log('📡 Frame #$_frameCount | barcodes: ${capture.barcodes.length}'
+          '${raw != null ? " | valor: $raw" : ""}');
+    }
 
-    if (_navigating) {
-      _log('⏸️ Ignorado — navegação em andamento');
-      return;
-    }
-    if (raw == null || raw.isEmpty) {
-      _log('⚠️ rawValue vazio/nulo');
-      return;
-    }
+    if (_navigating) return;
+    if (raw == null || raw.isEmpty) return;
+    _processBarcode(raw);
+  }
+
+  void _processBarcode(String raw) {
+    if (_navigating) return;
     _navigating = true;
+    _heartbeat?.cancel();
     _log('🎯 Código aceito: $raw');
-    // Feedback tátil imediato (somente mobile)
     if (!kIsWeb) HapticFeedback.mediumImpact();
-    // Piscar cantos verdes
     setState(() => _detected = true);
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) setState(() => _detected = false);
     });
     _camera.stop();
-    // Pequena pausa para o usuário ver o flash antes do sheet
     Future.delayed(const Duration(milliseconds: 200), () {
       if (mounted) _showConfirmation(raw);
     });
+  }
+
+  // ── Escanear a partir de foto ─────────────────────────────────────────────
+  Future<void> _scanFromPhoto() async {
+    _log('📸 Abrindo câmera para foto...');
+    if (mounted) setState(() => _scanningFromPhoto = true);
+    try {
+      final picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 90,
+      );
+      if (photo == null) {
+        _log('📸 Foto cancelada pelo usuário');
+        if (mounted) setState(() => _scanningFromPhoto = false);
+        return;
+      }
+      _log('📸 Foto capturada: ${photo.path} — analisando...');
+      final result = await _camera.analyzeImage(photo.path);
+      if (result == null || result.barcodes.isEmpty) {
+        _log('📸 Nenhum código detectado na foto', isError: true);
+        if (mounted) {
+          setState(() => _scanningFromPhoto = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  '❌ Nenhum código de barras detectado na foto. Tente novamente mais perto.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      final raw = result.barcodes.first.rawValue;
+      _log('📸 Código lido da foto: $raw');
+      if (mounted) setState(() => _scanningFromPhoto = false);
+      if (raw != null && raw.isNotEmpty) _processBarcode(raw);
+    } catch (e) {
+      _log('📸 Erro ao processar foto: $e', isError: true);
+      if (mounted) setState(() => _scanningFromPhoto = false);
+    }
   }
 
   void _showConfirmation(String barcode) {
@@ -610,21 +703,121 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
               ),
             ),
 
-            // ── Botão de código manual ───────────────────────────────────
+            // ── Botões inferiores: foto + código manual ──────────────────
             Positioned(
               bottom: botPad + 20,
-              left: 24,
-              right: 24,
-              child: TextButton.icon(
-                onPressed: _showManualInput,
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                icon: const Icon(Icons.keyboard_rounded, size: 18),
-                label: const Text('Inserir código manualmente'),
+              left: 16,
+              right: 16,
+              child: Row(
+                children: [
+                  // Botão tirar foto
+                  Expanded(
+                    child: _scanningFromPhoto
+                        ? Container(
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: _scanFromPhoto,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white70,
+                              side: const BorderSide(color: Colors.white30),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                            ),
+                            icon: const Icon(Icons.photo_camera_rounded, size: 18),
+                            label: const Text('Tirar foto'),
+                          ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Botão código manual
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: _showManualInput,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      icon: const Icon(Icons.keyboard_rounded, size: 18),
+                      label: const Text('Código manual'),
+                    ),
+                  ),
+                ],
               ),
             ),
+
+            // ── Banner: câmera com falha definitiva ──────────────────────
+            if (_cameraFailed)
+              Positioned(
+                top: topPad + 66,
+                left: 16,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.videocam_off_rounded,
+                              color: Colors.white, size: 20),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Câmera indisponível',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Permita o acesso à câmera nas configurações do navegador e toque em "Tentar novamente".',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _startCamera(),
+                          icon: const Icon(Icons.refresh_rounded,
+                              color: Colors.white, size: 16),
+                          label: const Text('Tentar novamente',
+                              style: TextStyle(color: Colors.white)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.white54),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // ── Botão de log de diagnóstico ──────────────────────────────
             Positioned(
