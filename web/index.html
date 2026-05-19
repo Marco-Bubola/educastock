@@ -31,6 +31,20 @@
 
   <title>educastock</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Polyfill para BarcodeDetector (necessário para iOS Safari).
+    Safari não implementa a Web BarcodeDetector API nativamente.
+    Este polyfill usa ZXing e ativa a detecção em todos os browsers.
+  -->
+  <script type="module">
+    import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.21/dist/index.js';
+    try {
+      window['BarcodeDetector'].getSupportedFormats();
+    } catch {
+      window['BarcodeDetector'] = BarcodeDetector;
+    }
+  </script>
 </head>
 <body>
   <!--
