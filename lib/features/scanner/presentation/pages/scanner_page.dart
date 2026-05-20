@@ -221,12 +221,44 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
   // ── Escanear a partir de foto ─────────────────────────────────────────────
   Future<void> _scanFromPhoto() async {
-    // Na web (iOS Chrome/Safari) não existe analyzeImage() nem ImagePicker
-    // confiável. Capturamos o frame atual da câmera via canvas + BarcodeDetector.
     if (kIsWeb) {
-      await _scanCurrentFrameWeb();
+      // Na web (iOS Chrome/Safari): abre câmera nativa via <input capture=environment>.
+      // analyzeImage() não é suportado na web — usamos BarcodeDetector na foto estática.
+      _log('📸 Abrindo câmera nativa para capturar foto...');
+      if (mounted) setState(() => _scanningFromPhoto = true);
+      try {
+        String? barcode;
+        try {
+          barcode = await callWebScanFromFile()
+              .timeout(const Duration(seconds: 60), onTimeout: () => null);
+        } catch (_) {
+          barcode = null;
+        }
+        if (barcode == null || barcode.isEmpty) {
+          _log('📸 Nenhum código detectado na foto', isError: true);
+          if (mounted) {
+            setState(() => _scanningFromPhoto = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    '❌ Nenhum código detectado. Aproxime mais e tente novamente.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        _log('📸 Código lido da foto: $barcode');
+        if (mounted) setState(() => _scanningFromPhoto = false);
+        _processBarcode(barcode);
+      } catch (e) {
+        _log('📸 Erro ao capturar foto: $e', isError: true);
+        if (mounted) setState(() => _scanningFromPhoto = false);
+      }
       return;
     }
+
+    // Caminho nativo (Android / iOS app)
     _log('📸 Abrindo câmera para foto...');
     if (mounted) setState(() => _scanningFromPhoto = true);
     try {
@@ -263,44 +295,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       if (raw != null && raw.isNotEmpty) _processBarcode(raw);
     } catch (e) {
       _log('📸 Erro ao processar foto: $e', isError: true);
-      if (mounted) setState(() => _scanningFromPhoto = false);
-    }
-  }
-
-  // Captura o frame atual do vídeo via canvas e tenta decodificar com ZXing.
-  // Usado na web (iOS Chrome/Safari) onde analyzeImage() não é suportado.
-  Future<void> _scanCurrentFrameWeb() async {
-    _log('📸 Capturando frame da câmera...');
-    if (mounted) setState(() => _scanningFromPhoto = true);
-    try {
-      // Tenta decodificar até 3 frames consecutivos para aumentar a chance
-      // de pegar um frame nítido.
-      String? barcode;
-      for (int i = 0; i < 3 && barcode == null; i++) {
-        barcode = await callWebScanFrame();
-        if (barcode == null && i < 2) {
-          await Future.delayed(const Duration(milliseconds: 200));
-        }
-      }
-      if (barcode == null || barcode.isEmpty) {
-        _log('📸 Nenhum código detectado no frame', isError: true);
-        if (mounted) {
-          setState(() => _scanningFromPhoto = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  '❌ Nenhum código detectado. Aproxime mais o código e tente novamente.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-      _log('📸 Código lido do frame: $barcode');
-      if (mounted) setState(() => _scanningFromPhoto = false);
-      _processBarcode(barcode);
-    } catch (e) {
-      _log('📸 Erro ao capturar frame: $e', isError: true);
       if (mounted) setState(() => _scanningFromPhoto = false);
     }
   }
@@ -816,13 +810,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14)),
                             ),
-                            icon: Icon(
-                              kIsWeb
-                                  ? Icons.center_focus_strong_rounded
-                                  : Icons.photo_camera_rounded,
+                            icon: const Icon(
+                              Icons.photo_camera_rounded,
                               size: 18,
                             ),
-                            label: Text(kIsWeb ? 'Capturar frame' : 'Tirar foto'),
+                            label: const Text('Tirar foto'),
                           ),
                   ),
                   const SizedBox(width: 10),
