@@ -40,16 +40,25 @@
   -->
   <script>
     async function _bootstrapApp() {
-      // 1. Garante BarcodeDetector (polyfill para iOS Safari)
+      // 1. Garante BarcodeDetector (polyfill para iOS Safari / Chrome iOS)
       if (!('BarcodeDetector' in window)) {
         try {
           const mod = await import(
             'https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.21/dist/index.js'
           );
           window['BarcodeDetector'] = mod.BarcodeDetector;
-          console.log('[EducaStock] BarcodeDetector polyfill instalado ✅');
+          console.log('[EducaStock] BarcodeDetector polyfill instalado (jsDelivr) ✅');
         } catch (e) {
-          console.warn('[EducaStock] Falha ao carregar polyfill BarcodeDetector:', e);
+          console.warn('[EducaStock] jsDelivr falhou, tentando unpkg...', e);
+          try {
+            const mod = await import(
+              'https://unpkg.com/@undecaf/barcode-detector-polyfill@0.9.21/dist/index.js'
+            );
+            window['BarcodeDetector'] = mod.BarcodeDetector;
+            console.log('[EducaStock] BarcodeDetector polyfill instalado (unpkg) ✅');
+          } catch (e2) {
+            console.error('[EducaStock] Falha ao carregar polyfill BarcodeDetector:', e2);
+          }
         }
       } else {
         console.log('[EducaStock] BarcodeDetector nativo disponível ✅');
@@ -71,18 +80,38 @@
 
       // 3. Expõe função de scan de frame para o Dart via js_util
       //    Retorna Promise<String|null> — Dart usa promiseToFuture()
+      //
+      //    IMPORTANTE: iOS Chrome/Safari não permite detect() diretamente em
+      //    <video>. É necessário capturar o frame via canvas antes — caso
+      //    contrário o polyfill ZXing retorna vazio silenciosamente.
+      window._scanCanvas = null; // canvas reutilizado para evitar GC excessivo
       window._zxingScanFrame = async function() {
         if (!window._barcodeDetector) return null;
         // Pega o elemento <video> criado pelo mobile_scanner
         const video = document.querySelector('video');
         if (!video || video.readyState < 2 || !video.videoWidth) return null;
         try {
-          const results = await window._barcodeDetector.detect(video);
+          // Captura frame atual para canvas (corrige bloqueio de leitura de
+          // vídeo no iOS WebKit / Chrome iOS)
+          if (!window._scanCanvas) {
+            window._scanCanvas = document.createElement('canvas');
+          }
+          const c = window._scanCanvas;
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          if (c.width !== vw || c.height !== vh) {
+            c.width = vw;
+            c.height = vh;
+          }
+          const ctx = c.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(video, 0, 0, vw, vh);
+          const results = await window._barcodeDetector.detect(c);
           if (results && results.length > 0) {
             return results[0].rawValue;
           }
           return null;
-        } catch (_) {
+        } catch (e) {
+          console.warn('[EducaStock] ZXing detect error:', e && e.message ? e.message : e);
           return null;
         }
       };

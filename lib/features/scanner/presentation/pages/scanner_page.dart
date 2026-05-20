@@ -100,7 +100,9 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         _webScanTimer?.cancel();
         _processBarcode(barcode);
       }
-    } catch (_) {}
+    } catch (e) {
+      _log('⚠️ ZXing erro: $e', isError: true);
+    }
   }
 
   // Animação da linha de scan ──────────────────────────────────────────────
