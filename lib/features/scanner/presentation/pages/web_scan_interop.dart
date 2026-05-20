@@ -16,3 +16,18 @@ Future<String?> callWebScanFrame() async {
     return null;
   }
 }
+
+/// Abre a câmera nativa via `<input capture=environment>` e retorna o barcode
+/// detectado na foto ou null (usuário cancelou / não detectado).
+Future<String?> callWebScanFromFile() async {
+  try {
+    final dynamic promise = js.context.callMethod('_scanFromFileInput', []);
+    if (promise == null) return null;
+    final dynamic result = await js_util.promiseToFuture<dynamic>(promise);
+    if (result == null) return null;
+    final str = result.toString();
+    return str.isEmpty ? null : str;
+  } catch (_) {
+    return null;
+  }
+}
