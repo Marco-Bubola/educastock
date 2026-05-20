@@ -1,21 +1,26 @@
 {
   "project_info": {
-    "project_number": "929079196105",
-    "project_id": "educastock-20a98",
-    "storage_bucket": "educastock-20a98.firebasestorage.app"
+    "project_number": "809300510546",
+    "project_id": "educastock-136cd",
+    "storage_bucket": "educastock-136cd.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:929079196105:android:6afb49225825334d135018",
+        "mobilesdk_app_id": "1:809300510546:android:b27b43f92f2933a501dc8b",
         "android_client_info": {
-          "package_name": "br.org.casadacrianca.educastock"
+          "package_name": "br.com.casadacrianca.educastock"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "809300510546-2op2ki96vappvsmpqbjvs8aonh3svlju.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyCwg6Xnqb1S8YyFnf5SX4kSHovBbZXjKsY"
+          "current_key": "AIzaSyCKgSy1UdRitxL6op9tgf6osrVkykL6Rao"
         }
       ],
       "services": {

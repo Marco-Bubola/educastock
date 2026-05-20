@@ -47,30 +47,29 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCwg6Xnqb1S8YyFnf5SX4kSHovBbZXjKsY',
-    appId: '1:929079196105:android:6afb49225825334d135018',
-    messagingSenderId: '929079196105',
-    projectId: 'educastock-20a98',
-    storageBucket: 'educastock-20a98.firebasestorage.app',
+    apiKey: 'AIzaSyCKgSy1UdRitxL6op9tgf6osrVkykL6Rao',
+    appId: '1:809300510546:android:b27b43f92f2933a501dc8b',
+    messagingSenderId: '809300510546',
+    projectId: 'educastock-136cd',
+    storageBucket: 'educastock-136cd.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDpGKVI4MLY4HoevJ5cMTb2LmUU08gHW2U',
-    appId: '1:929079196105:ios:047cc7c1ac675980135018',
-    messagingSenderId: '929079196105',
-    projectId: 'educastock-20a98',
-    storageBucket: 'educastock-20a98.firebasestorage.app',
+    apiKey: 'AIzaSyBYmd7ESC36_wrv8jc7S2sKbYxnQcmfVto',
+    appId: '1:809300510546:ios:d1604ebe65a40af401dc8b',
+    messagingSenderId: '809300510546',
+    projectId: 'educastock-136cd',
+    storageBucket: 'educastock-136cd.firebasestorage.app',
     iosBundleId: 'br.org.casadacrianca.educastock',
   );
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAq3ZvD6Wqqz0r3BMVzmB789m9pkfubNk8',
-    appId: '1:929079196105:web:621eed3d4e4701e3135018',
-    messagingSenderId: '929079196105',
-    projectId: 'educastock-20a98',
-    authDomain: 'educastock-20a98.firebaseapp.com',
-    storageBucket: 'educastock-20a98.firebasestorage.app',
-    measurementId: 'G-9DD0Z6TVMC',
+    apiKey: 'AIzaSyDLqSJp70KsjEfeSU84RlMyAOVLrFL30gw',
+    appId: '1:809300510546:web:15809012980a553401dc8b',
+    messagingSenderId: '809300510546',
+    projectId: 'educastock-136cd',
+    authDomain: 'educastock-136cd.firebaseapp.com',
+    storageBucket: 'educastock-136cd.firebasestorage.app',
   );
 
 }
