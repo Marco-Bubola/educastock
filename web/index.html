@@ -78,42 +78,109 @@
         window._barcodeDetector = null;
       }
 
-      // 3. Expõe função de scan de frame para o Dart via js_util
-      //    Retorna Promise<String|null> — Dart usa promiseToFuture()
+      // 3. Expõe funções de scan de código de barras para o Dart via js_util
+      //    (Retornam Promise<String|null> — Dart usa promiseToFuture())
       //
-      //    IMPORTANTE: iOS Chrome/Safari não permite detect() diretamente em
-      //    <video>. É necessário capturar o frame via canvas antes — caso
-      //    contrário o polyfill ZXing retorna vazio silenciosamente.
-      window._scanCanvas = null; // canvas reutilizado para evitar GC excessivo
+      // ── Scan contínuo do frame de vídeo ───────────────────────────────────
+      // Tenta múltiplas estratégias para contornar a restrição do iOS WebKit
+      // que impede leitura de pixels de streams de câmera via canvas.
+      window._scanCanvas = null;
+      window._cropCanvas = null;
       window._zxingScanFrame = async function() {
         if (!window._barcodeDetector) return null;
-        // Pega o elemento <video> criado pelo mobile_scanner
         const video = document.querySelector('video');
-        if (!video || video.readyState < 2 || !video.videoWidth) return null;
+        if (!video || video.readyState < 2) return null;
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        if (!vw || !vh) return null;
+
         try {
-          // Captura frame atual para canvas (corrige bloqueio de leitura de
-          // vídeo no iOS WebKit / Chrome iOS)
-          if (!window._scanCanvas) {
-            window._scanCanvas = document.createElement('canvas');
-          }
+          // Estratégia 1: detectar direto do elemento <video> (evita canvas)
+          try {
+            const r = await window._barcodeDetector.detect(video);
+            if (r && r.length > 0) return r[0].rawValue;
+          } catch (_) {}
+
+          // Estratégia 2: canvas com frame completo
+          if (!window._scanCanvas) window._scanCanvas = document.createElement('canvas');
           const c = window._scanCanvas;
-          const vw = video.videoWidth;
-          const vh = video.videoHeight;
-          if (c.width !== vw || c.height !== vh) {
-            c.width = vw;
-            c.height = vh;
-          }
+          if (c.width !== vw || c.height !== vh) { c.width = vw; c.height = vh; }
           const ctx = c.getContext('2d', { willReadFrequently: true });
           ctx.drawImage(video, 0, 0, vw, vh);
-          const results = await window._barcodeDetector.detect(c);
-          if (results && results.length > 0) {
-            return results[0].rawValue;
-          }
+          const full = await window._barcodeDetector.detect(c);
+          if (full && full.length > 0) return full[0].rawValue;
+
+          // Estratégia 3: canvas cortado ao centro (60%) — compensa zoom digital
+          const cx = Math.floor(vw * 0.2), cy = Math.floor(vh * 0.2);
+          const cw = Math.floor(vw * 0.6), ch = Math.floor(vh * 0.6);
+          if (!window._cropCanvas) window._cropCanvas = document.createElement('canvas');
+          const cc = window._cropCanvas;
+          if (cc.width !== cw || cc.height !== ch) { cc.width = cw; cc.height = ch; }
+          const cctx = cc.getContext('2d', { willReadFrequently: true });
+          cctx.drawImage(c, cx, cy, cw, ch, 0, 0, cw, ch);
+          const cropped = await window._barcodeDetector.detect(cc);
+          if (cropped && cropped.length > 0) return cropped[0].rawValue;
+
           return null;
         } catch (e) {
           console.warn('[EducaStock] ZXing detect error:', e && e.message ? e.message : e);
           return null;
         }
+      };
+
+      // ── Captura foto via câmera nativa (input file) ───────────────────────
+      // Usado pelo botão "Tirar foto" na web (iOS Chrome/Safari).
+      // Abre a câmera traseira do dispositivo via <input capture=environment>,
+      // processa a imagem estática com BarcodeDetector — mais confiável que
+      // leitura de frames de vídeo no iOS WebKit.
+      window._scanFromFileInput = function() {
+        return new Promise(function(resolve) {
+          var input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/*';
+          input.setAttribute('capture', 'environment');
+          input.style.cssText = 'position:absolute;top:-9999px;left:-9999px;opacity:0;';
+
+          var settled = false;
+          function finish(val) {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            try { if (document.body.contains(input)) document.body.removeChild(input); } catch(e) {}
+            resolve(val);
+          }
+
+          input.addEventListener('change', async function() {
+            var file = input.files && input.files[0];
+            if (!file) { finish(null); return; }
+            try {
+              if (!window._barcodeDetector) { finish(null); return; }
+              // createImageBitmap lida melhor com EXIF/orientação do iOS
+              var src = await createImageBitmap(file);
+              var results = await window._barcodeDetector.detect(src);
+              if (src.close) src.close();
+              finish(results && results.length > 0 ? results[0].rawValue : null);
+            } catch(e) {
+              console.warn('[EducaStock] _scanFromFileInput error:', e);
+              finish(null);
+            }
+          });
+
+          // Detecta cancelamento: página volta ao foco após fechar câmera
+          var wasHidden = false;
+          function onVisibilityChange() {
+            if (document.hidden) {
+              wasHidden = true;
+            } else if (wasHidden) {
+              // Aguarda 2s para onchange disparar antes de resolver null
+              setTimeout(function() { finish(null); }, 2000);
+            }
+          }
+          document.addEventListener('visibilitychange', onVisibilityChange);
+
+          document.body.appendChild(input);
+          input.click();
+        });
       };
 
       // 4. Carrega Flutter SOMENTE após tudo estar pronto
