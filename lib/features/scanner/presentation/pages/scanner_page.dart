@@ -43,7 +43,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   // No app nativo: zoom óptico/digital via setZoomScale (0.0 a 1.0).
   // _zoomSupported fica false somente se setZoomScale falhar no device.
   bool   _zoomSupported = true;
-  double _zoom          = kIsWeb ? 2.0 : _kInitialZoomMobile;
+  double _zoom          = kIsWeb ? 1.0 : _kInitialZoomMobile;
   // Piscar os cantos ao detectar
   bool   _detected      = false;
 
@@ -74,8 +74,12 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     _heartbeat = Timer.periodic(const Duration(seconds: 3), (_) {
       final state = _camera.value;
       final label = kIsWeb ? 'tentativas ZXing' : 'frames processados';
-      _log('💓 Scanner: running=${state.isRunning} | '
-           '$label=$_frameCount');
+      if (kIsWeb) {
+        final diag = callWebGetDiagnostics();
+        _log('💓 Scanner: running=${state.isRunning} | $label=$_frameCount | diag=$diag');
+      } else {
+        _log('💓 Scanner: running=${state.isRunning} | $label=$_frameCount');
+      }
       _frameCount = 0;
     });
   }
@@ -222,35 +226,57 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   // ── Escanear a partir de foto ─────────────────────────────────────────────
   Future<void> _scanFromPhoto() async {
     if (kIsWeb) {
-      // Na web (iOS Chrome/Safari): abre câmera nativa via <input capture=environment>.
-      // analyzeImage() não é suportado na web — usamos BarcodeDetector na foto estática.
-      _log('📸 Abrindo câmera nativa para capturar foto...');
+      // Na web (iOS Chrome/Safari): usa ImageCapture.takePhoto() para capturar
+      // do stream atual SEM abrir câmera nativa do iOS.
+      _log('📸 Capturando foto do stream (ImageCapture)...');
       if (mounted) setState(() => _scanningFromPhoto = true);
       try {
-        String? barcode;
-        try {
-          barcode = await callWebScanFromFile()
-              .timeout(const Duration(seconds: 60), onTimeout: () => null);
-        } catch (_) {
-          barcode = null;
-        }
-        if (barcode == null || barcode.isEmpty) {
+        final raw = await callWebCaptureAndScanRaw()
+            .timeout(const Duration(seconds: 30), onTimeout: () => 'ERR:timeout');
+        if (raw == null || raw.isEmpty) {
           _log('📸 Nenhum código detectado na foto', isError: true);
+        } else if (raw.startsWith('ERR:')) {
+          final reason = raw.substring(4);
+          switch (reason) {
+            case 'no_stream':
+              _log('📸 Câmera não está ativa — reiniciando...', isError: true);
+              if (mounted) setState(() => _scanningFromPhoto = false);
+              await _startCamera();
+              return;
+            case 'no_detector':
+              _log('📸 BarcodeDetector não disponível — aguarde o polyfill carregar', isError: true);
+            case 'capture_failed':
+              _log('📸 Falha na captura — tente novamente', isError: true);
+            case 'timeout':
+              _log('📸 Timeout ao capturar foto', isError: true);
+            default:
+              _log('📸 Erro: $raw', isError: true);
+          }
           if (mounted) {
             setState(() => _scanningFromPhoto = false);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    '❌ Nenhum código detectado. Aproxime mais e tente novamente.'),
+              SnackBar(
+                content: Text('❌ $reason — aproxime o código e tente novamente'),
                 backgroundColor: Colors.red,
               ),
             );
           }
           return;
+        } else {
+          _log('📸 Código lido da foto: $raw');
+          if (mounted) setState(() => _scanningFromPhoto = false);
+          _processBarcode(raw);
+          return;
         }
-        _log('📸 Código lido da foto: $barcode');
-        if (mounted) setState(() => _scanningFromPhoto = false);
-        _processBarcode(barcode);
+        if (mounted) {
+          setState(() => _scanningFromPhoto = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Nenhum código detectado. Aproxime mais e tente novamente.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       } catch (e) {
         _log('📸 Erro ao capturar foto: $e', isError: true);
         if (mounted) setState(() => _scanningFromPhoto = false);
