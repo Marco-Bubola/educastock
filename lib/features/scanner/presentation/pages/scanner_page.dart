@@ -13,6 +13,9 @@ import '../controllers/scanner_provider.dart';
 // Interop de scan direto para web (polyfill BarcodeDetector via JS bridge)
 import 'web_scan_interop_stub.dart'
     if (dart.library.html) 'web_scan_interop.dart';
+// Análise de imagem estática via ML Kit (Android/iOS) — stub no web
+import 'barcode_image_analyzer_stub.dart'
+    if (dart.library.io) 'barcode_image_analyzer_native.dart';
 
 // ── Constantes do scanner ────────────────────────────────────────────────────
 const _kScanBoxSize = 260.0;
@@ -33,14 +36,12 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     with SingleTickerProviderStateMixin {
 
   // Camera ─────────────────────────────────────────────────────────────────
-  // Android: DetectionSpeed.noDuplicates (mais confiável)
-  // iOS/Web: não usa (web tem loop custom ZXing, iOS usa camera nativa)
-  // returnImage: true em Android para pré-processar via ML
+  // Nativo (Android + iOS): noDuplicates — o SDK nativo gerencia deduplicação
+  // e entrega cada barcode apenas uma vez, sem precisar de debounce agressivo.
+  // Web: DetectionSpeed.normal — o loop ZXing customizado já tem busy-guard.
   final _camera = MobileScannerController(
-    detectionSpeed: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-        ? DetectionSpeed.noDuplicates
-        : DetectionSpeed.normal,
-    returnImage: !kIsWeb && defaultTargetPlatform == TargetPlatform.android,
+    detectionSpeed: kIsWeb ? DetectionSpeed.normal : DetectionSpeed.noDuplicates,
+    returnImage: false,
     autoStart: false,
   );
 
@@ -162,10 +163,9 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     try {
       await _camera.start();
       _log('✅ Câmera iniciada com sucesso');
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-        _log('🎯 Android: DetectionSpeed.noDuplicates, zoom 0.45 (~3.15×), debounce 250ms');
-      } else if (!kIsWeb) {
-        _log('🎯 iOS: DetectionSpeed.normal, zoom 0.25 (~2.75×), debounce 400ms');
+      if (!kIsWeb) {
+        final plat = defaultTargetPlatform == TargetPlatform.android ? 'Android' : 'iOS';
+        _log('🎯 $plat: noDuplicates, zoom=${_zoom.toStringAsFixed(2)}, debounce=150ms');
       }
       _startHeartbeat();
       if (kIsWeb) _startWebScanLoop();
@@ -228,14 +228,10 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     if (_navigating) return;
     if (raw == null || raw.isEmpty) return;
 
-    // Debounce: Android = 250ms (mais rápido), iOS = 400ms (mais conservador)
-    // Evita processar o mesmo barcode múltiplas vezes com DetectionSpeed.
-    final debounceMs = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-        ? 250
-        : 400;
-
+    // noDuplicates já garante que o mesmo barcode não chega duas vezes seguidas.
+    // Debounce leve (150ms) apenas para estabilidade da UI (evita double-tap acidental).
     _debounce?.cancel();
-    _debounce = Timer(Duration(milliseconds: debounceMs), () {
+    _debounce = Timer(const Duration(milliseconds: 150), () {
       if (!_navigating && mounted) _processBarcode(raw);
     });
   }
@@ -318,15 +314,19 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       return;
     }
 
-    // Caminho nativo (Android / iOS app): varredura com até _kMaxPhotoAttempts fotos
+    // Caminho nativo (Android / iOS):
+    // Para câmera ANTES de abrir o picker do sistema — no iOS, duas sessões de
+    // câmera simultâneas impedem a captura e causam falha silenciosa no analyzeImage.
+    try { await _camera.stop(); } catch (_) {}
+
     final picker = ImagePicker();
+    bool foundBarcode = false;
 
     for (int attempt = 1; attempt <= _kMaxPhotoAttempts; attempt++) {
-      if (!mounted || _navigating) return;
+      if (!mounted || _navigating) break;
 
       if (mounted) setState(() { _scanningFromPhoto = true; _photoAttempt = attempt; });
 
-      // Feedback entre tentativas
       if (attempt > 1 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -339,7 +339,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
           ),
         );
         await Future.delayed(const Duration(milliseconds: 1000));
-        if (!mounted) return;
+        if (!mounted) break;
       }
 
       _log('📸 Tentativa $attempt/$_kMaxPhotoAttempts — abrindo câmera...');
@@ -349,52 +349,55 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         photo = await picker.pickImage(
           source: ImageSource.camera,
           preferredCameraDevice: CameraDevice.rear,
-          imageQuality: 100, // qualidade máxima para melhor leitura
+          // 92 % = arquivo menor → ML Kit processa mais rápido, sem perda de detecção
+          imageQuality: 92,
         );
       } catch (e) {
         _log('📸 Erro ao capturar foto: $e', isError: true);
-        if (mounted) setState(() { _scanningFromPhoto = false; _photoAttempt = 0; });
-        return;
+        break;
       }
 
       if (photo == null) {
         _log('📸 Captura cancelada na tentativa $attempt');
-        if (mounted) setState(() { _scanningFromPhoto = false; _photoAttempt = 0; });
-        return;
+        break;
       }
 
-      _log('📸 Analisando: ${photo.path}');
+      _log('📸 Analisando via ML Kit: ${photo.path}');
       try {
-        final result = await _camera.analyzeImage(photo.path);
-        if (result != null && result.barcodes.isNotEmpty) {
-          final raw = result.barcodes.first.rawValue;
-          if (raw != null && raw.isNotEmpty) {
-            _log('📸 ✅ Código lido na tentativa $attempt: $raw');
-            if (mounted) setState(() { _scanningFromPhoto = false; _photoAttempt = 0; });
-            _processBarcode(raw);
-            return;
-          }
+        // Usa ML Kit diretamente — mais confiável que _camera.analyzeImage
+        // (que depende do estado interno do MobileScannerController)
+        final raw = await analyzeBarcodeImage(photo.path);
+        if (raw != null && raw.isNotEmpty) {
+          _log('📸 ✅ Código detectado na tentativa $attempt: $raw');
+          if (mounted) setState(() { _scanningFromPhoto = false; _photoAttempt = 0; });
+          foundBarcode = true;
+          _processBarcode(raw); // _processBarcode reinicia câmera após confirmação
+          return;
         }
-        _log('📸 Tentativa $attempt sem resultado', isError: attempt == _kMaxPhotoAttempts);
+        _log('📸 Tentativa $attempt: nenhum código detectado',
+            isError: attempt == _kMaxPhotoAttempts);
       } catch (e) {
-        _log('📸 Erro na tentativa $attempt: $e', isError: true);
+        _log('📸 Erro ML Kit na tentativa $attempt: $e', isError: true);
       }
     }
 
-    // Todas as tentativas falharam
+    // Limpa estado e reinicia câmera (tentativas esgotadas ou cancelamento)
     if (mounted) {
       setState(() { _scanningFromPhoto = false; _photoAttempt = 0; });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            '❌ Código não detectado após $_kMaxPhotoAttempts tentativas. Tente digitar o código manualmente.',
+      if (!foundBarcode && !_navigating) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '❌ Código não detectado. Tente digitar manualmente ou aproxime mais.',
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
           ),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 4),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+        );
+      }
     }
+    if (!_navigating) _startCamera();
   }
 
   void _showConfirmation(String barcode) {
