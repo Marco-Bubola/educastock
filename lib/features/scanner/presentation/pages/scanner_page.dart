@@ -800,63 +800,65 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
               ),
             ),
 
-            // ── Botões inferiores: foto + código manual ──────────────────
+            // ── Botão inferior central: tirar foto (FAB redondo) ────────────
             Positioned(
-              bottom: botPad + 20,
-              left: 16,
-              right: 16,
-              child: Row(
-                children: [
-                  // Botão tirar foto
-                  Expanded(
-                    child: _scanningFromPhoto
-                        ? Container(
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(14),
+              bottom: botPad + 24,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _scanningFromPhoto
+                    ? Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white38, width: 2),
+                        ),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
                             ),
-                            child: const Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          )
-                        : OutlinedButton.icon(
-                            onPressed: _scanFromPhoto,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white70,
-                              side: const BorderSide(color: Colors.white30),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
-                            ),
-                            icon: const Icon(
-                              Icons.photo_camera_rounded,
-                              size: 18,
-                            ),
-                            label: const Text('Tirar foto'),
                           ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Botão código manual
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: _showManualInput,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white70,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      )
+                    : GestureDetector(
+                        onTap: _scanFromPhoto,
+                        child: Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black45,
+                                blurRadius: 14,
+                                offset: Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.photo_camera_rounded,
+                            color: Colors.black87,
+                            size: 32,
+                          ),
+                        ),
                       ),
-                      icon: const Icon(Icons.keyboard_rounded, size: 18),
-                      label: const Text('Código manual'),
-                    ),
-                  ),
-                ],
+              ),
+            ),
+
+            // ── Botão código manual (ícone) ──────────────────────────────
+            Positioned(
+              bottom: botPad + 40,
+              right: 32,
+              child: _FabBtn(
+                icon: Icons.keyboard_rounded,
+                onTap: _showManualInput,
               ),
             ),
 
@@ -921,8 +923,8 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
             // ── Botão de log de diagnóstico ──────────────────────────────
             Positioned(
-              bottom: botPad + 66,
-              right: 16,
+              bottom: botPad + 40,
+              left: 32,
               child: _FabBtn(
                 icon: Icons.bug_report_rounded,
                 onTap: () => setState(() => _showDebugLog = !_showDebugLog),
@@ -932,7 +934,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
             // ── Painel de log visual ─────────────────────────────────────
             if (_showDebugLog)
               Positioned(
-                bottom: botPad + 110,
+                bottom: botPad + 130,
                 left: 12,
                 right: 12,
                 child: _DebugLogPanel(
