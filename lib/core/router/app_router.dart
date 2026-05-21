@@ -132,6 +132,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           final prefillIsPerishable = state.uri.queryParameters['isPerishable'];
           final prefillUnit = state.uri.queryParameters['unit'];
           final prefillUnitSize = state.uri.queryParameters['unitSize'];
+          final prefillDescription = state.uri.queryParameters['desc'];
           return ProductFormPage(
             productId: productId,
             barcode: barcode,
@@ -142,6 +143,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             prefillIsPerishable: prefillIsPerishable,
             prefillUnit: prefillUnit,
             prefillUnitSize: prefillUnitSize,
+            prefillDescription: prefillDescription,
           );
         },
       ),
