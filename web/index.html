@@ -1,19 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
@@ -34,234 +21,503 @@
 </head>
 <body>
   <!--
-    Passo 1: carrega ZXing (pure-JS barcode decoder, sem WASM, funciona no iOS).
-    Expõe: ZXing.MultiFormatReader, ZXing.HTMLCanvasElementLuminanceSource, etc.
+    ZXing pure-JS: funciona em iOS Safari sem WASM.
+    Expõe MultiFormatReader, HybridBinarizer, GlobalHistogramBinarizer, etc.
   -->
   <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 
   <script>
-    function _bootstrapApp() {
+  function _bootstrapApp() {
 
-      // ── 1. Inicializa ZXing MultiFormatReader ─────────────────────────────
-      window._zxingReady = false;
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1. INICIALIZA ZXING com todos os formatos relevantes
+    // ─────────────────────────────────────────────────────────────────────────
+    window._zxingReady = false;
+    try {
+      var hints = new Map();
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8,
+        ZXing.BarcodeFormat.QR_CODE,
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.UPC_A,
+        ZXing.BarcodeFormat.UPC_E,
+        ZXing.BarcodeFormat.ITF,
+        ZXing.BarcodeFormat.DATA_MATRIX,
+        ZXing.BarcodeFormat.PDF_417,
+        ZXing.BarcodeFormat.AZTEC,
+      ]);
+
+      // Reader padrão (HybridBinarizer — melhor para fotos nítidas)
+      window._zxingReader = new ZXing.MultiFormatReader();
+      window._zxingReader.setHints(hints);
+
+      // Reader alternativo (GlobalHistogramBinarizer — melhor para imagens com
+      // baixo contraste ou iluminação uniforme, como embalagens foscase)
+      window._zxingReaderGH = new ZXing.MultiFormatReader();
+      window._zxingReaderGH.setHints(hints);
+
+      window._zxingReady = true;
+      console.log('[EducaStock] ZXing pronto ✅ (Hybrid + GlobalHistogram)');
+    } catch(e) {
+      console.error('[EducaStock] ZXing init falhou:', e);
+      window._zxingReader = null;
+      window._zxingReaderGH = null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2. UTILITÁRIOS DE CANVAS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Tenta decodificar com HybridBinarizer (1ª tentativa padrão)
+    window._decodeHybrid = function(canvas) {
+      if (!window._zxingReader) return null;
       try {
-        var hints = new Map();
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-          ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-          ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128,
-          ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.UPC_A,
-          ZXing.BarcodeFormat.UPC_E, ZXing.BarcodeFormat.ITF,
-        ]);
-        window._zxingReader = new ZXing.MultiFormatReader();
-        window._zxingReader.setHints(hints);
-        window._zxingReady = true;
-        console.log('[EducaStock] ZXing MultiFormatReader pronto ✅');
+        var lum = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        var bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+        var r = window._zxingReader.decode(bmp);
+        return r ? r.getText() : null;
+      } catch(e) { return null; }
+    };
+
+    // Tenta decodificar com GlobalHistogramBinarizer (melhor para baixo contraste)
+    window._decodeGH = function(canvas) {
+      if (!window._zxingReaderGH) return null;
+      try {
+        var lum = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        var bmp = new ZXing.BinaryBitmap(new ZXing.GlobalHistogramBinarizer(lum));
+        var r = window._zxingReaderGH.decode(bmp);
+        return r ? r.getText() : null;
+      } catch(e) { return null; }
+    };
+
+    // Compat: mantido para chamadas legadas
+    window._zxingDecodeCanvas = window._decodeHybrid;
+
+    // Rotaciona canvas 90° no sentido horário (para barcodes inclinados)
+    window._rotateCanvas90 = function(src) {
+      try {
+        var dst = document.createElement('canvas');
+        dst.width  = src.height;
+        dst.height = src.width;
+        var ctx = dst.getContext('2d');
+        ctx.translate(dst.width / 2, dst.height / 2);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(src, -src.width / 2, -src.height / 2);
+        return dst;
+      } catch(e) { return src; }
+    };
+
+    // Recorta a região central do canvas (para focar na área do código)
+    // ratioW e ratioH: fração do tamanho total a manter (0.0–1.0)
+    window._cropCenter = function(canvas, ratioW, ratioH) {
+      try {
+        var w = Math.round(canvas.width  * ratioW);
+        var h = Math.round(canvas.height * ratioH);
+        var x = Math.round((canvas.width  - w) / 2);
+        var y = Math.round((canvas.height - h) / 2);
+        var dst = document.createElement('canvas');
+        dst.width = w; dst.height = h;
+        dst.getContext('2d').drawImage(canvas, x, y, w, h, 0, 0, w, h);
+        return dst;
+      } catch(e) { return canvas; }
+    };
+
+    // Pré-processamento: converte para escala de cinza + boost de contraste.
+    // Aplicar antes do ZXing melhora a binarização em imagens com pouco contraste
+    // (embalagens foscase, iluminação lateral, superfícies metalizadas).
+    window._applyContrastBoost = function(canvas) {
+      try {
+        var ctx = canvas.getContext('2d');
+        var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var data = imageData.data;
+        var factor = 1.9; // fator de contraste (1.0 = sem mudança, 2.0 = dobro)
+        var mid = 128;
+        for (var i = 0; i < data.length; i += 4) {
+          // Converte para escala de cinza (pesos perceptivos padrão)
+          var gray = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114;
+          // Aplica curva de contraste centrada em 128
+          var enhanced = factor * (gray - mid) + mid;
+          var v = Math.round(Math.min(255, Math.max(0, enhanced)));
+          data[i] = data[i+1] = data[i+2] = v;
+          // data[i+3] = alpha, não alterado
+        }
+        ctx.putImageData(imageData, 0, 0);
+        return canvas;
+      } catch(e) { return canvas; }
+    };
+
+    // Cria cópia de canvas com pré-processamento (não modifica original)
+    window._makeContrastCanvas = function(src) {
+      try {
+        var dst = document.createElement('canvas');
+        dst.width = src.width; dst.height = src.height;
+        dst.getContext('2d').drawImage(src, 0, 0);
+        return window._applyContrastBoost(dst);
+      } catch(e) { return src; }
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3. DECODIFICAÇÃO MULTI-ESTRATÉGIA (live scan — rápido, ~3 tentativas)
+    // ─────────────────────────────────────────────────────────────────────────
+    // Prioridade:
+    //   1. Frame original (Hybrid) — caso mais comum
+    //   2. Crop central 65% (Hybrid) — barcode está no centro da área de scan
+    //   3. Frame original (GlobalHistogram) — baixo contraste
+    //   4. Crop central (GlobalHistogram) — combinação
+    window._zxingDecodeLive = function(canvas) {
+      // 1. Original — HybridBinarizer
+      var r = window._decodeHybrid(canvas);
+      if (r) return r;
+
+      // 2. Crop central 65% — HybridBinarizer
+      var crop = window._cropCenter(canvas, 0.65, 0.65);
+      r = window._decodeHybrid(crop);
+      if (r) return r;
+
+      // 3. Original — GlobalHistogramBinarizer
+      r = window._decodeGH(canvas);
+      if (r) return r;
+
+      // 4. Crop central — GlobalHistogramBinarizer
+      r = window._decodeGH(crop);
+      if (r) return r;
+
+      return null;
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 4. DECODIFICAÇÃO COMPLETA (foto — exaustiva, ~10 tentativas)
+    // ─────────────────────────────────────────────────────────────────────────
+    // Usado ao tirar foto. Pode ser mais lento pois é uma operação única.
+    // Tenta: resolução original, crop, rotações, versões com contraste boosted.
+    window._zxingDecodeFull = function(canvas, callback) {
+      // Tentativas síncronas (rápidas)
+      var r;
+
+      // 1. Original — Hybrid
+      r = window._decodeHybrid(canvas);
+      if (r) { callback(r); return; }
+
+      // 2. Original — GlobalHistogram
+      r = window._decodeGH(canvas);
+      if (r) { callback(r); return; }
+
+      // 3. Crop central 70% — Hybrid
+      var crop70 = window._cropCenter(canvas, 0.70, 0.70);
+      r = window._decodeHybrid(crop70);
+      if (r) { callback(r); return; }
+
+      // 4. Crop central 70% — GlobalHistogram
+      r = window._decodeGH(crop70);
+      if (r) { callback(r); return; }
+
+      // 5. Contraste boosted — Hybrid
+      var boosted = window._makeContrastCanvas(canvas);
+      r = window._decodeHybrid(boosted);
+      if (r) { callback(r); return; }
+
+      // 6. Contraste boosted — GlobalHistogram
+      r = window._decodeGH(boosted);
+      if (r) { callback(r); return; }
+
+      // 7–9. Rotação 90° (código na vertical) + Hybrid + GH + boosted
+      var r90 = window._rotateCanvas90(canvas);
+      r = window._decodeHybrid(r90);
+      if (r) { callback(r); return; }
+      r = window._decodeGH(r90);
+      if (r) { callback(r); return; }
+      r = window._decodeHybrid(window._makeContrastCanvas(r90));
+      if (r) { callback(r); return; }
+
+      // 10–12. Rotação 270° (código na vertical, outro lado)
+      var r270 = window._rotateCanvas90(window._rotateCanvas90(r90));
+      r = window._decodeHybrid(r270);
+      if (r) { callback(r); return; }
+      r = window._decodeGH(r270);
+      if (r) { callback(r); return; }
+      r = window._decodeHybrid(window._makeContrastCanvas(r270));
+      if (r) { callback(r); return; }
+
+      // 13. Rotação 180° (código de cabeça para baixo)
+      var r180 = window._rotateCanvas90(r90);
+      r = window._decodeHybrid(r180);
+      if (r) { callback(r); return; }
+
+      // 14. Crop central boosted 90°
+      r = window._decodeHybrid(window._makeContrastCanvas(window._cropCenter(r90, 0.70, 0.70)));
+      if (r) { callback(r); return; }
+
+      callback(null);
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 5. HELPERS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    window._getStreamDiagnostics = function() {
+      try {
+        var video = document.querySelector('video');
+        if (!video) return '{"err":"no-video"}';
+        var tracks = video.srcObject ? video.srcObject.getVideoTracks() : [];
+        var settings = tracks.length > 0 ? tracks[0].getSettings() : {};
+        return JSON.stringify({
+          rs:     video.readyState,
+          w:      video.videoWidth,
+          h:      video.videoHeight,
+          camW:   settings.width  || 0,
+          camH:   settings.height || 0,
+          paused: video.paused,
+          stream: !!video.srcObject,
+          tracks: tracks.length,
+          tState: tracks.length > 0 ? tracks[0].readyState : 'none',
+          IC:     ('ImageCapture' in window),
+          zx:     window._zxingReady,
+        });
+      } catch(e) { return '{"err":"' + String(e.message || e) + '"}'; }
+    };
+
+    // Obtém (ou cria) instância de ImageCapture para o track ativo
+    window._ic = null; window._icTrack = null;
+    window._getImageCapture = function() {
+      try {
+        var video = document.querySelector('video');
+        if (!video || !video.srcObject) return null;
+        var tracks = video.srcObject.getVideoTracks();
+        if (!tracks || !tracks.length) return null;
+        var track = tracks[0];
+        if (!('ImageCapture' in window)) return null;
+        if (!window._ic || window._icTrack !== track || track.readyState !== 'live') {
+          window._ic = new ImageCapture(track);
+          window._icTrack = track;
+        }
+        return window._ic;
+      } catch(e) { return null; }
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 6. AUMENTO DE RESOLUÇÃO DA CÂMERA
+    // Tenta aumentar a resolução do stream para melhorar a detecção.
+    // Chamado repetidamente até conseguir ou desistir após 10 tentativas.
+    // ─────────────────────────────────────────────────────────────────────────
+    window._resBoosted = false;
+    window._resBoostAttempts = 0;
+    window._boostCameraResolution = function() {
+      if (window._resBoosted || window._resBoostAttempts >= 10) return;
+      window._resBoostAttempts++;
+      try {
+        var video = document.querySelector('video');
+        if (!video || !video.srcObject) return;
+        var tracks = video.srcObject.getVideoTracks();
+        if (!tracks || !tracks.length) return;
+        var track = tracks[0];
+        if (track.readyState !== 'live') return;
+        var current = track.getSettings();
+        // Só tenta se resolução for baixa
+        if (current.width && current.width >= 1080) {
+          window._resBoosted = true;
+          console.log('[EducaStock] Resolução já adequada:', current.width + 'x' + current.height);
+          return;
+        }
+        track.applyConstraints({
+          advanced: [
+            { width: { ideal: 1920 }, height: { ideal: 1080 } },
+            { width: { ideal: 1280 }, height: { ideal: 720  } },
+            { width: { ideal: 960  }, height: { ideal: 540  } },
+          ]
+        }).then(function() {
+          var s = track.getSettings();
+          console.log('[EducaStock] Câmera: ' + s.width + 'x' + s.height);
+          window._resBoosted = true;
+        }).catch(function(e) {
+          console.warn('[EducaStock] applyConstraints falhou:', e.message || e);
+        });
       } catch(e) {
-        console.error('[EducaStock] ZXing init falhou:', e);
-        window._zxingReader = null;
+        console.warn('[EducaStock] boostCameraResolution erro:', e);
+      }
+    };
+
+    // Polling: tenta aumentar resolução a cada 2 s por até 20 s
+    var _resInterval = setInterval(function() {
+      window._boostCameraResolution();
+      if (window._resBoosted || window._resBoostAttempts >= 10) {
+        clearInterval(_resInterval);
+      }
+    }, 2000);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 7. SCAN DE FRAME (loop contínuo — usa estratégia rápida de 4 tentativas)
+    // ─────────────────────────────────────────────────────────────────────────
+    window._zxingScanFrameCb = function(cb) {
+      if (!window._zxingReader) { cb(null); return; }
+      var video = document.querySelector('video');
+      if (!video || video.readyState < 2) { cb(null); return; }
+      var vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh) { cb(null); return; }
+
+      function decodeFromVideo() {
+        try {
+          var c = document.createElement('canvas');
+          c.width = vw; c.height = vh;
+          c.getContext('2d').drawImage(video, 0, 0, vw, vh);
+          cb(window._zxingDecodeLive(c));
+        } catch(e) { cb(null); }
       }
 
-      // ── 2. Decode síncrono de canvas ──────────────────────────────────────
-      window._zxingDecodeCanvas = function(canvas) {
-        if (!window._zxingReader) return null;
-        try {
-          var lum = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-          var bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-          var r = window._zxingReader.decode(bmp);
-          return r ? r.getText() : null;
-        } catch(e) {
-          // NotFoundException é lançada quando não há código — normal
-          return null;
-        }
-      };
-
-      // ── 3. Helpers ─────────────────────────────────────────────────────────
-
-      // Diagnóstico síncrono do stream (retorna JSON string)
-      window._getStreamDiagnostics = function() {
-        try {
-          var video = document.querySelector('video');
-          if (!video) return '{"err":"no-video"}';
-          var tracks = video.srcObject ? video.srcObject.getVideoTracks() : [];
-          return JSON.stringify({
-            rs: video.readyState,
-            w: video.videoWidth,
-            h: video.videoHeight,
-            paused: video.paused,
-            stream: !!video.srcObject,
-            tracks: tracks.length,
-            tState: tracks.length > 0 ? tracks[0].readyState : 'none',
-            IC: ('ImageCapture' in window),
-            zx: window._zxingReady
-          });
-        } catch(e) { return '{"err":"' + String(e.message || e) + '"}'; }
-      };
-
-      // Obtém (ou cria) instância de ImageCapture para o track ativo
-      window._ic = null; window._icTrack = null;
-      window._getImageCapture = function() {
-        try {
-          var video = document.querySelector('video');
-          if (!video || !video.srcObject) return null;
-          var tracks = video.srcObject.getVideoTracks();
-          if (!tracks || !tracks.length) return null;
-          var track = tracks[0];
-          if (!('ImageCapture' in window)) return null;
-          if (!window._ic || window._icTrack !== track || track.readyState !== 'live') {
-            window._ic = new ImageCapture(track);
-            window._icTrack = track;
-          }
-          return window._ic;
-        } catch(e) { return null; }
-      };
-
-      // ── 4. Detecta barcode em blob/file via img → canvas → ZXing ──────────
-      window._detectInBlob = function(blob, callback) {
-        if (!window._zxingReader) { callback(null); return; }
-        var url = URL.createObjectURL(blob);
-        var img = new Image();
-        img.onload = function() {
-          URL.revokeObjectURL(url);
-          var w = img.naturalWidth || img.width;
-          var h = img.naturalHeight || img.height;
-          if (!w || !h) { callback(null); return; }
-
-          // Tenta resolução original
-          var canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0);
-          var result = window._zxingDecodeCanvas(canvas);
-          if (result) { callback(result); return; }
-
-          // Tenta escala reduzida (máx 1920px) para fotos muito grandes
-          var scale = Math.min(1, 1920 / Math.max(w, h));
-          if (scale < 0.99) {
-            var sw = Math.round(w * scale), sh = Math.round(h * scale);
-            var small = document.createElement('canvas');
-            small.width = sw; small.height = sh;
-            small.getContext('2d').drawImage(img, 0, 0, sw, sh);
-            var r2 = window._zxingDecodeCanvas(small);
-            if (r2) { callback(r2); return; }
-          }
-
-          callback(null);
-        };
-        img.onerror = function() { URL.revokeObjectURL(url); callback(null); };
-        img.src = url;
-      };
-
-      // ── 5. Scan de frame de vídeo (loop contínuo) ─────────────────────────
-      // ZXing é síncrono — sem promise chains problemáticas no iOS.
-      // grabFrame() → canvas fresh (não tainted) → ZXing.decode
-      window._zxingScanFrameCb = function(cb) {
-        if (!window._zxingReader) { cb(null); return; }
-        var video = document.querySelector('video');
-        if (!video || video.readyState < 2) { cb(null); return; }
-        var vw = video.videoWidth, vh = video.videoHeight;
-        if (!vw || !vh) { cb(null); return; }
-
-        function decodeFromVideo() {
-          // Último recurso: canvas desenhado diretamente do <video>
-          // (pode ser preto no iOS WebKit, mas tenta)
+      var ic = window._getImageCapture();
+      if (ic) {
+        ic.grabFrame().then(function(frame) {
+          if (!frame) { decodeFromVideo(); return; }
           try {
-            var c = document.createElement('canvas');
-            c.width = vw; c.height = vh;
-            c.getContext('2d').drawImage(video, 0, 0, vw, vh);
-            cb(window._zxingDecodeCanvas(c));
-          } catch(e) { cb(null); }
+            var fc = document.createElement('canvas');
+            fc.width  = frame.width  || vw;
+            fc.height = frame.height || vh;
+            fc.getContext('2d').drawImage(frame, 0, 0);
+            if (frame.close) frame.close();
+            cb(window._zxingDecodeLive(fc));
+          } catch(e) {
+            if (frame && frame.close) frame.close();
+            decodeFromVideo();
+          }
+        }, function() { decodeFromVideo(); });
+      } else {
+        decodeFromVideo();
+      }
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 8. DETECTAR EM BLOB (foto tirada) — usa estratégia completa de ~14 tentativas
+    // ─────────────────────────────────────────────────────────────────────────
+    window._detectInBlob = function(blob, callback) {
+      if (!window._zxingReader) { callback(null); return; }
+      var url = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function() {
+        URL.revokeObjectURL(url);
+        var w = img.naturalWidth  || img.width;
+        var h = img.naturalHeight || img.height;
+        if (!w || !h) { callback(null); return; }
+
+        // Canvas em resolução original
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+
+        // Se muito grande, cria versão reduzida para processar mais rápido
+        // e tenta as duas em paralelo (síncrono via _zxingDecodeFull)
+        var maxDim = Math.max(w, h);
+        if (maxDim > 1920) {
+          var scale  = 1920 / maxDim;
+          var sw = Math.round(w * scale), sh = Math.round(h * scale);
+          var small = document.createElement('canvas');
+          small.width = sw; small.height = sh;
+          small.getContext('2d').drawImage(img, 0, 0, sw, sh);
+          // Tenta na versão menor primeiro (mais rápida para ZXing)
+          window._zxingDecodeFull(small, function(r) {
+            if (r) { callback(r); return; }
+            // Fallback na resolução original (pode ter mais detalhe)
+            window._zxingDecodeFull(canvas, callback);
+          });
+        } else {
+          window._zxingDecodeFull(canvas, callback);
+        }
+      };
+      img.onerror = function() { URL.revokeObjectURL(url); callback(null); };
+      img.src = url;
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 9. CAPTURA FOTO E DETECTA (botão câmera na UI)
+    // ─────────────────────────────────────────────────────────────────────────
+    window._captureAndScanCb = function(cb) {
+      if (!window._zxingReader) { cb('ERR:no_detector'); return; }
+
+      var ic = window._getImageCapture();
+
+      // Fallback: <input type=file capture=environment> (funciona no iOS Safari
+      // quando ImageCapture não está disponível ou takePhoto falha)
+      function fileInputFallback() {
+        var input    = document.createElement('input');
+        input.type   = 'file';
+        input.accept = 'image/*';
+        input.setAttribute('capture', 'environment');
+        input.style.cssText = 'position:absolute;top:-9999px;left:-9999px;opacity:0;';
+
+        var settled = false;
+        function done(v) {
+          if (settled) return; settled = true;
+          document.removeEventListener('visibilitychange', onVis);
+          try {
+            if (document.body.contains(input)) document.body.removeChild(input);
+          } catch(_) {}
+          cb(v);
         }
 
-        // Preferência: grabFrame() → ImageBitmap → canvas fresh
-        // Canvas de ImageBitmap NÃO é tainted no iOS WebKit.
-        var ic = window._getImageCapture();
-        if (ic) {
+        input.addEventListener('change', function() {
+          var file = input.files && input.files[0];
+          if (!file) { done(null); return; }
+          window._detectInBlob(file, done);
+        });
+
+        var wasHidden = false;
+        function onVis() {
+          if (document.hidden) { wasHidden = true; }
+          else if (wasHidden) { setTimeout(function() { done(null); }, 2000); }
+        }
+        document.addEventListener('visibilitychange', onVis);
+        document.body.appendChild(input);
+        input.click();
+      }
+
+      if (!ic) { fileInputFallback(); return; }
+
+      // takePhoto() captura em alta resolução sem abrir câmera nativa.
+      // Tenta com configurações de alta qualidade primeiro.
+      var photoPromise;
+      try {
+        photoPromise = ic.takePhoto({ imageWidth: 1920, imageHeight: 1080 });
+      } catch(e) {
+        photoPromise = ic.takePhoto();
+      }
+
+      photoPromise.then(function(blob) {
+        window._detectInBlob(blob, function(result) {
+          if (result) { cb(result); return; }
+
+          // takePhoto não detectou — tenta também com grabFrame (frame atual)
+          // útil quando o takePhoto captura um frame diferente do que o usuário vê
           ic.grabFrame().then(function(frame) {
-            if (!frame) { decodeFromVideo(); return; }
+            if (!frame) { cb(null); return; }
             try {
               var fc = document.createElement('canvas');
-              fc.width = frame.width || vw;
-              fc.height = frame.height || vh;
+              fc.width  = frame.width;
+              fc.height = frame.height;
               fc.getContext('2d').drawImage(frame, 0, 0);
               if (frame.close) frame.close();
-              var result = window._zxingDecodeCanvas(fc);
-              cb(result);
+              window._zxingDecodeFull(fc, cb);
             } catch(e) {
               if (frame && frame.close) frame.close();
-              decodeFromVideo();
+              cb(null);
             }
-          }, function() { decodeFromVideo(); });
-        } else {
-          decodeFromVideo();
-        }
-      };
-
-      // ── 6. Captura foto e detecta (botão "Tirar foto") ────────────────────
-      window._captureAndScanCb = function(cb) {
-        if (!window._zxingReader) { cb('ERR:no_detector'); return; }
-
-        var ic = window._getImageCapture();
-
-        function fileInputFallback() {
-          var input = document.createElement('input');
-          input.type = 'file'; input.accept = 'image/*';
-          input.setAttribute('capture', 'environment');
-          input.style.cssText = 'position:absolute;top:-9999px;left:-9999px;opacity:0;';
-          var settled = false;
-          function done(v) {
-            if (settled) return; settled = true;
-            document.removeEventListener('visibilitychange', onVis);
-            try { if (document.body.contains(input)) document.body.removeChild(input); } catch(_) {}
-            cb(v);
-          }
-          input.addEventListener('change', function() {
-            var file = input.files && input.files[0];
-            if (!file) { done(null); return; }
-            window._detectInBlob(file, done);
-          });
-          var wasHidden = false;
-          function onVis() {
-            if (document.hidden) { wasHidden = true; }
-            else if (wasHidden) { setTimeout(function() { done(null); }, 2000); }
-          }
-          document.addEventListener('visibilitychange', onVis);
-          document.body.appendChild(input);
-          input.click();
-        }
-
-        if (!ic) { fileInputFallback(); return; }
-
-        // takePhoto() captura em alta resolução sem abrir câmera nativa
-        ic.takePhoto().then(function(blob) {
-          window._detectInBlob(blob, function(result) {
-            if (result) { cb(result); return; }
-            // takePhoto deu imagem mas não detectou — tenta grabFrame como fallback
-            ic.grabFrame().then(function(frame) {
-              if (!frame) { cb(null); return; }
-              try {
-                var fc = document.createElement('canvas');
-                fc.width = frame.width; fc.height = frame.height;
-                fc.getContext('2d').drawImage(frame, 0, 0);
-                if (frame.close) frame.close();
-                cb(window._zxingDecodeCanvas(fc));
-              } catch(e) {
-                if (frame && frame.close) frame.close();
-                cb(null);
-              }
-            }, function() { cb(null); });
-          });
-        }, function(err) {
-          console.warn('[EducaStock] takePhoto falhou:', err && err.message ? err.message : err);
-          fileInputFallback();
+          }, function() { cb(null); });
         });
-      };
+      }, function(err) {
+        console.warn('[EducaStock] takePhoto falhou:', err && err.message ? err.message : err);
+        fileInputFallback();
+      });
+    };
 
-      // ── 7. Carrega Flutter SOMENTE após tudo pronto ────────────────────────
-      var s = document.createElement('script');
-      s.src = 'flutter_bootstrap.js';
-      document.body.appendChild(s);
-    }
-    _bootstrapApp();
+    // ─────────────────────────────────────────────────────────────────────────
+    // 10. INICIA FLUTTER
+    // ─────────────────────────────────────────────────────────────────────────
+    var s = document.createElement('script');
+    s.src = 'flutter_bootstrap.js';
+    document.body.appendChild(s);
+  }
+
+  _bootstrapApp();
   </script>
 </body>
 </html>
