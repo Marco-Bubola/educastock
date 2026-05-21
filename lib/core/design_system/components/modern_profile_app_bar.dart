@@ -8,6 +8,7 @@ import '../../../features/batches/presentation/controllers/batches_provider.dart
 import '../tokens/color_tokens.dart';
 import '../tokens/spacing_tokens.dart';
 import '../tokens/typography_tokens.dart';
+import 'casa_tutorial.dart';
 
 // Gradiente padrão de todos os headers do app
 const _kHeaderGradient = LinearGradient(
@@ -56,20 +57,28 @@ class ModernProfileAppBar extends ConsumerWidget implements PreferredSizeWidget 
           error: (_, __) => 0,
         );
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light
-          .copyWith(statusBarColor: Colors.transparent),
-      child: Container(
-        decoration: const BoxDecoration(gradient: _kHeaderGradient),
-        child: SafeArea(
-          bottom: false,
-          child: SizedBox(
-            height: 64,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: Row(
-                children: [
-                  // ── Botão de voltar ─────────────────────────────────
+    return ValueListenableBuilder<bool>(
+      valueListenable: tutorialActiveNotifier,
+      builder: (_, tutActive, child) => AnimatedOpacity(
+        opacity: tutActive ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 250),
+        child: child,
+      ),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light
+            .copyWith(statusBarColor: Colors.transparent),
+        child: Container(
+          decoration: const BoxDecoration(gradient: _kHeaderGradient),
+          child: SafeArea(
+            bottom: false,
+            child: SizedBox(
+              height: 64,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Row(
+                  children: [
+                    // ── Botão de voltar ─────────────────────────────
                   if (showBackButton)
                     Padding(
                       padding: const EdgeInsets.only(right: AppSpacing.sm),
@@ -183,6 +192,7 @@ class ModernProfileAppBar extends ConsumerWidget implements PreferredSizeWidget 
           ),
         ),
       ),
+    ),
     );
   }
 }
