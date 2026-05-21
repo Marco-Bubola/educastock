@@ -194,19 +194,30 @@
           }, function() { tryCanvas(); });
         }
 
-        // Estratégia 1: ImageCapture.grabFrame() — contorna restrição iOS
+        // Estratégia 1: ImageCapture.grabFrame() → canvas fresh (NÃO tainted no iOS)
+        // CRÍTICO: um canvas desenhado a partir de ImageBitmap NÃO herda a taint
+        // do video element. A restrição do iOS WebKit só se aplica quando se faz
+        // canvas.drawImage(videoElement) diretamente. Com ImageBitmap de grabFrame()
+        // o canvas permanece limpo e getImageData() funciona normalmente.
         var ic = window._getImageCapture();
         if (ic) {
           ic.grabFrame().then(function(frame) {
             if (!frame) { tryDirectVideo(); return; }
-            window._barcodeDetector.detect(frame).then(function(r) {
+            try {
+              var fw = frame.width || vw;
+              var fh = frame.height || vh;
+              var fc = document.createElement('canvas');
+              fc.width = fw; fc.height = fh;
+              fc.getContext('2d').drawImage(frame, 0, 0);
               if (frame.close) frame.close();
-              if (r && r.length > 0) { cb(r[0].rawValue); return; }
-              tryDirectVideo();
-            }, function() {
+              window._barcodeDetector.detect(fc).then(function(r) {
+                if (r && r.length > 0) { cb(r[0].rawValue); return; }
+                tryDirectVideo();
+              }, function() { tryDirectVideo(); });
+            } catch(e) {
               if (frame && frame.close) frame.close();
               tryDirectVideo();
-            });
+            }
           }, function() { tryDirectVideo(); });
         } else {
           tryDirectVideo();
@@ -259,14 +270,20 @@
           // Tenta grabFrame como segundo recurso antes do fallback nativo
           ic.grabFrame().then(function(frame) {
             if (!frame) { fileInputFallback(); return; }
-            window._barcodeDetector.detect(frame).then(function(r) {
+            try {
+              var fw = frame.width; var fh = frame.height;
+              var fc = document.createElement('canvas');
+              fc.width = fw; fc.height = fh;
+              fc.getContext('2d').drawImage(frame, 0, 0);
               if (frame.close) frame.close();
-              if (r && r.length > 0) { cb(r[0].rawValue); return; }
-              fileInputFallback();
-            }, function() {
+              window._barcodeDetector.detect(fc).then(function(r) {
+                if (r && r.length > 0) { cb(r[0].rawValue); return; }
+                fileInputFallback();
+              }, function() { fileInputFallback(); });
+            } catch(e) {
               if (frame && frame.close) frame.close();
               fileInputFallback();
-            });
+            }
           }, function() { fileInputFallback(); });
         });
       };
