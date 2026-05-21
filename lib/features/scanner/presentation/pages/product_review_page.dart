@@ -1130,7 +1130,8 @@ class _FoundBody extends StatelessWidget {
                   '&imageUrl=${Uri.encodeComponent(result.imageUrl ?? '')}'
                   '&isPerishable=$isPerishable'
                   '&unit=$unit'
-                  '&unitSize=$unitSize',
+                  '&unitSize=$unitSize'
+                  '&desc=${Uri.encodeComponent(result.description ?? '')}',
                 );
               },
               icon: const Icon(Icons.check_rounded, size: 18),
