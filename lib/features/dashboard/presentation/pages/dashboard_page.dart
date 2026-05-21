@@ -851,6 +851,7 @@ class _ForecastSection extends ConsumerWidget {
                   )
                   .toList(),
             ),
+          _ => const SizedBox.shrink(),
         },
       ],
     );
