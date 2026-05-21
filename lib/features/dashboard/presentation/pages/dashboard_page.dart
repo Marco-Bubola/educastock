@@ -10,12 +10,15 @@ import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
 import '../../../ml/presentation/widgets/risk_widgets.dart';
+import '../../../ml/presentation/controllers/consumption_forecast_provider.dart';
+import '../../../ml/presentation/widgets/forecast_widgets.dart';
 import '../../../reports/presentation/controllers/reports_provider.dart';
 
 final _keyDashQuickActions = GlobalKey();
 final _keyDashExpiring = GlobalKey();
 final _keyDashHeader = GlobalKey();
 final _keyDashMlRisk = GlobalKey();
+final _keyDashMlForecast = GlobalKey();
 final _keyDashKpis = GlobalKey();
 
 class DashboardPage extends ConsumerWidget {
@@ -88,6 +91,18 @@ class DashboardPage extends ConsumerWidget {
                       '🟡 Médio risco: monitore de perto',
                       '🟢 Baixo risco: situação controlada',
                       'Toque em "Ver detalhes" para análise completa',
+                    ],
+                  ),
+                  TutorialStep(
+                    key: _keyDashMlForecast,
+                    title: 'Previsão de Consumo',
+                    description: 'O modelo Prophet analisa o histórico de saídas e prevê o consumo futuro por produto, sugerindo quantidades para reposição.',
+                    icon: Icons.trending_up_rounded,
+                    align: ContentAlign.top,
+                    hints: const [
+                      'Execute o notebook Colab para gerar previsões',
+                      'Sugestão de reposição = consumo 30d × 1,2 - estoque atual',
+                      'Indicadores de tendência: crescendo, estável, caindo',
                     ],
                   ),
                   TutorialStep(
@@ -207,6 +222,14 @@ class DashboardPage extends ConsumerWidget {
             KeyedSubtree(
               key: _keyDashMlRisk,
               child: _MlRiskSection(),
+            ),
+
+            const SizedBox(height: AppSpacing.xl),
+
+            // Previsão de Consumo Prophet
+            KeyedSubtree(
+              key: _keyDashMlForecast,
+              child: const _ForecastSection(),
             ),
 
             const SizedBox(height: AppSpacing.xl),
@@ -758,6 +781,78 @@ class _AlertBatchTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Seção de Previsão de Consumo Prophet no dashboard
+// ---------------------------------------------------------------------------
+
+class _ForecastSection extends ConsumerWidget {
+  const _ForecastSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final topAsync = ref.watch(topReplenishmentForecastsProvider);
+    final hasData = ref.watch(hasForecastDataProvider);
+
+    if (!hasData && topAsync is! AsyncLoading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CasaSectionHeader(
+            title: 'Sugestão de Reposição',
+            action: 'Ver tudo',
+            onAction: () => context.push(AppRoutes.mlForecast),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          const ForecastEmptyState(),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CasaSectionHeader(
+          title: 'Sugestão de Reposição',
+          action: 'Ver tudo',
+          onAction: () => context.push(AppRoutes.mlForecast),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        switch (topAsync) {
+          AsyncLoading() => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Column(
+                children: List.generate(
+                  2,
+                  (_) => const Padding(
+                    padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: CasaCardSkeleton(),
+                  ),
+                ),
+              ),
+            ),
+          AsyncError() => const SizedBox.shrink(),
+          AsyncData(value: final forecasts) when forecasts.isEmpty =>
+            const SizedBox.shrink(),
+          AsyncData(value: final forecasts) => Column(
+              children: forecasts
+                  .map(
+                    (f) => Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+                      child: ForecastSuggestionCard(
+                        forecast: f,
+                        onTap: () => context.push(AppRoutes.mlForecast),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+        },
+      ],
     );
   }
 }
