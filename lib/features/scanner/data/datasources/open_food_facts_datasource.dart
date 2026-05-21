@@ -48,15 +48,11 @@ class OpenFoodFactsDatasource {
           receiveTimeout: const Duration(seconds: 10),
         ));
 
-  Future<ProductApiResult> lookupBarcode(String barcode) async {
-    // 1) Open Food Facts (prioridade)
-    // IMPORTANTE: só retornamos aqui se de fato encontrarmos o produto
-    // (status == 1 E nome preenchido). Se o produto não estiver no banco do
-    // Open Food Facts, deixamos cair para os fallbacks abaixo — NÃO retornamos
-    // found:false prematuramente, pois UPCItemDB pode ter o produto.
+  // ── Busca individual por fonte ─────────────────────────────────────────────
+
+  Future<ProductApiResult?> lookupOpenFoodFacts(String barcode) async {
     try {
-      final response =
-          await _dio.get('/api/v0/product/$barcode.json');
+      final response = await _dio.get('/api/v0/product/$barcode.json');
       final data = response.data as Map<String, dynamic>;
 
       if (data['status'] == 1) {
@@ -68,7 +64,6 @@ class OpenFoodFactsDatasource {
           product['generic_name'] as String?,
         ]);
 
-        // Só retornamos se o nome não for vazio — senão cairemos nos fallbacks
         if (name != null && name.trim().isNotEmpty) {
           final brand = product['brands'] as String?;
           final categoryTags =
@@ -85,18 +80,19 @@ class OpenFoodFactsDatasource {
             imageUrl: imageUrl,
           );
         }
-        // status == 1 mas sem nome → cai nos fallbacks
       }
-      // status != 1 (produto não cadastrado no OFF) → cai nos fallbacks
     } on DioException {
-      // erro de rede → cai nos fallbacks
+      // Network error — fall through
     }
+    return null;
+  }
 
-    // 2) UPCItemDB (fallback)
+  Future<ProductApiResult?> lookupUpcItemDb(String barcode) async {
     try {
-      final response = await _upcDio.get('/prod/trial/lookup', queryParameters: {
-        'upc': barcode,
-      });
+      final response = await _upcDio.get(
+        '/prod/trial/lookup',
+        queryParameters: {'upc': barcode},
+      );
       final data = response.data as Map<String, dynamic>;
       final items = (data['items'] as List?) ?? [];
       if (items.isNotEmpty) {
@@ -118,47 +114,64 @@ class OpenFoodFactsDatasource {
         );
       }
     } on DioException {
-      // continua no fallback seguinte
+      // Network error — fall through
     }
+    return null;
+  }
 
-    // 3) Barcode Lookup (fallback opcional via key)
-    if (_barcodeLookupApiKey.isNotEmpty) {
-      try {
-        final response = await _barcodeLookupDio.get(
-          '/v3/products',
-          queryParameters: {
-            'barcode': barcode,
-            'formatted': 'y',
-            'key': _barcodeLookupApiKey,
-          },
+  Future<ProductApiResult?> lookupBarcodeLookupApi(String barcode) async {
+    if (_barcodeLookupApiKey.isEmpty) return null;
+    try {
+      final response = await _barcodeLookupDio.get(
+        '/v3/products',
+        queryParameters: {
+          'barcode': barcode,
+          'formatted': 'y',
+          'key': _barcodeLookupApiKey,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      final products = (data['products'] as List?) ?? [];
+      if (products.isNotEmpty) {
+        final item = products.first as Map<String, dynamic>;
+        final name = item['product_name'] as String?;
+        final brand = item['brand'] as String?;
+        final category = _normalizeCategory(item['category'] as String?);
+        final imageUrl = item['images'] is List &&
+                (item['images'] as List).isNotEmpty
+            ? (item['images'] as List).first as String?
+            : null;
+        return ProductApiResult(
+          barcode: barcode,
+          found: name != null && name.trim().isNotEmpty,
+          name: name,
+          brand: brand,
+          category: category,
+          imageUrl: imageUrl,
         );
-        final data = response.data as Map<String, dynamic>;
-        final products = (data['products'] as List?) ?? [];
-        if (products.isNotEmpty) {
-          final item = products.first as Map<String, dynamic>;
-          final name = item['product_name'] as String?;
-          final brand = item['brand'] as String?;
-          final category = _normalizeCategory(item['category'] as String?);
-          final imageUrl = item['images'] is List &&
-                  (item['images'] as List).isNotEmpty
-              ? (item['images'] as List).first as String?
-              : null;
-          return ProductApiResult(
-            barcode: barcode,
-            found: name != null && name.trim().isNotEmpty,
-            name: name,
-            brand: brand,
-            category: category,
-            imageUrl: imageUrl,
-          );
-        }
-      } on DioException {
-        // sem fallback adicional
       }
+    } on DioException {
+      // Network error — fall through
     }
+    return null;
+  }
+
+  // ── Busca completa com fallback (mantida para compatibilidade) ─────────────
+
+  Future<ProductApiResult> lookupBarcode(String barcode) async {
+    final off = await lookupOpenFoodFacts(barcode);
+    if (off != null && off.found) return off;
+
+    final upc = await lookupUpcItemDb(barcode);
+    if (upc != null && upc.found) return upc;
+
+    final bl = await lookupBarcodeLookupApi(barcode);
+    if (bl != null && bl.found) return bl;
 
     return ProductApiResult(barcode: barcode, found: false);
   }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   String? _firstNonEmpty(List<String?> values) {
     for (final v in values) {
@@ -169,14 +182,10 @@ class OpenFoodFactsDatasource {
 
   String? _mapCategory(List<String> tags) {
     for (final tag in tags) {
-      if (tag.contains('beverages') || tag.contains('bebidas')) {
-        return 'bebida';
-      }
+      if (tag.contains('beverages') || tag.contains('bebidas')) return 'bebida';
       if (tag.contains('food') ||
           tag.contains('aliment') ||
-          tag.contains('foods')) {
-        return 'alimento';
-      }
+          tag.contains('foods')) return 'alimento';
     }
     return null;
   }
