@@ -34,9 +34,7 @@
     // ─────────────────────────────────────────────────────────────────────────
     window._zxingReady = false;
     try {
-      var hints = new Map();
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      var formats = [
         ZXing.BarcodeFormat.EAN_13,
         ZXing.BarcodeFormat.EAN_8,
         ZXing.BarcodeFormat.QR_CODE,
@@ -48,19 +46,26 @@
         ZXing.BarcodeFormat.DATA_MATRIX,
         ZXing.BarcodeFormat.PDF_417,
         ZXing.BarcodeFormat.AZTEC,
-      ]);
+        ZXing.BarcodeFormat.CODABAR,
+      ];
 
-      // Reader padrão (HybridBinarizer — melhor para fotos nítidas)
+      // Hints base: tenta com máxima insistência
+      var hints = new Map();
+      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+      // ALSO_INVERTED: tenta também barcodes com cores invertidas (suportado no 0.21)
+      try { hints.set(ZXing.DecodeHintType.ALSO_INVERTED, true); } catch(_) {}
+
+      // Reader padrão — HybridBinarizer (frames nítidos, boa iluminação)
       window._zxingReader = new ZXing.MultiFormatReader();
       window._zxingReader.setHints(hints);
 
-      // Reader alternativo (GlobalHistogramBinarizer — melhor para imagens com
-      // baixo contraste ou iluminação uniforme, como embalagens foscase)
+      // Reader GH — GlobalHistogramBinarizer (baixo contraste, iluminação uniforme)
       window._zxingReaderGH = new ZXing.MultiFormatReader();
       window._zxingReaderGH.setHints(hints);
 
       window._zxingReady = true;
-      console.log('[EducaStock] ZXing pronto ✅ (Hybrid + GlobalHistogram)');
+      console.log('[EducaStock] ZXing pronto ✅ (Hybrid + GH + CODABAR + ALSO_INVERTED)');
     } catch(e) {
       console.error('[EducaStock] ZXing init falhou:', e);
       window._zxingReader = null;
@@ -159,42 +164,164 @@
       } catch(e) { return src; }
     };
 
+    // Nitidez: unsharp mask 3×3 — reduz efeito de motion blur e foco suave.
+    // Ajuda a capturar barcodes quando a mão treme levemente.
+    window._sharpenCanvas = function(canvas) {
+      try {
+        var ctx = canvas.getContext('2d');
+        var w = canvas.width, h = canvas.height;
+        var src = ctx.getImageData(0, 0, w, h);
+        var dst = ctx.createImageData(w, h);
+        var sd = src.data, dd = dst.data;
+        // Kernel de nitidez: centro=5, vizinhos=-1 (laplaciano de sharpening)
+        for (var y = 1; y < h - 1; y++) {
+          for (var x = 1; x < w - 1; x++) {
+            var i = (y * w + x) * 4;
+            for (var c = 0; c < 3; c++) {
+              var v = 5 * sd[i + c]
+                - sd[i - 4 + c]         // esquerda
+                - sd[i + 4 + c]         // direita
+                - sd[i - w * 4 + c]     // cima
+                - sd[i + w * 4 + c];    // baixo
+              dd[i + c] = Math.min(255, Math.max(0, v));
+            }
+            dd[i + 3] = 255;
+          }
+        }
+        ctx.putImageData(dst, 0, 0);
+        return canvas;
+      } catch(e) { return canvas; }
+    };
+
+    // Cópia sharpened (não modifica o original)
+    window._makeSharpCanvas = function(src) {
+      try {
+        var dst = document.createElement('canvas');
+        dst.width = src.width; dst.height = src.height;
+        dst.getContext('2d').drawImage(src, 0, 0);
+        return window._sharpenCanvas(dst);
+      } catch(e) { return src; }
+    };
+
+    // Inversão de cores — detecta barcodes brancos em fundo escuro
+    // (embalagens metalizadas, pretas ou com fundo escuro)
+    window._makeInvertCanvas = function(src) {
+      try {
+        var dst = document.createElement('canvas');
+        dst.width = src.width; dst.height = src.height;
+        var ctx = dst.getContext('2d');
+        ctx.drawImage(src, 0, 0);
+        var imageData = ctx.getImageData(0, 0, dst.width, dst.height);
+        var data = imageData.data;
+        for (var i = 0; i < data.length; i += 4) {
+          data[i]     = 255 - data[i];
+          data[i + 1] = 255 - data[i + 1];
+          data[i + 2] = 255 - data[i + 2];
+        }
+        ctx.putImageData(imageData, 0, 0);
+        return dst;
+      } catch(e) { return src; }
+    };
+
+    // Downscale: reduz para máx. 1280px no lado maior (velocidade no live scan)
+    window._downscale = function(canvas, maxDim) {
+      try {
+        var m = maxDim || 1280;
+        var w = canvas.width, h = canvas.height;
+        var max = Math.max(w, h);
+        if (max <= m) return canvas;
+        var scale = m / max;
+        var sw = Math.round(w * scale), sh = Math.round(h * scale);
+        var dst = document.createElement('canvas');
+        dst.width = sw; dst.height = sh;
+        var ctx = dst.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(canvas, 0, 0, sw, sh);
+        return dst;
+      } catch(e) { return canvas; }
+    };
+
     // ─────────────────────────────────────────────────────────────────────────
-    // 3. DECODIFICAÇÃO MULTI-ESTRATÉGIA (live scan — rápido, ~3 tentativas)
+    // 3. DECODIFICAÇÃO MULTI-ESTRATÉGIA (live scan — 12 tentativas)
     // ─────────────────────────────────────────────────────────────────────────
-    // Prioridade:
-    //   1. Frame original (Hybrid) — caso mais comum
-    //   2. Crop central 65% (Hybrid) — barcode está no centro da área de scan
-    //   3. Frame original (GlobalHistogram) — baixo contraste
-    //   4. Crop central (GlobalHistogram) — combinação
+    // Frame >1280px é reduzido automaticamente (velocidade).
+    // Estratégias em ordem de custo crescente: mais rápidas primeiro.
+    //   1-2.  Original Hybrid + GH
+    //   3-4.  Crop 65% Hybrid + GH
+    //   5-6.  Rotate 90° Hybrid + GH  (barcode lateral — ketchup, latas)
+    //   7-8.  Rotate 270° Hybrid + GH
+    //   9.    Contraste boosted + Hybrid  (embalagem fosca, luz lateral)
+    //   10.   Sharp + Hybrid             (leve motion blur / mão tremendo)
+    //   11.   Invertido + GH             (embalagem escura / metalizada)
+    //   12.   Rotate 180° + Hybrid       (produto de cabeça para baixo)
     window._zxingDecodeLive = function(canvas) {
-      // 1. Original — HybridBinarizer
-      var r = window._decodeHybrid(canvas);
+      // Downscale se necessário (>1280px → mais lento sem ganho no live scan)
+      var c = window._downscale(canvas, 1280);
+      var r;
+
+      // 1. Original — Hybrid
+      r = window._decodeHybrid(c);
       if (r) return r;
 
-      // 2. Crop central 65% — HybridBinarizer
-      var crop = window._cropCenter(canvas, 0.65, 0.65);
+      // 2. Original — GlobalHistogram (baixo contraste / luz uniforme)
+      r = window._decodeGH(c);
+      if (r) return r;
+
+      // 3. Crop 65% — Hybrid
+      var crop = window._cropCenter(c, 0.65, 0.65);
       r = window._decodeHybrid(crop);
       if (r) return r;
 
-      // 3. Original — GlobalHistogramBinarizer
-      r = window._decodeGH(canvas);
+      // 4. Crop 65% — GlobalHistogram
+      r = window._decodeGH(crop);
       if (r) return r;
 
-      // 4. Crop central — GlobalHistogramBinarizer
-      r = window._decodeGH(crop);
+      // 5. Rotate 90° — Hybrid (barcode vertical na lateral do produto)
+      var rot90 = window._rotateCanvas90(c);
+      r = window._decodeHybrid(rot90);
+      if (r) return r;
+
+      // 6. Rotate 90° — GH
+      r = window._decodeGH(rot90);
+      if (r) return r;
+
+      // 7. Rotate 270° — Hybrid
+      var rot270 = window._rotateCanvas90(window._rotateCanvas90(rot90));
+      r = window._decodeHybrid(rot270);
+      if (r) return r;
+
+      // 8. Rotate 270° — GH
+      r = window._decodeGH(rot270);
+      if (r) return r;
+
+      // 9. Contraste boosted — Hybrid (embalagem fosca / iluminação lateral)
+      var boosted = window._makeContrastCanvas(c);
+      r = window._decodeHybrid(boosted);
+      if (r) return r;
+
+      // 10. Sharp crop — Hybrid (motion blur de mão levemente tremendo)
+      r = window._decodeHybrid(window._makeSharpCanvas(crop));
+      if (r) return r;
+
+      // 11. Invertido boosted — GH (embalagem escura / metalizada / branca)
+      r = window._decodeGH(window._makeInvertCanvas(boosted));
+      if (r) return r;
+
+      // 12. Rotate 180° — Hybrid (produto de cabeça para baixo)
+      r = window._decodeHybrid(window._rotateCanvas90(rot90));
       if (r) return r;
 
       return null;
     };
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 4. DECODIFICAÇÃO COMPLETA (foto — exaustiva, ~10 tentativas)
+    // 4. DECODIFICAÇÃO COMPLETA (foto — exaustiva, ~20 tentativas)
     // ─────────────────────────────────────────────────────────────────────────
-    // Usado ao tirar foto. Pode ser mais lento pois é uma operação única.
-    // Tenta: resolução original, crop, rotações, versões com contraste boosted.
+    // Usado ao tirar foto. Velocidade não é crítica — prioriza encontrar o código.
+    // Cobre: baixo contraste, embalagens foscase/metalizadas, barcodes laterais,
+    //        foco suave, inversão de cores, múltiplas rotações e crops.
     window._zxingDecodeFull = function(canvas, callback) {
-      // Tentativas síncronas (rápidas)
       var r;
 
       // 1. Original — Hybrid
@@ -205,25 +332,39 @@
       r = window._decodeGH(canvas);
       if (r) { callback(r); return; }
 
-      // 3. Crop central 70% — Hybrid
+      // 3. Crop 70% — Hybrid
       var crop70 = window._cropCenter(canvas, 0.70, 0.70);
       r = window._decodeHybrid(crop70);
       if (r) { callback(r); return; }
 
-      // 4. Crop central 70% — GlobalHistogram
+      // 4. Crop 70% — GH
       r = window._decodeGH(crop70);
       if (r) { callback(r); return; }
 
-      // 5. Contraste boosted — Hybrid
+      // 5. Crop 50% — Hybrid (barcode pequeno, produto longe)
+      var crop50 = window._cropCenter(canvas, 0.50, 0.50);
+      r = window._decodeHybrid(crop50);
+      if (r) { callback(r); return; }
+
+      // 6. Contraste boosted — Hybrid
       var boosted = window._makeContrastCanvas(canvas);
       r = window._decodeHybrid(boosted);
       if (r) { callback(r); return; }
 
-      // 6. Contraste boosted — GlobalHistogram
+      // 7. Contraste boosted — GH
       r = window._decodeGH(boosted);
       if (r) { callback(r); return; }
 
-      // 7–9. Rotação 90° (código na vertical) + Hybrid + GH + boosted
+      // 8. Sharp — Hybrid (foco suave / motion blur)
+      var sharp = window._makeSharpCanvas(canvas);
+      r = window._decodeHybrid(sharp);
+      if (r) { callback(r); return; }
+
+      // 9. Sharp crop — Hybrid
+      r = window._decodeHybrid(window._makeSharpCanvas(crop70));
+      if (r) { callback(r); return; }
+
+      // 10–13. Rotação 90° — Hybrid + GH + boosted + sharp
       var r90 = window._rotateCanvas90(canvas);
       r = window._decodeHybrid(r90);
       if (r) { callback(r); return; }
@@ -231,8 +372,10 @@
       if (r) { callback(r); return; }
       r = window._decodeHybrid(window._makeContrastCanvas(r90));
       if (r) { callback(r); return; }
+      r = window._decodeHybrid(window._makeSharpCanvas(r90));
+      if (r) { callback(r); return; }
 
-      // 10–12. Rotação 270° (código na vertical, outro lado)
+      // 14–17. Rotação 270° — Hybrid + GH + boosted + sharp
       var r270 = window._rotateCanvas90(window._rotateCanvas90(r90));
       r = window._decodeHybrid(r270);
       if (r) { callback(r); return; }
@@ -240,14 +383,23 @@
       if (r) { callback(r); return; }
       r = window._decodeHybrid(window._makeContrastCanvas(r270));
       if (r) { callback(r); return; }
+      r = window._decodeHybrid(window._makeSharpCanvas(r270));
+      if (r) { callback(r); return; }
 
-      // 13. Rotação 180° (código de cabeça para baixo)
+      // 18. Rotação 180° — Hybrid (produto de cabeça para baixo)
       var r180 = window._rotateCanvas90(r90);
       r = window._decodeHybrid(r180);
       if (r) { callback(r); return; }
 
-      // 14. Crop central boosted 90°
-      r = window._decodeHybrid(window._makeContrastCanvas(window._cropCenter(r90, 0.70, 0.70)));
+      // 19. Invertido boosted — GH (embalagem escura / metalizada)
+      r = window._decodeGH(window._makeInvertCanvas(boosted));
+      if (r) { callback(r); return; }
+
+      // 20. Crop 90° boosted + sharp (último recurso para barcode lateral)
+      var crop90boost = window._makeSharpCanvas(
+        window._makeContrastCanvas(window._cropCenter(r90, 0.70, 0.70))
+      );
+      r = window._decodeHybrid(crop90boost);
       if (r) { callback(r); return; }
 
       callback(null);
@@ -321,18 +473,30 @@
           console.log('[EducaStock] Resolução já adequada:', current.width + 'x' + current.height);
           return;
         }
+        // Tenta autofoco contínuo + alta resolução
         track.applyConstraints({
+          focusMode: 'continuous',
           advanced: [
-            { width: { ideal: 1920 }, height: { ideal: 1080 } },
-            { width: { ideal: 1280 }, height: { ideal: 720  } },
+            { width: { ideal: 1920 }, height: { ideal: 1080 }, focusMode: 'continuous' },
+            { width: { ideal: 1280 }, height: { ideal: 720  }, focusMode: 'continuous' },
             { width: { ideal: 960  }, height: { ideal: 540  } },
           ]
         }).then(function() {
           var s = track.getSettings();
-          console.log('[EducaStock] Câmera: ' + s.width + 'x' + s.height);
+          console.log('[EducaStock] Câmera: ' + s.width + 'x' + s.height
+            + ' foco:' + (s.focusMode || 'n/a'));
           window._resBoosted = true;
         }).catch(function(e) {
-          console.warn('[EducaStock] applyConstraints falhou:', e.message || e);
+          // focusMode pode não ser suportado — tenta só a resolução
+          console.warn('[EducaStock] applyConstraints (com foco) falhou, tentando só resolução:', e.message || e);
+          track.applyConstraints({
+            advanced: [
+              { width: { ideal: 1280 }, height: { ideal: 720 } },
+              { width: { ideal: 960  }, height: { ideal: 540 } },
+            ]
+          }).then(function() {
+            window._resBoosted = true;
+          }).catch(function() {});
         });
       } catch(e) {
         console.warn('[EducaStock] boostCameraResolution erro:', e);
