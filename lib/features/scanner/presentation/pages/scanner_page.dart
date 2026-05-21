@@ -15,11 +15,11 @@ import 'web_scan_interop_stub.dart'
 
 // ── Constantes do scanner ────────────────────────────────────────────────────
 const _kScanBoxSize = 260.0;
-// Escala interna do mobile_scanner: 0.0 = mín, 1.0 = máx do device.
-// 0.45 ≈ ~3× na maioria dos devices Android/iOS. Na web o zoom não é
-// exposto pelo browser, então iniciamos em 0 e ocultamos os botões.
-const _kInitialZoomMobile = 0.45;
+// 0.25 ≈ ~2.75× — zoom mais baixo facilita enquadrar o código e melhora detecção
+const _kInitialZoomMobile = 0.25;
 const _kZoomStep          = 0.1;
+// Máximo de tentativas ao escanear por foto
+const _kMaxPhotoAttempts = 3;
 
 // ── Página ───────────────────────────────────────────────────────────────────
 class ScannerPage extends ConsumerStatefulWidget {
@@ -32,28 +32,28 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     with SingleTickerProviderStateMixin {
 
   // Camera ─────────────────────────────────────────────────────────────────
+  // DetectionSpeed.normal + debounce manual: mais agressivo que noDuplicates
+  // e evita falsos positivos por processar a confirmação com atraso.
   final _camera = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
+    detectionSpeed: DetectionSpeed.normal,
     returnImage: false,
     autoStart: false, // iniciamos manualmente pós-frame
   );
 
   bool   _navigating    = false;
-  // Na web: zoom digital via Transform.scale (1.0× a 4.0×), inicia em 2.0×.
-  // No app nativo: zoom óptico/digital via setZoomScale (0.0 a 1.0).
-  // _zoomSupported fica false somente se setZoomScale falhar no device.
   bool   _zoomSupported = true;
   double _zoom          = kIsWeb ? 1.0 : _kInitialZoomMobile;
-  // Piscar os cantos ao detectar
   bool   _detected      = false;
 
   // ── Log visual de diagnóstico ─────────────────────────────────────────
-  bool _showDebugLog     = false;
-  bool _cameraFailed     = false;  // permissão negada ou erro irrecuperável
+  bool _showDebugLog      = false;
+  bool _cameraFailed      = false;
   bool _scanningFromPhoto = false;
-  int  _frameCount       = 0;
+  int  _photoAttempt      = 0;   // tentativa atual da varredura por foto
+  int  _frameCount        = 0;
   Timer? _heartbeat;
-  Timer? _webScanTimer;  // loop de scan ZXing para web (iOS Safari)
+  Timer? _webScanTimer;
+  Timer? _debounce;              // evita duplicatas em DetectionSpeed.normal
   final List<_LogEntry> _logs = [];
 
   void _log(String msg, {bool isError = false}) {
@@ -186,6 +186,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   void dispose() {
     _heartbeat?.cancel();
     _webScanTimer?.cancel();
+    _debounce?.cancel();
     _lineCtrl.dispose();
     _camera.dispose();
     super.dispose();
@@ -195,7 +196,6 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   void _onDetect(BarcodeCapture capture) {
     _frameCount++;
     final raw = capture.barcodes.firstOrNull?.rawValue;
-    // Só loga eventos com barcode para não poluir o log com frames vazios
     if (capture.barcodes.isNotEmpty || _frameCount % 10 == 0) {
       _log('📡 Frame #$_frameCount | barcodes: ${capture.barcodes.length}'
           '${raw != null ? " | valor: $raw" : ""}');
@@ -203,7 +203,13 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
     if (_navigating) return;
     if (raw == null || raw.isEmpty) return;
-    _processBarcode(raw);
+
+    // Debounce: aceita o mesmo código só após 400 ms sem novas detecções,
+    // evitando processar o mesmo barcode múltiplas vezes em DetectionSpeed.normal.
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (!_navigating && mounted) _processBarcode(raw);
+    });
   }
 
   void _processBarcode(String raw) {
@@ -284,44 +290,82 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       return;
     }
 
-    // Caminho nativo (Android / iOS app)
-    _log('📸 Abrindo câmera para foto...');
-    if (mounted) setState(() => _scanningFromPhoto = true);
-    try {
-      final picker = ImagePicker();
-      final XFile? photo = await picker.pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
-        imageQuality: 90,
-      );
-      if (photo == null) {
-        _log('📸 Foto cancelada pelo usuário');
-        if (mounted) setState(() => _scanningFromPhoto = false);
-        return;
-      }
-      _log('📸 Foto capturada: ${photo.path} — analisando...');
-      final result = await _camera.analyzeImage(photo.path);
-      if (result == null || result.barcodes.isEmpty) {
-        _log('📸 Nenhum código detectado na foto', isError: true);
-        if (mounted) {
-          setState(() => _scanningFromPhoto = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  '❌ Nenhum código de barras detectado na foto. Tente novamente mais perto.'),
-              backgroundColor: Colors.red,
+    // Caminho nativo (Android / iOS app): varredura com até _kMaxPhotoAttempts fotos
+    final picker = ImagePicker();
+
+    for (int attempt = 1; attempt <= _kMaxPhotoAttempts; attempt++) {
+      if (!mounted || _navigating) return;
+
+      if (mounted) setState(() { _scanningFromPhoto = true; _photoAttempt = attempt; });
+
+      // Feedback entre tentativas
+      if (attempt > 1 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '🔍 Tentativa $attempt/$_kMaxPhotoAttempts — aproxime e centralize o código',
             ),
-          );
-        }
+            duration: const Duration(milliseconds: 1800),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.black87,
+          ),
+        );
+        await Future.delayed(const Duration(milliseconds: 1000));
+        if (!mounted) return;
+      }
+
+      _log('📸 Tentativa $attempt/$_kMaxPhotoAttempts — abrindo câmera...');
+
+      XFile? photo;
+      try {
+        photo = await picker.pickImage(
+          source: ImageSource.camera,
+          preferredCameraDevice: CameraDevice.rear,
+          imageQuality: 100, // qualidade máxima para melhor leitura
+        );
+      } catch (e) {
+        _log('📸 Erro ao capturar foto: $e', isError: true);
+        if (mounted) setState(() { _scanningFromPhoto = false; _photoAttempt = 0; });
         return;
       }
-      final raw = result.barcodes.first.rawValue;
-      _log('📸 Código lido da foto: $raw');
-      if (mounted) setState(() => _scanningFromPhoto = false);
-      if (raw != null && raw.isNotEmpty) _processBarcode(raw);
-    } catch (e) {
-      _log('📸 Erro ao processar foto: $e', isError: true);
-      if (mounted) setState(() => _scanningFromPhoto = false);
+
+      if (photo == null) {
+        _log('📸 Captura cancelada na tentativa $attempt');
+        if (mounted) setState(() { _scanningFromPhoto = false; _photoAttempt = 0; });
+        return;
+      }
+
+      _log('📸 Analisando: ${photo.path}');
+      try {
+        final result = await _camera.analyzeImage(photo.path);
+        if (result != null && result.barcodes.isNotEmpty) {
+          final raw = result.barcodes.first.rawValue;
+          if (raw != null && raw.isNotEmpty) {
+            _log('📸 ✅ Código lido na tentativa $attempt: $raw');
+            if (mounted) setState(() { _scanningFromPhoto = false; _photoAttempt = 0; });
+            _processBarcode(raw);
+            return;
+          }
+        }
+        _log('📸 Tentativa $attempt sem resultado', isError: attempt == _kMaxPhotoAttempts);
+      } catch (e) {
+        _log('📸 Erro na tentativa $attempt: $e', isError: true);
+      }
+    }
+
+    // Todas as tentativas falharam
+    if (mounted) {
+      setState(() { _scanningFromPhoto = false; _photoAttempt = 0; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '❌ Código não detectado após $_kMaxPhotoAttempts tentativas. Tente digitar o código manualmente.',
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -815,14 +859,30 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white38, width: 2),
                         ),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white,
-                            ),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              if (_photoAttempt > 0) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  '$_photoAttempt/$_kMaxPhotoAttempts',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       )
