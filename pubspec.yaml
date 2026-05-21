@@ -34,6 +34,7 @@ dependencies:
   # Barcode scanning
   mobile_scanner: ^5.2.3
   google_mlkit_text_recognition: ^0.13.0
+  google_mlkit_barcode_scanning: ^0.12.1
 
   # HTTP
   dio: ^5.7.0
