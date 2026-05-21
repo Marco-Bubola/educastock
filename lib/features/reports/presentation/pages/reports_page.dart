@@ -1530,7 +1530,11 @@ class _MovementsTabState extends ConsumerState<_MovementsTab> {
           error: (_, __) => const SizedBox.shrink(),
           data: (movements) {
             final grouped = _groupByPeriod(movements, _range);
-            return _MovementsBarChart(data: grouped, cs: cs);
+            return _MovementsBarChart(
+              key: _keyMovChart,
+              data: grouped,
+              cs: cs,
+            );
           },
         ),
         const _ChartNote(
@@ -1611,7 +1615,11 @@ class _MovementsTabState extends ConsumerState<_MovementsTab> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _MovementsListView(
-                    movements: shown, cs: cs, isDark: isDark),
+                  key: _keyMovList,
+                  movements: shown,
+                  cs: cs,
+                  isDark: isDark,
+                ),
                 if (filtered.length > 20 && !_showAll) ...[
                   const SizedBox(height: AppSpacing.sm),
                   OutlinedButton.icon(
@@ -1670,7 +1678,163 @@ class _MovementsTabState extends ConsumerState<_MovementsTab> {
   }
 }
 
-// ─── Period Selector ──────────────────────────────────────────────────────
+// ─── Modern Period Header ────────────────────────────────────────────────
+
+class _MovementsPeriodHeader extends StatelessWidget {
+  final String rangeLabel;
+  final int selectedDays;
+  final List<int> periods;
+  final Map<int, String> periodLabels;
+  final void Function(int) onPeriodSelected;
+  final VoidCallback onCustomRange;
+  final ColorScheme cs;
+  final bool isDark;
+
+  const _MovementsPeriodHeader({
+    required this.rangeLabel,
+    required this.selectedDays,
+    required this.periods,
+    required this.periodLabels,
+    required this.onPeriodSelected,
+    required this.onCustomRange,
+    required this.cs,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            cs.primary.withValues(alpha: 0.08),
+            cs.secondary.withValues(alpha: 0.04),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+      ),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.date_range_rounded,
+                  color: cs.primary, size: 18),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                'Período: $rangeLabel',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface.withValues(alpha: 0.75),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ...periods.map((p) {
+                  final selected = p == selectedDays;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.xs),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.small),
+                        color: selected
+                            ? cs.primary
+                            : cs.surface,
+                        border: Border.all(
+                          color: selected
+                              ? cs.primary
+                              : cs.outlineVariant.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => onPeriodSelected(p),
+                          borderRadius: BorderRadius.circular(
+                              AppRadius.small),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.sm,
+                            ),
+                            child: Text(
+                              periodLabels[p]!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                                color: selected
+                                    ? cs.onPrimary
+                                    : cs.onSurface,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                Padding(
+                  padding: const EdgeInsets.only(left: AppSpacing.sm),
+                  child: Material(
+                    color: cs.tertiary.withValues(alpha: 0.12),
+                    borderRadius:
+                        BorderRadius.circular(AppRadius.small),
+                    child: InkWell(
+                      onTap: onCustomRange,
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.small),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.calendar_today_rounded,
+                              color: cs.tertiary,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Personalizado',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: cs.tertiary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Period Selector (old version, kept for reference) ──────────────────────
 
 class _PeriodSelector extends StatelessWidget {
   final int selectedDays;
@@ -1759,7 +1923,7 @@ class _MovementsSummaryGrid extends StatelessWidget {
   final Map<String, int> summary;
   final ColorScheme cs;
 
-  const _MovementsSummaryGrid({required this.summary, required this.cs});
+  const _MovementsSummaryGrid({super.key, required this.summary, required this.cs});
 
   @override
   Widget build(BuildContext context) {
@@ -2059,7 +2223,7 @@ class _MovementsBarChart extends StatelessWidget {
   final List<_MovDayData> data;
   final ColorScheme cs;
 
-  const _MovementsBarChart({required this.data, required this.cs});
+  const _MovementsBarChart({super.key, required this.data, required this.cs});
 
   @override
   Widget build(BuildContext context) {
@@ -2507,6 +2671,7 @@ class _MovementsListView extends StatelessWidget {
   final bool isDark;
 
   const _MovementsListView({
+    super.key,
     required this.movements,
     required this.cs,
     required this.isDark,
@@ -4272,6 +4437,56 @@ class _ForecastReportTab extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       children: [
+        // ─── Help tutorial button
+        Align(
+          alignment: Alignment.centerRight,
+          child: buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyForecastKpi,
+                  title: 'KPIs de Previsão',
+                  description:
+                      'Resumo rápido: quantos produtos precisam repor, quantos estão em risco crítico, e o total de unidades sugeridas.',
+                  icon: Icons.dashboard_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🔴 Críticos = estoque muito baixo para consumo previsto',
+                    '📦 Reposição = toque em "Gerar Pedido" para exportar CSV',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyForecastCoverage,
+                  title: 'Cobertura de Estoque',
+                  description:
+                      'Barras azuis = estoque atual; barras verdes = consumo previsto para 30 dias. Se azul < verde, precisa repor.',
+                  icon: Icons.bar_chart_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Produtos sem barra azul têm estoque zerado',
+                    'Use essa visualização para planejar compras mensais',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyForecastReplenish,
+                  title: 'Lista de Reposição',
+                  description:
+                      'Produtos ordenados por urgência com a quantidade sugerida de compra. Exporte em CSV ou envie para fornecedores.',
+                  icon: Icons.add_shopping_cart_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Toque "Gerar Pedido" para exportar a lista',
+                    'Treinar o modelo regularmente no Colab melhora as previsões',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+
         // ─── Header section
         _SectionHeader(
           title: 'Previsão de Consumo',
@@ -4333,6 +4548,7 @@ class _ForecastReportTab extends ConsumerWidget {
         // ─── KPI grid
         if (hasForecast) ...[
           _ForecastKpiGrid(
+            key: _keyForecastKpi,
             replenishCount: replenishCount,
             criticalCount: critical.length,
             totalUnits: totalUnits,
@@ -4360,6 +4576,7 @@ class _ForecastReportTab extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           _ForecastCoverageChart(
+            key: _keyForecastCoverage,
             forecasts: forecasts.take(8).toList(),
             cs: cs,
             isDark: isDark,
@@ -4393,12 +4610,20 @@ class _ForecastReportTab extends ConsumerWidget {
               count: needsReplenishment.length,
             ),
             const SizedBox(height: AppSpacing.sm),
-            ...needsReplenishment.take(10).map(
-                  (f) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                    child: _ForecastReplenishCard(forecast: f, cs: cs, isDark: isDark),
-                  ),
-                ),
+            Container(
+              key: _keyForecastReplenish,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...needsReplenishment.take(10).map(
+                        (f) => Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                          child: _ForecastReplenishCard(forecast: f, cs: cs, isDark: isDark),
+                        ),
+                      ),
+                ],
+              ),
+            ),
             if (needsReplenishment.length > 10)
               Padding(
                 padding: const EdgeInsets.only(top: 2, bottom: AppSpacing.sm),
@@ -4576,6 +4801,7 @@ class _ForecastKpiGrid extends StatelessWidget {
   final bool isDark;
 
   const _ForecastKpiGrid({
+    super.key,
     required this.replenishCount,
     required this.criticalCount,
     required this.totalUnits,
@@ -4843,6 +5069,7 @@ class _ForecastCoverageChart extends StatelessWidget {
   final bool isDark;
 
   const _ForecastCoverageChart({
+    super.key,
     required this.forecasts,
     required this.cs,
     required this.isDark,
