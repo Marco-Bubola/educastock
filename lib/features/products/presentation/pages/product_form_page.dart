@@ -20,6 +20,7 @@ class ProductFormPage extends ConsumerStatefulWidget {
   final String? prefillIsPerishable;
   final String? prefillUnit;
   final String? prefillUnitSize;
+  final String? prefillDescription;
 
   const ProductFormPage({
     super.key,
@@ -32,6 +33,7 @@ class ProductFormPage extends ConsumerStatefulWidget {
     this.prefillIsPerishable,
     this.prefillUnit,
     this.prefillUnitSize,
+    this.prefillDescription,
   });
 
   @override
@@ -120,6 +122,10 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
       }
       if (widget.prefillUnitSize != null && widget.prefillUnitSize!.isNotEmpty) {
         _unitSizeController.text = widget.prefillUnitSize!;
+      }
+      if (widget.prefillDescription != null &&
+          widget.prefillDescription!.isNotEmpty) {
+        _descController.text = widget.prefillDescription!;
       }
     }
     // Carregar produto existente para editar
@@ -210,8 +216,24 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
           }
         }
       },
-      error: (e, _) => showCasaSnackbar(context,
-          message: 'Erro ao salvar produto.', isError: true),
+      error: (e, _) {
+        String msg = 'Erro ao salvar produto.';
+        final detail = e.toString();
+        if (detail.contains('permission-denied') ||
+            detail.contains('PERMISSION_DENIED')) {
+          msg = 'Sem permissão para salvar. Verifique seu acesso.';
+        } else if (detail.contains('network') ||
+            detail.contains('unavailable') ||
+            detail.contains('UNAVAILABLE')) {
+          msg = 'Sem conexão com a internet. Tente novamente.';
+        } else if (detail.contains('storage') ||
+            detail.contains('object-not-found')) {
+          msg = 'Erro ao enviar foto. Tente sem foto ou tente novamente.';
+        } else if (detail.isNotEmpty) {
+          msg = 'Erro: ${detail.length > 80 ? detail.substring(0, 80) : detail}';
+        }
+        showCasaSnackbar(context, message: msg, isError: true);
+      },
       loading: () {},
     );
   }
@@ -293,21 +315,20 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
           ),
         ],
       ),
-      floatingActionButton: KeyedSubtree(
+      bottomNavigationBar: KeyedSubtree(
         key: _keySaveBtn,
-        child: _SaveFab(
+        child: _SaveBar(
           isEditing: isEditing,
           isLoading: isLoading,
           onSave: _submit,
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
             children: [
               // Banner do código de barras
               if (widget.barcode != null) ...[
@@ -706,68 +727,73 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
   }
 }
 
-// ─── FAB de salvar ────────────────────────────────────────────────────────
+// ─── Barra de ação de salvar ──────────────────────────────────────────────
 
-class _SaveFab extends StatelessWidget {
+class _SaveBar extends StatelessWidget {
   final bool isEditing;
   final bool isLoading;
   final VoidCallback onSave;
-  const _SaveFab(
+  const _SaveBar(
       {required this.isEditing,
       required this.isLoading,
       required this.onSave});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: isLoading
-                ? null
-                : const LinearGradient(
-                    colors: [
-                      AppColors.brandPrimary600,
-                      AppColors.secondaryBlue600
-                    ],
-                  ),
-            color: isLoading ? AppColors.neutral500 : null,
-            borderRadius: BorderRadius.circular(AppRadius.button),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.brandPrimary600.withValues(alpha: 0.35),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              )
-            ],
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.sm,
+        AppSpacing.xl,
+        AppSpacing.sm + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3))),
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: isLoading
+              ? null
+              : const LinearGradient(
+                  colors: [AppColors.brandPrimary600, AppColors.secondaryBlue600],
+                ),
+          color: isLoading ? AppColors.neutral500 : null,
+          borderRadius: BorderRadius.circular(AppRadius.button),
+          boxShadow: isLoading
+              ? null
+              : [
+                  BoxShadow(
+                    color: AppColors.brandPrimary600.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  )
+                ],
+        ),
+        child: ElevatedButton.icon(
+          onPressed: isLoading ? null : onSave,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            minimumSize: const Size(double.infinity, 46),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.button)),
           ),
-          child: ElevatedButton.icon(
-            onPressed: isLoading ? null : onSave,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.button)),
-            ),
-            icon: isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2))
-                : Icon(
-                    isEditing ? Icons.save_rounded : Icons.arrow_forward_rounded,
-                    size: 20),
-            label: Text(
-              isEditing ? 'Salvar Alterações' : 'Salvar e Cadastrar Lote',
-              style: const TextStyle(
+          icon: isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : Icon(
+                  isEditing ? Icons.save_rounded : Icons.check_circle_outline_rounded,
                   color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15),
-            ),
+                  size: 18),
+          label: Text(
+            isEditing ? 'Salvar Alterações' : 'Salvar e Cadastrar Lote',
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
           ),
         ),
       ),
