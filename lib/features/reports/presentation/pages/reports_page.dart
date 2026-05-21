@@ -38,6 +38,21 @@ final _keyTrendChart = GlobalKey();
 final _keyExpiryChart = GlobalKey();
 final _keyCategoryChart = GlobalKey();
 
+// ─── Tutorial keys – Risk tab ─────────────────────────────────────────────
+final _keyRiskBanner = GlobalKey();
+final _keyRiskDonut = GlobalKey();
+final _keyRiskInsights = GlobalKey();
+
+// ─── Tutorial keys – Movements tab ───────────────────────────────────────
+final _keyMovSummary = GlobalKey();
+final _keyMovChart = GlobalKey();
+final _keyMovList = GlobalKey();
+
+// ─── Tutorial keys – Forecast tab ────────────────────────────────────────
+final _keyForecastKpi = GlobalKey();
+final _keyForecastCoverage = GlobalKey();
+final _keyForecastReplenish = GlobalKey();
+
 Future<void> _exportCsv({
   required BuildContext context,
   required List<Batch> allBatches,
@@ -271,51 +286,56 @@ class ReportsPage extends ConsumerWidget {
 
     return DefaultTabController(
       length: 4,
-      child: Scaffold(
-        backgroundColor: cs.surface,
-        appBar: _ReportsAppBar(
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.event_repeat_rounded,
-                  color: Colors.white, size: 20),
-              tooltip: 'Agendar relatório semanal',
-              onPressed: () => _showScheduleSheet(context),
-            ),
-            IconButton(
-              icon: const Icon(Icons.picture_as_pdf_outlined,
-                  color: Colors.white, size: 20),
-              tooltip: 'Exportar PDF',
-              onPressed: () async {
-                await _exportPdf(
-                    allBatches: allList,
-                    expiring7: exp7List,
-                    expiring30: exp30List);
-                await ref.read(analyticsServiceProvider).logReportExport(
-                    format: 'pdf', reportType: 'inventory_overview');
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.table_view_outlined,
-                  color: Colors.white, size: 20),
-              tooltip: 'Exportar CSV',
-              onPressed: () async {
-                await _exportCsv(
-                    context: context,
-                    allBatches: allList,
-                    expiring30: exp30List);
-                await ref.read(analyticsServiceProvider).logReportExport(
-                    format: 'csv', reportType: 'inventory_overview');
-              },
-            ),
-          ],
-        ),
-        body: const TabBarView(
-          children: [
-            _ChartsTab(),
-            _MlRiskTab(),
-            _MovementsTab(),
-            _ForecastReportTab(),
-          ],
+      child: ValueListenableBuilder<bool>(
+        valueListenable: tutorialActiveNotifier,
+        builder: (ctx, tutActive, _) => Scaffold(
+          backgroundColor: cs.surface,
+          appBar: tutActive
+              ? null
+              : _ReportsAppBar(
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.event_repeat_rounded,
+                          color: Colors.white, size: 20),
+                      tooltip: 'Agendar relatório semanal',
+                      onPressed: () => _showScheduleSheet(context),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.picture_as_pdf_outlined,
+                          color: Colors.white, size: 20),
+                      tooltip: 'Exportar PDF',
+                      onPressed: () async {
+                        await _exportPdf(
+                            allBatches: allList,
+                            expiring7: exp7List,
+                            expiring30: exp30List);
+                        await ref.read(analyticsServiceProvider).logReportExport(
+                            format: 'pdf', reportType: 'inventory_overview');
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.table_view_outlined,
+                          color: Colors.white, size: 20),
+                      tooltip: 'Exportar CSV',
+                      onPressed: () async {
+                        await _exportCsv(
+                            context: context,
+                            allBatches: allList,
+                            expiring30: exp30List);
+                        await ref.read(analyticsServiceProvider).logReportExport(
+                            format: 'csv', reportType: 'inventory_overview');
+                      },
+                    ),
+                  ],
+                ),
+          body: const TabBarView(
+            children: [
+              _ChartsTab(),
+              _MlRiskTab(),
+              _MovementsTab(),
+              _ForecastReportTab(),
+            ],
+          ),
         ),
       ),
     );
@@ -962,9 +982,59 @@ class _MlRiskTab extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       children: [
+        // ─── Help tutorial button
+        Align(
+          alignment: Alignment.centerRight,
+          child: buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyRiskBanner,
+                  title: 'Saúde do Estoque',
+                  description:
+                      'Painel com totais de lotes críticos, em atenção e seguros. Quanto mais verde, melhor a situação.',
+                  icon: Icons.shield_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🔴 Críticos = ação imediata necessária',
+                    '🟡 Atenção = monitorar de perto nos próximos dias',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyRiskDonut,
+                  title: 'Distribuição por Risco',
+                  description:
+                      'Gráfico de rosca mostrando a proporção dos lotes em cada nível de risco. Ideal ter >70% verde.',
+                  icon: Icons.pie_chart_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Toque nas fatias para ver quantidade e %',
+                    'Vermelho alto? Execute o Colab para redistribuição urgente',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyRiskInsights,
+                  title: 'Insights Automáticos',
+                  description:
+                      'Alertas gerados automaticamente pela IA com base no estado atual do estoque. Siga as recomendações para evitar perdas.',
+                  icon: Icons.lightbulb_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Alertas em vermelho = ação urgente',
+                    'Sugestões em azul = melhorias preventivas',
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+
         // ─── Classifier badge
         _SectionHeader(
-          title: 'Análise de Risco ML',
+          title: 'Análise de Risco',
           subtitle: classifierSrc == 'tflite'
               ? 'Modelo TFLite on-device ativo'
               : 'Classificação por regras inteligentes',
@@ -985,6 +1055,7 @@ class _MlRiskTab extends ConsumerWidget {
 
         // ─── Risk score banner
         _MlScoreBanner(
+          key: _keyRiskBanner,
           criticalCount: criticals.length,
           warningCount: amarelos.length,
           safeCount: verdes.length,
@@ -1013,6 +1084,7 @@ class _MlRiskTab extends ConsumerWidget {
         // ─── Donut chart
         riskPredictionsAsync.when(
           data: (_) => _MlRiskDonutChart(
+            key: _keyRiskDonut,
             verdeCount: verdes.length,
             amareloCount: amarelos.length,
             vermelhoCount: criticals.length,
@@ -1118,7 +1190,7 @@ class _MlRiskTab extends ConsumerWidget {
           color: AppColors.warning600,
         ),
         const SizedBox(height: AppSpacing.sm),
-        _InsightsPanel(insights: insights),
+        _InsightsPanel(key: _keyRiskInsights, insights: insights),
         const SizedBox(height: AppSpacing.md),
 
         // ─── Legenda
@@ -1188,6 +1260,7 @@ class _MlScoreBanner extends StatelessWidget {
   final ColorScheme cs;
 
   const _MlScoreBanner({
+    super.key,
     required this.criticalCount,
     required this.warningCount,
     required this.safeCount,
@@ -1369,37 +1442,78 @@ class _MovementsTabState extends ConsumerState<_MovementsTab> {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       children: [
-        // ─── Seletor de período
-        _SectionHeader(
-          title: 'Período de Análise',
-          subtitle: rangeLabel,
-          icon: Icons.date_range_rounded,
-          color: AppColors.secondaryBlue600,
+        // ─── Help tutorial button
+        Align(
+          alignment: Alignment.centerRight,
+          child: buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: [
+                TutorialStep(
+                  key: _keyMovSummary,
+                  title: 'Resumo do Período',
+                  description:
+                      'Saldo líquido do período: entradas menos saídas e descartes. Verde = estoque cresceu, vermelho = diminuiu.',
+                  icon: Icons.summarize_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Alterne o período para comparar meses diferentes',
+                    'Saldo negativo pode indicar distribuição alta — ótimo sinal!',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyMovChart,
+                  title: 'Entradas × Saídas',
+                  description:
+                      'Comparativo visual por período. Verde = entradas no estoque; vermelho = saídas e descartes.',
+                  icon: Icons.bar_chart_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Toque nas barras para ver o valor exato',
+                    'Saídas altas em período curto = distribuição ativa',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyMovList,
+                  title: 'Histórico de Movimentações',
+                  description:
+                      'Lista completa agrupada por data. Use os filtros para visualizar apenas entradas, saídas ou descartes.',
+                  icon: Icons.list_alt_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Filtros de tipo na barra superior',
+                    'Toque em "Ver mais" para carregar o histórico completo',
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: AppSpacing.sm),
-        _PeriodSelector(
+        const SizedBox(height: AppSpacing.xs),
+
+        // ─── Modern period header
+        _MovementsPeriodHeader(
+          rangeLabel: rangeLabel,
           selectedDays: _customRange != null ? 0 : _days,
           periods: _periods,
           periodLabels: _periodLabels,
           onPeriodSelected: _setPeriod,
           onCustomRange: _pickCustomRange,
           cs: cs,
+          isDark: isDark,
         ),
-        const SizedBox(height: AppSpacing.xl),
+        const SizedBox(height: AppSpacing.md),
 
         // ─── Resumo KPIs
-        _SectionHeader(
-          title: 'Resumo do Período',
-          subtitle: 'Totais de movimentação no período selecionado',
-          icon: Icons.summarize_rounded,
-          color: AppColors.brandPrimary600,
-        ),
-        const SizedBox(height: AppSpacing.sm),
         summaryAsync.when(
           loading: () => const CasaCardSkeleton(),
           error: (_, __) => const SizedBox.shrink(),
-          data: (summary) =>
-              _MovementsSummaryGrid(summary: summary, cs: cs),
+          data: (summary) => _MovementsSummaryGrid(
+            key: _keyMovSummary,
+            summary: summary,
+            cs: cs,
+          ),
         ),
         const SizedBox(height: AppSpacing.xl),
 
@@ -2828,6 +2942,7 @@ class _MlRiskDonutChart extends StatefulWidget {
   final bool isDark;
 
   const _MlRiskDonutChart({
+    super.key,
     required this.verdeCount,
     required this.amareloCount,
     required this.vermelhoCount,
@@ -5891,7 +6006,7 @@ List<_InsightDef> _buildInsights({
 
 class _InsightsPanel extends StatelessWidget {
   final List<_InsightDef> insights;
-  const _InsightsPanel({required this.insights});
+  const _InsightsPanel({super.key, required this.insights});
 
   @override
   Widget build(BuildContext context) {
