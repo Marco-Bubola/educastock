@@ -11,10 +11,10 @@
  *   node ../scripts/seed_database.mjs
  */
 
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 
-if (!getApps().length) initializeApp();
+if (!getApps().length) initializeApp({ credential: applicationDefault(), projectId: 'educastock-136cd' });
 const db = getFirestore();
 
 // ─── Helpers de data ─────────────────────────────────────────────────────────
@@ -50,7 +50,17 @@ const PRODUCTS = [
   { id:'prod-farinha',    name:'Farinha de Trigo Especial',      brand:'Dona Benta',     category:'alimento',        unit:'kg',   barcode:'7891234560005', isPerishable:false, minimumStock:25, description:'Pacote 1 kg',                                 createdBy:UID_ADMIN,      createdAt:daysAgo(180), isActive:true },
   { id:'prod-acucar',     name:'Açúcar Cristal',                 brand:'União',          category:'alimento',        unit:'kg',   barcode:'7891234560006', isPerishable:false, minimumStock:20, description:'Pacote 2 kg',                                 createdBy:UID_ADMIN,      createdAt:daysAgo(180), isActive:true },
   { id:'prod-leite',      name:'Leite em Pó Integral',           brand:'Ninho',          category:'alimento',        unit:'lata', barcode:'7891234560007', isPerishable:true,  minimumStock:30, description:'Lata 400 g',                                  createdBy:UID_ADMIN,      createdAt:daysAgo(180), isActive:true },
-  { id:'prod-sardinha',   name:'Sardinha em Lata ao Molho',      brand:'Coqueiro',       category:'alimento',        unit:'un',   barcode:'7891234560008', isPerishable:true,  minimumStock:50, description:'Lata 125 g ao molho de tomate',               createdBy:UID_ESTOQUISTA, createdAt:daysAgo(115), isActive:true },
+  { id:'prod-sardinha',        name:'Sardinha em Lata ao Molho',         brand:'Coqueiro',       category:'alimento',       unit:'un',   barcode:'7891234560008', isPerishable:true,  minimumStock:50, description:'Lata 125 g ao molho de tomate',                createdBy:UID_ESTOQUISTA, createdAt:daysAgo(115), isActive:true },
+  { id:'prod-farinha-mandioca',name:'Farinha de Mandioca Torrada',        brand:'Yoki',           category:'alimento',       unit:'kg',   barcode:'7891234560020', isPerishable:false, minimumStock:20, description:'Pacote 500 g',                                  createdBy:UID_ESTOQUISTA, createdAt:daysAgo(100), isActive:true },
+  { id:'prod-aveia',           name:'Aveia em Flocos',                    brand:'Quaker',         category:'alimento',       unit:'pct',  barcode:'7891234560021', isPerishable:false, minimumStock:20, description:'Pacote 200 g',                                  createdBy:UID_ESTOQUISTA, createdAt:daysAgo(95),  isActive:true },
+  { id:'prod-extrato-tomate',  name:'Extrato de Tomate',                  brand:'Elefante',       category:'alimento',       unit:'un',   barcode:'7891234560022', isPerishable:true,  minimumStock:30, description:'Lata 370 g',                                    createdBy:UID_ESTOQUISTA, createdAt:daysAgo(90),  isActive:true },
+  { id:'prod-milho-lata',      name:'Milho Verde em Lata',                brand:'Bonduelle',      category:'alimento',       unit:'un',   barcode:'7891234560023', isPerishable:true,  minimumStock:25, description:'Lata 170 g drenado',                            createdBy:UID_ESTOQUISTA, createdAt:daysAgo(85),  isActive:true },
+  { id:'prod-ervilha-lata',    name:'Ervilha em Lata',                    brand:'Bonduelle',      category:'alimento',       unit:'un',   barcode:'7891234560024', isPerishable:true,  minimumStock:20, description:'Lata 170 g drenado',                            createdBy:UID_ESTOQUISTA, createdAt:daysAgo(80),  isActive:true },
+  { id:'prod-biscoito',        name:'Biscoito Cream Cracker',             brand:'Marilan',        category:'alimento',       unit:'pct',  barcode:'7891234560025', isPerishable:false, minimumStock:30, description:'Pacote 400 g',                                  createdBy:UID_ESTOQUISTA, createdAt:daysAgo(75),  isActive:true },
+  { id:'prod-achocolatado',    name:'Achocolatado em Pó',                 brand:'Nescau',         category:'alimento',       unit:'pct',  barcode:'7891234560026', isPerishable:false, minimumStock:15, description:'Pacote 400 g',                                  createdBy:UID_ESTOQUISTA, createdAt:daysAgo(70),  isActive:true },
+  { id:'prod-fuba',            name:'Fubá de Milho',                      brand:'Yoki',           category:'alimento',       unit:'kg',   barcode:'7891234560027', isPerishable:false, minimumStock:20, description:'Pacote 1 kg',                                   createdBy:UID_VOL,        createdAt:daysAgo(65),  isActive:true },
+  { id:'prod-sal',             name:'Sal Refinado Iodado',                brand:'Cisne',          category:'alimento',       unit:'kg',   barcode:'7891234560028', isPerishable:false, minimumStock:15, description:'Pacote 1 kg',                                   createdBy:UID_ESTOQUISTA, createdAt:daysAgo(60),  isActive:true },
+  { id:'prod-cafe',            name:'Café Torrado e Moído',               brand:'Pilão',          category:'alimento',       unit:'pct',  barcode:'7891234560029', isPerishable:false, minimumStock:15, description:'Pacote 250 g',                                  createdBy:UID_ESTOQUISTA, createdAt:daysAgo(55),  isActive:true },
   // — bebida ——————————————————————————————————————————————————————————————————
   { id:'prod-suco',       name:'Suco de Uva Integral',           brand:'Maguary',        category:'bebida',          unit:'L',    barcode:'7891234560009', isPerishable:true,  minimumStock:30, description:'Embalagem 1 L',                               createdBy:UID_ESTOQUISTA, createdAt:daysAgo(105), isActive:true },
   // — limpeza —————————————————————————————————————————————————————————————————
@@ -287,6 +297,86 @@ const BATCHES = [
     entryDate:daysAgo(35), origin:'doacao', donor:'Associação de Moradores Vila Nova', supplier:null, unitPrice:null,
     batchNumber:'CC-CAM-001', imageUrl:null, shelfLocation:'loc-alm-a1', status:'disponivel',
     notes:'Roupas usadas em boas condições', createdBy:UID_VOL, createdAt:daysAgo(35) },
+
+  // ── FARINHA DE MANDIOCA ────────────────────────────────────────────────────
+  // 60 init → -25(d,-70) = 35 final
+  { id:'batch-farinha-mandioca-001', productId:'prod-farinha-mandioca', productName:'Farinha de Mandioca Torrada',
+    quantity:35, initialQuantity:60, expiryDate:daysFromNow(180), noExpiry:false,
+    entryDate:daysAgo(95), origin:'doacao', donor:'CEASA Campinas', supplier:null, unitPrice:null,
+    batchNumber:'CC-FMA-001', imageUrl:null, shelfLocation:'loc-dep-b2', status:'disponivel',
+    notes:'Doação excedente do CEASA', createdBy:UID_ESTOQUISTA, createdAt:daysAgo(95) },
+
+  // ── AVEIA ──────────────────────────────────────────────────────────────────
+  // 80 init → -30(d,-65) = 50 final
+  { id:'batch-aveia-001', productId:'prod-aveia', productName:'Aveia em Flocos',
+    quantity:50, initialQuantity:80, expiryDate:daysFromNow(200), noExpiry:false,
+    entryDate:daysAgo(90), origin:'compra', donor:null, supplier:'Distribuidora Alimentos Santos Ltda', unitPrice:3.90,
+    batchNumber:'CC-AVE-001', imageUrl:null, shelfLocation:'loc-dep-b2', status:'disponivel',
+    notes:null, createdBy:UID_ESTOQUISTA, createdAt:daysAgo(90) },
+
+  // ── EXTRATO DE TOMATE ──────────────────────────────────────────────────────
+  // 120 init → -50(d,-60) = 70 final
+  { id:'batch-extrato-tomate-001', productId:'prod-extrato-tomate', productName:'Extrato de Tomate',
+    quantity:70, initialQuantity:120, expiryDate:daysFromNow(300), noExpiry:false,
+    entryDate:daysAgo(85), origin:'parceiro', donor:null, supplier:'Supermercado BomPreço', unitPrice:null,
+    batchNumber:'CC-EXT-001', imageUrl:null, shelfLocation:'loc-dep-a2', status:'disponivel',
+    notes:'Parceria mensal BomPreço', createdBy:UID_ESTOQUISTA, createdAt:daysAgo(85) },
+
+  // ── MILHO VERDE ────────────────────────────────────────────────────────────
+  // 100 init → -40(d,-55) = 60 final
+  { id:'batch-milho-lata-001', productId:'prod-milho-lata', productName:'Milho Verde em Lata',
+    quantity:60, initialQuantity:100, expiryDate:daysFromNow(500), noExpiry:false,
+    entryDate:daysAgo(80), origin:'doacao', donor:'Banco de Alimentos SP', supplier:null, unitPrice:null,
+    batchNumber:'CC-MLH-001', imageUrl:null, shelfLocation:'loc-dep-a2', status:'disponivel',
+    notes:null, createdBy:UID_VOL, createdAt:daysAgo(80) },
+
+  // ── ERVILHA ────────────────────────────────────────────────────────────────
+  // 80 init → -30(d,-50) = 50 final
+  { id:'batch-ervilha-lata-001', productId:'prod-ervilha-lata', productName:'Ervilha em Lata',
+    quantity:50, initialQuantity:80, expiryDate:daysFromNow(500), noExpiry:false,
+    entryDate:daysAgo(75), origin:'doacao', donor:'Banco de Alimentos SP', supplier:null, unitPrice:null,
+    batchNumber:'CC-ERV-001', imageUrl:null, shelfLocation:'loc-dep-a2', status:'disponivel',
+    notes:null, createdBy:UID_VOL, createdAt:daysAgo(75) },
+
+  // ── BISCOITO ───────────────────────────────────────────────────────────────
+  // 150 init → -70(d,-45) = 80 final
+  { id:'batch-biscoito-001', productId:'prod-biscoito', productName:'Biscoito Cream Cracker',
+    quantity:80, initialQuantity:150, expiryDate:daysFromNow(120), noExpiry:false,
+    entryDate:daysAgo(70), origin:'doacao', donor:'Paróquia São José', supplier:null, unitPrice:null,
+    batchNumber:'CC-BSC-001', imageUrl:null, shelfLocation:'loc-dep-b2', status:'disponivel',
+    notes:'Doação campanha solidária paróquia', createdBy:UID_VOL, createdAt:daysAgo(70) },
+
+  // ── ACHOCOLATADO ───────────────────────────────────────────────────────────
+  // 50 init → -20(d,-40) = 30 final
+  { id:'batch-achocolatado-001', productId:'prod-achocolatado', productName:'Achocolatado em Pó',
+    quantity:30, initialQuantity:50, expiryDate:daysFromNow(250), noExpiry:false,
+    entryDate:daysAgo(65), origin:'compra', donor:null, supplier:'Distribuidora NutriLife Alimentos', unitPrice:9.90,
+    batchNumber:'CC-ACH-001', imageUrl:null, shelfLocation:'loc-dep-b2', status:'disponivel',
+    notes:'Para crianças em acompanhamento nutricional', createdBy:UID_ADMIN, createdAt:daysAgo(65) },
+
+  // ── FUBÁ ───────────────────────────────────────────────────────────────────
+  // 80 init → -30(d,-35) = 50 final
+  { id:'batch-fuba-001', productId:'prod-fuba', productName:'Fubá de Milho',
+    quantity:50, initialQuantity:80, expiryDate:daysFromNow(300), noExpiry:false,
+    entryDate:daysAgo(60), origin:'doacao', donor:'CEASA Campinas', supplier:null, unitPrice:null,
+    batchNumber:'CC-FUB-001', imageUrl:null, shelfLocation:'loc-dep-b2', status:'disponivel',
+    notes:'Para receitas de canjica e bolo de milho', createdBy:UID_VOL, createdAt:daysAgo(60) },
+
+  // ── SAL ────────────────────────────────────────────────────────────────────
+  // 100 init → -30(d,-30) = 70 final
+  { id:'batch-sal-001', productId:'prod-sal', productName:'Sal Refinado Iodado',
+    quantity:70, initialQuantity:100, expiryDate:null, noExpiry:true,
+    entryDate:daysAgo(55), origin:'compra', donor:null, supplier:'Distribuidora Alimentos Santos Ltda', unitPrice:2.50,
+    batchNumber:'CC-SAL-001', imageUrl:null, shelfLocation:'loc-dep-b1', status:'disponivel',
+    notes:null, createdBy:UID_ESTOQUISTA, createdAt:daysAgo(55) },
+
+  // ── CAFÉ ───────────────────────────────────────────────────────────────────
+  // 60 init → -20(d,-25) = 40 final
+  { id:'batch-cafe-001', productId:'prod-cafe', productName:'Café Torrado e Moído',
+    quantity:40, initialQuantity:60, expiryDate:daysFromNow(180), noExpiry:false,
+    entryDate:daysAgo(50), origin:'parceiro', donor:null, supplier:'Cafeteria Sabor da Serra', unitPrice:null,
+    batchNumber:'CC-CAF-001', imageUrl:null, shelfLocation:'loc-dep-b2', status:'disponivel',
+    notes:'Parceria com cafeteria local para doação mensal', createdBy:UID_ESTOQUISTA, createdAt:daysAgo(50) },
 ];
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -383,6 +473,30 @@ const MOVEMENTS = [
 
   // ── AJUSTE NEGATIVO (referente a approval-feijao-001 aprovado) ─────────────
   { id:'mov-ajuste-feijao-001', productId:'prod-feijao',     productName:'Feijão Carioca',                  batchId:'batch-feijao-001',     type:'ajusteNegativo', quantity:10,  reasonCode:'ajusteInventario', reason:'Ajuste de inventário – avaria identificada na contagem', activity:null, performedBy:UID_ADMIN, performedByName:'Maria Fernanda Costa', performedAt:daysAgo(50), isPendingSync:false, auditBefore:{quantity:30, status:'disponivel'}, auditAfter:{quantity:20, status:'disponivel', reasonCode:'ajusteInventario'} },
+
+  // ── ENTRADAS NOVOS PRODUTOS ALIMENTOS ────────────────────────────────────
+  { id:'mov-ent-farinha-mandioca-001', productId:'prod-farinha-mandioca', productName:'Farinha de Mandioca Torrada',  batchId:'batch-farinha-mandioca-001', type:'entrada', quantity:60,  reasonCode:null, reason:'Doação excedente CEASA Campinas',        activity:null, performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(95), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:60,  status:'disponivel'} },
+  { id:'mov-ent-aveia-001',            productId:'prod-aveia',            productName:'Aveia em Flocos',              batchId:'batch-aveia-001',            type:'entrada', quantity:80,  reasonCode:null, reason:'Compra mensal',                          activity:null, performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(90), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:80,  status:'disponivel'} },
+  { id:'mov-ent-extrato-tomate-001',   productId:'prod-extrato-tomate',   productName:'Extrato de Tomate',            batchId:'batch-extrato-tomate-001',   type:'entrada', quantity:120, reasonCode:null, reason:'Parceria Supermercado BomPreço',          activity:null, performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(85), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:120, status:'disponivel'} },
+  { id:'mov-ent-milho-lata-001',       productId:'prod-milho-lata',       productName:'Milho Verde em Lata',          batchId:'batch-milho-lata-001',       type:'entrada', quantity:100, reasonCode:null, reason:'Doação Banco de Alimentos SP',            activity:null, performedBy:UID_VOL,        performedByName:'Ana Paula Santos',   performedAt:daysAgo(80), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:100, status:'disponivel'} },
+  { id:'mov-ent-ervilha-lata-001',     productId:'prod-ervilha-lata',     productName:'Ervilha em Lata',              batchId:'batch-ervilha-lata-001',     type:'entrada', quantity:80,  reasonCode:null, reason:'Doação Banco de Alimentos SP',            activity:null, performedBy:UID_VOL,        performedByName:'Ana Paula Santos',   performedAt:daysAgo(75), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:80,  status:'disponivel'} },
+  { id:'mov-ent-biscoito-001',         productId:'prod-biscoito',         productName:'Biscoito Cream Cracker',       batchId:'batch-biscoito-001',         type:'entrada', quantity:150, reasonCode:null, reason:'Doação Paróquia São José',                activity:null, performedBy:UID_VOL,        performedByName:'Ana Paula Santos',   performedAt:daysAgo(70), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:150, status:'disponivel'} },
+  { id:'mov-ent-achocolatado-001',     productId:'prod-achocolatado',     productName:'Achocolatado em Pó',           batchId:'batch-achocolatado-001',     type:'entrada', quantity:50,  reasonCode:null, reason:'Compra NutriLife Alimentos',              activity:null, performedBy:UID_ADMIN,      performedByName:'Maria Fernanda Costa',performedAt:daysAgo(65), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:50,  status:'disponivel'} },
+  { id:'mov-ent-fuba-001',             productId:'prod-fuba',             productName:'Fubá de Milho',                batchId:'batch-fuba-001',             type:'entrada', quantity:80,  reasonCode:null, reason:'Doação excedente CEASA Campinas',        activity:null, performedBy:UID_VOL,        performedByName:'Ana Paula Santos',   performedAt:daysAgo(60), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:80,  status:'disponivel'} },
+  { id:'mov-ent-sal-001',              productId:'prod-sal',              productName:'Sal Refinado Iodado',          batchId:'batch-sal-001',              type:'entrada', quantity:100, reasonCode:null, reason:'Compra mensal',                          activity:null, performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(55), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:100, status:'disponivel'} },
+  { id:'mov-ent-cafe-001',             productId:'prod-cafe',             productName:'Café Torrado e Moído',         batchId:'batch-cafe-001',             type:'entrada', quantity:60,  reasonCode:null, reason:'Parceria Cafeteria Sabor da Serra',       activity:null, performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(50), isPendingSync:false, auditBefore:{quantity:0,  status:'disponivel'}, auditAfter:{quantity:60,  status:'disponivel'} },
+
+  // ── SAÍDAS DIRETAS NOVOS PRODUTOS ─────────────────────────────────────────
+  { id:'mov-sai-farinha-mandioca-001a', productId:'prod-farinha-mandioca', productName:'Farinha de Mandioca Torrada',  batchId:'batch-farinha-mandioca-001', type:'saida', quantity:25, reasonCode:'doacao', reason:'Distribuição Kit Alimentar Fevereiro',   activity:'Distribuição Fevereiro',  performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(70), isPendingSync:false, auditBefore:{quantity:60,  status:'disponivel'}, auditAfter:{quantity:35,  status:'disponivel'} },
+  { id:'mov-sai-aveia-001a',            productId:'prod-aveia',            productName:'Aveia em Flocos',              batchId:'batch-aveia-001',            type:'saida', quantity:30, reasonCode:'doacao', reason:'Distribuição para famílias com crianças', activity:'Distribuição Março',      performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(65), isPendingSync:false, auditBefore:{quantity:80,  status:'disponivel'}, auditAfter:{quantity:50,  status:'disponivel'} },
+  { id:'mov-sai-extrato-tomate-001a',   productId:'prod-extrato-tomate',   productName:'Extrato de Tomate',            batchId:'batch-extrato-tomate-001',   type:'saida', quantity:50, reasonCode:'doacao', reason:'Distribuição Cesta Básica Março',         activity:'Distribuição Março',      performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(60), isPendingSync:false, auditBefore:{quantity:120, status:'disponivel'}, auditAfter:{quantity:70,  status:'disponivel'} },
+  { id:'mov-sai-milho-lata-001a',       productId:'prod-milho-lata',       productName:'Milho Verde em Lata',          batchId:'batch-milho-lata-001',       type:'saida', quantity:40, reasonCode:'doacao', reason:'Distribuição Cesta Básica Março',         activity:'Distribuição Março',      performedBy:UID_VOL,        performedByName:'Ana Paula Santos',    performedAt:daysAgo(55), isPendingSync:false, auditBefore:{quantity:100, status:'disponivel'}, auditAfter:{quantity:60,  status:'disponivel'} },
+  { id:'mov-sai-ervilha-lata-001a',     productId:'prod-ervilha-lata',     productName:'Ervilha em Lata',              batchId:'batch-ervilha-lata-001',     type:'saida', quantity:30, reasonCode:'doacao', reason:'Distribuição Cesta Básica Abril',         activity:'Distribuição Abril',      performedBy:UID_VOL,        performedByName:'Ana Paula Santos',    performedAt:daysAgo(50), isPendingSync:false, auditBefore:{quantity:80,  status:'disponivel'}, auditAfter:{quantity:50,  status:'disponivel'} },
+  { id:'mov-sai-biscoito-001a',         productId:'prod-biscoito',         productName:'Biscoito Cream Cracker',       batchId:'batch-biscoito-001',         type:'saida', quantity:70, reasonCode:'doacao', reason:'Distribuição para crianças – evento ONG',  activity:'Evento ONG',              performedBy:UID_VOL,        performedByName:'Ana Paula Santos',    performedAt:daysAgo(45), isPendingSync:false, auditBefore:{quantity:150, status:'disponivel'}, auditAfter:{quantity:80,  status:'disponivel'} },
+  { id:'mov-sai-achocolatado-001a',     productId:'prod-achocolatado',     productName:'Achocolatado em Pó',           batchId:'batch-achocolatado-001',     type:'saida', quantity:20, reasonCode:'doacao', reason:'Distribuição acompanhamento nutricional',  activity:'Acomp. Nutricional',      performedBy:UID_ADMIN,      performedByName:'Maria Fernanda Costa',performedAt:daysAgo(40), isPendingSync:false, auditBefore:{quantity:50,  status:'disponivel'}, auditAfter:{quantity:30,  status:'disponivel'} },
+  { id:'mov-sai-fuba-001a',             productId:'prod-fuba',             productName:'Fubá de Milho',                batchId:'batch-fuba-001',             type:'saida', quantity:30, reasonCode:'doacao', reason:'Distribuição Abril',                      activity:'Distribuição Abril',      performedBy:UID_VOL,        performedByName:'Ana Paula Santos',    performedAt:daysAgo(35), isPendingSync:false, auditBefore:{quantity:80,  status:'disponivel'}, auditAfter:{quantity:50,  status:'disponivel'} },
+  { id:'mov-sai-sal-001a',              productId:'prod-sal',              productName:'Sal Refinado Iodado',          batchId:'batch-sal-001',              type:'saida', quantity:30, reasonCode:'doacao', reason:'Distribuição mensal – Abril',             activity:'Distribuição Abril',      performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(30), isPendingSync:false, auditBefore:{quantity:100, status:'disponivel'}, auditAfter:{quantity:70,  status:'disponivel'} },
+  { id:'mov-sai-cafe-001a',             productId:'prod-cafe',             productName:'Café Torrado e Moído',         batchId:'batch-cafe-001',             type:'saida', quantity:20, reasonCode:'doacao', reason:'Distribuição Maio',                       activity:'Distribuição Maio',       performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(25), isPendingSync:false, auditBefore:{quantity:60,  status:'disponivel'}, auditAfter:{quantity:40,  status:'disponivel'} },
 
   // ── SAÍDAS POR RECEITA – Run 001: Cesta Grande x10 (dia -150) ─────────────
   { id:'mov-r001-arroz',    productId:'prod-arroz',    productName:'Arroz Branco Tipo 1',            batchId:'batch-arroz-001',    type:'saida', quantity:50, reasonCode:'receita', reason:'Cesta Básica Família Grande x10', activity:'Cesta Básica Família Grande', performedBy:UID_ESTOQUISTA, performedByName:'João Pedro Oliveira', performedAt:daysAgo(150), isPendingSync:false, auditBefore:{quantity:200,status:'disponivel'}, auditAfter:{quantity:150,status:'disponivel'} },
