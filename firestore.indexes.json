@@ -107,6 +107,30 @@
       ]
     },
     {
+      "collectionGroup": "stock_movements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "performedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "consumption_forecasts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suggestedReplenishment",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "recipes",
       "queryScope": "COLLECTION",
       "fields": [
