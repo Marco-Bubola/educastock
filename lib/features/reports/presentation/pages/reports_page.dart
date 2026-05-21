@@ -714,14 +714,6 @@ class _ChartsTab extends ConsumerWidget {
           }
         }
 
-        final insights = _buildInsights(
-          batches: batches,
-          exp7: exp7List.length,
-          exp30: exp30List.length,
-          expired: expired,
-          totalItems: totalItems,
-        );
-
         return ListView(
           padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
@@ -775,8 +767,8 @@ class _ChartsTab extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.xs),
 
-            // ─── Summary grid
-            _SummaryGrid(
+            // ─── Modern stats banner
+            _ModernStatsBanner(
               totalBatches: batches.length,
               totalItems: totalItems,
               totalValue: totalValue,
@@ -870,16 +862,25 @@ class _ChartsTab extends ConsumerWidget {
               const SizedBox(height: AppSpacing.xl),
             ],
 
-            // ─── Insights
-            _SectionHeader(
-              title: 'Insights do Estoque',
-              subtitle: 'Alertas e recomendações automáticas',
-              icon: Icons.lightbulb_rounded,
-              color: AppColors.warning600,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            _InsightsPanel(insights: insights),
-            const SizedBox(height: AppSpacing.xl),
+            // ─── Value distribution by product
+            if (topProducts.isNotEmpty) ...[
+              _SectionHeader(
+                title: 'Valor Estimado por Produto',
+                subtitle: 'Top 5 — valor total em estoque (R\$)',
+                icon: Icons.monetization_on_rounded,
+                color: AppColors.success600,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _ValueBarChart(
+                batches: batches,
+                isDark: isDark,
+                cs: cs,
+              ),
+              const _ChartNote(
+                text: 'Baseado no preço unitário de cada lote. Itens sem preço não são contabilizados.',
+              ),
+              const SizedBox(height: AppSpacing.xl),
+            ],
 
             // ─── Tips
             _TabTipCard(
@@ -931,6 +932,20 @@ class _MlRiskTab extends ConsumerWidget {
     final riskCountsAsync = ref.watch(riskCountsProvider);
     final riskPredictionsAsync = ref.watch(batchRiskPredictionsProvider);
     final classifierSourceAsync = ref.watch(classifierSourceProvider);
+
+    // batch data for insights
+    final allBatches = ref.watch(allAvailableBatchesProvider).valueOrNull ?? [];
+    final exp7 = ref.watch(expiringBatchesProvider(7)).valueOrNull ?? [];
+    final exp30 = ref.watch(expiringBatchesProvider(30)).valueOrNull ?? [];
+    final totalItems = allBatches.fold<int>(0, (s, b) => s + b.quantity);
+    final expired = allBatches.where((b) => b.isExpired).length;
+    final insights = _buildInsights(
+      batches: allBatches,
+      exp7: exp7.length,
+      exp30: exp30.length,
+      expired: expired,
+      totalItems: totalItems,
+    );
 
     final predictions = riskPredictionsAsync.valueOrNull ?? [];
     final sortedPredictions = [...predictions]..sort(_sortByRisk);
@@ -1093,6 +1108,17 @@ class _MlRiskTab extends ConsumerWidget {
             verdeCount: verdes.length,
             cs: cs,
           ),
+        const SizedBox(height: AppSpacing.md),
+
+        // ─── Insights do estoque
+        _SectionHeader(
+          title: 'Insights do Estoque',
+          subtitle: 'Alertas e recomendações automáticas',
+          icon: Icons.lightbulb_rounded,
+          color: AppColors.warning600,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _InsightsPanel(insights: insights),
         const SizedBox(height: AppSpacing.md),
 
         // ─── Legenda
@@ -3150,7 +3176,435 @@ class _MlLegend extends StatelessWidget {
   }
 }
 
-// ─── Grid de resumo ───────────────────────────────────────────────────────
+// ─── Modern Stats Banner ─────────────────────────────────────────────────
+
+class _ModernStatsBanner extends StatelessWidget {
+  final int totalBatches;
+  final int totalItems;
+  final double totalValue;
+  final int expired;
+  final int criticals;
+  final int warnings;
+  final int healthScore;
+  final bool isDark;
+  final ColorScheme cs;
+
+  const _ModernStatsBanner({
+    required this.totalBatches,
+    required this.totalItems,
+    required this.totalValue,
+    required this.expired,
+    required this.criticals,
+    required this.warnings,
+    required this.healthScore,
+    required this.isDark,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final currFmt = NumberFormat.currency(
+        locale: 'pt_BR', symbol: 'R\$', decimalDigits: 0);
+    final healthColor = healthScore >= 80
+        ? AppColors.success600
+        : healthScore >= 50
+            ? AppColors.warning600
+            : AppColors.danger600;
+    final healthLabel = healthScore >= 80
+        ? 'Ótimo'
+        : healthScore >= 50
+            ? 'Regular'
+            : 'Crítico';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ─── Hero row: health ring + 3 key stats
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [
+                      healthColor.withValues(alpha: 0.18),
+                      cs.surfaceContainerLow,
+                    ]
+                  : [
+                      healthColor.withValues(alpha: 0.08),
+                      cs.surfaceContainerLowest,
+                    ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+                color: healthColor.withValues(alpha: isDark ? 0.35 : 0.2)),
+          ),
+          child: Row(
+            children: [
+              // ─── Health ring
+              SizedBox(
+                width: 88,
+                height: 88,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 88,
+                      height: 88,
+                      child: CircularProgressIndicator(
+                        value: healthScore / 100,
+                        strokeWidth: 8,
+                        backgroundColor:
+                            cs.outlineVariant.withValues(alpha: 0.3),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(healthColor),
+                        strokeCap: StrokeCap.round,
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$healthScore%',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: healthColor,
+                            height: 1,
+                          ),
+                        ),
+                        Text(
+                          healthLabel,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              // ─── 3 key stats
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _StatRow(
+                      icon: Icons.layers_rounded,
+                      color: AppColors.brandPrimary600,
+                      label: 'Lotes no estoque',
+                      value: '$totalBatches',
+                      cs: cs,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    _StatRow(
+                      icon: Icons.widgets_outlined,
+                      color: AppColors.secondaryBlue600,
+                      label: 'Total de itens',
+                      value: totalItems.toString(),
+                      cs: cs,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    _StatRow(
+                      icon: Icons.attach_money_rounded,
+                      color: AppColors.success600,
+                      label: 'Valor estimado',
+                      value: currFmt.format(totalValue),
+                      cs: cs,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+
+        // ─── Alert chips row
+        Row(
+          children: [
+            Expanded(
+              child: _AlertChip(
+                icon: Icons.warning_rounded,
+                label: 'Críticos',
+                value: criticals,
+                color: criticals > 0 ? AppColors.danger600 : AppColors.success600,
+                isDark: isDark,
+                cs: cs,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: _AlertChip(
+                icon: Icons.schedule_rounded,
+                label: 'Atenção (30d)',
+                value: warnings,
+                color: warnings > 0 ? AppColors.warning600 : AppColors.success600,
+                isDark: isDark,
+                cs: cs,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: _AlertChip(
+                icon: Icons.cancel_outlined,
+                label: 'Vencidos',
+                value: expired,
+                color: expired > 0 ? AppColors.danger600 : AppColors.success600,
+                isDark: isDark,
+                cs: cs,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+  final ColorScheme cs;
+
+  const _StatRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            label,
+            style: AppTypography.bodySmall.copyWith(
+              color: cs.onSurfaceVariant,
+              fontSize: 10,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: AppTypography.labelMedium.copyWith(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w800,
+            fontSize: 13,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AlertChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int value;
+  final Color color;
+  final bool isDark;
+  final ColorScheme cs;
+
+  const _AlertChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.isDark,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          vertical: AppSpacing.sm, horizontal: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.14 : 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border:
+            Border.all(color: color.withValues(alpha: isDark ? 0.3 : 0.2)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 12, color: color),
+              const SizedBox(width: 3),
+              Text(
+                '$value',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: AppTypography.labelSmall.copyWith(
+              color: cs.onSurfaceVariant,
+              fontSize: 9,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Value Bar Chart (top 5 products by R$) ───────────────────────────────
+
+class _ValueBarChart extends StatelessWidget {
+  final List<Batch> batches;
+  final bool isDark;
+  final ColorScheme cs;
+
+  const _ValueBarChart({
+    required this.batches,
+    required this.isDark,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<String, double> valueByProduct = {};
+    for (final b in batches) {
+      if ((b.unitPrice ?? 0) > 0) {
+        valueByProduct[b.productName] =
+            (valueByProduct[b.productName] ?? 0) +
+                (b.unitPrice! * b.quantity);
+      }
+    }
+    if (valueByProduct.isEmpty) {
+      return Container(
+        height: 80,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
+        child: Center(
+          child: Text(
+            'Nenhum produto com preço cadastrado',
+            style: AppTypography.bodySmall
+                .copyWith(color: cs.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+
+    final sorted = valueByProduct.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top5 = sorted.take(5).toList();
+    final maxVal = top5.first.value;
+
+    final colors = [
+      AppColors.brandPrimary600,
+      AppColors.secondaryBlue600,
+      AppColors.success600,
+      AppColors.warning600,
+      AppColors.danger600,
+    ];
+    final currFmt = NumberFormat.currency(
+        locale: 'pt_BR', symbol: 'R\$', decimalDigits: 0);
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border:
+            Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: top5.asMap().entries.map((e) {
+          final i = e.key;
+          final entry = e.value;
+          final pct = maxVal == 0 ? 0.0 : entry.value / maxVal;
+          final color = colors[i];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.pill),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        entry.key,
+                        style: AppTypography.labelSmall.copyWith(
+                          color: cs.onSurface,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      currFmt.format(entry.value),
+                      style: AppTypography.labelSmall.copyWith(
+                        color: color,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  child: LinearProgressIndicator(
+                    value: pct.clamp(0.0, 1.0),
+                    minHeight: 7,
+                    backgroundColor:
+                        cs.outlineVariant.withValues(alpha: 0.2),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ─── Grid de resumo (kept for reference) ─────────────────────────────────
 
 // ─── Shared: Tab Tip Card ─────────────────────────────────────────────────
 
