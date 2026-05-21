@@ -5,6 +5,10 @@ import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 export 'package:tutorial_coach_mark/tutorial_coach_mark.dart'
     show ShapeLightFocus, ContentAlign, TargetFocus, TargetContent, TutorialCoachMark;
 
+/// Global flag — true while a coach-mark overlay is active.
+/// AppBars and TabBars watch this to hide themselves during tutorials.
+final ValueNotifier<bool> tutorialActiveNotifier = ValueNotifier<bool>(false);
+
 // Design constants — fully explicit, no theme/MediaQuery dependency
 const _kBorder = Color(0xFF1D5FA8);
 const _kSkyBlue = Color(0xFF38BDF8);
@@ -47,6 +51,7 @@ void showCasaTutorial({
   VoidCallback? onSkip,
 }) {
   if (steps.isEmpty) return;
+  tutorialActiveNotifier.value = true;
 
   // Scroll to a step's target widget before showing it.
   // Uses `alignmentPolicy: explicit` so it ALWAYS repositions to the top
@@ -133,14 +138,18 @@ void showCasaTutorial({
   final coachMark = TutorialCoachMark(
     targets: targets,
     colorShadow: const Color(0xFF050D1A),
-    opacityShadow: 0.90,
+    opacityShadow: 0.92,
     hideSkip: true,
     focusAnimationDuration: const Duration(milliseconds: 350),
     unFocusAnimationDuration: const Duration(milliseconds: 220),
     pulseAnimationDuration: const Duration(milliseconds: 900),
     pulseEnable: true,
-    onFinish: onFinish,
+    onFinish: () {
+      tutorialActiveNotifier.value = false;
+      onFinish?.call();
+    },
     onSkip: () {
+      tutorialActiveNotifier.value = false;
       onSkip?.call();
       return true;
     },
