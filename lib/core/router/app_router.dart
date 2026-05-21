@@ -24,6 +24,7 @@ import '../../features/settings/presentation/pages/users_management_page.dart';
 import '../../features/settings/presentation/pages/categories_settings_page.dart';
 import '../../features/settings/presentation/pages/alerts_settings_page.dart';
 import '../../features/ml/presentation/pages/ml_insights_page.dart';
+import '../../features/ml/presentation/pages/forecast_page.dart';
 import '../../features/recipes/presentation/pages/recipes_page.dart';
 import '../../features/recipes/presentation/pages/recipe_create_page.dart';
 import '../../features/stock/presentation/pages/history_page.dart';
@@ -51,6 +52,7 @@ abstract class AppRoutes {
   static const categoriesSettings = '/settings/categories';
   static const alertsSettings = '/settings/alerts';
   static const mlInsights = '/ml/insights';
+  static const mlForecast = '/ml/forecast';
   static const recipes = '/recipes';
   static const recipeCreate = '/recipes/new';
   static const history = '/history';
@@ -223,6 +225,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.mlInsights,
             builder: (_, __) => const MlInsightsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.mlForecast,
+            builder: (_, __) => const ForecastPage(),
           ),
           GoRoute(
             path: AppRoutes.recipes,
