@@ -34,75 +34,54 @@
 </head>
 <body>
   <!--
-    Carrega o polyfill BarcodeDetector (iOS Safari não suporta nativamente)
-    ANTES de iniciar o Flutter, usando async/await para garantir a ordem.
-    O flutter_bootstrap.js é inserido dinamicamente APÓS o polyfill estar pronto.
+    Passo 1: carrega ZBar WASM + polyfill BarcodeDetector como scripts síncronos.
+    A ordem importa: zbar-wasm ANTES do polyfill.
+    Após execução, `window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill` está disponível.
   -->
+  <script src="https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.21/dist/index.js"></script>
+
   <script>
     async function _bootstrapApp() {
-      // 1. Garante BarcodeDetector (polyfill para iOS Safari / Chrome iOS)
+
+      // ── 1. Instala BarcodeDetector se necessário ───────────────────────────
       if (!('BarcodeDetector' in window)) {
         try {
-          const mod = await import(
-            'https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.21/dist/index.js'
-          );
-          window['BarcodeDetector'] = mod.BarcodeDetector;
-          console.log('[EducaStock] BarcodeDetector polyfill instalado (jsDelivr) ✅');
-        } catch (e) {
-          console.warn('[EducaStock] jsDelivr falhou, tentando unpkg...', e);
-          try {
-            const mod = await import(
-              'https://unpkg.com/@undecaf/barcode-detector-polyfill@0.9.21/dist/index.js'
-            );
-            window['BarcodeDetector'] = mod.BarcodeDetector;
-            console.log('[EducaStock] BarcodeDetector polyfill instalado (unpkg) ✅');
-          } catch (e2) {
-            console.error('[EducaStock] Falha ao carregar polyfill BarcodeDetector:', e2);
+          // Polyfill já foi carregado pelos <script> acima.
+          // A variável global é 'barcodeDetectorPolyfill' com a classe dentro.
+          var BDP = (typeof barcodeDetectorPolyfill !== 'undefined')
+            ? (barcodeDetectorPolyfill.BarcodeDetectorPolyfill || barcodeDetectorPolyfill.BarcodeDetector)
+            : null;
+          if (BDP) {
+            window.BarcodeDetector = BDP;
+            console.log('[EducaStock] BarcodeDetectorPolyfill instalado ✅');
+          } else {
+            console.error('[EducaStock] barcodeDetectorPolyfill global não encontrado');
           }
+        } catch (e) {
+          console.error('[EducaStock] Erro instalando polyfill:', e);
         }
       } else {
         console.log('[EducaStock] BarcodeDetector nativo disponível ✅');
       }
 
-      // 2. Inicializa instância do BarcodeDetector para uso direto via Dart
+      // ── 2. Cria instância do detector ──────────────────────────────────────
       try {
-        window._barcodeDetector = new window['BarcodeDetector']({
+        window._barcodeDetector = new window.BarcodeDetector({
           formats: [
             'ean_13', 'ean_8', 'code_128', 'qr_code',
             'upc_a', 'upc_e', 'code_39', 'code_93', 'itf'
           ]
         });
-        console.log('[EducaStock] _barcodeDetector pronto ✅');
+        console.log('[EducaStock] _barcodeDetector criado ✅');
       } catch (e) {
-        console.warn('[EducaStock] _barcodeDetector init falhou:', e);
+        console.error('[EducaStock] _barcodeDetector init falhou:', e);
         window._barcodeDetector = null;
       }
 
-      // 3. Expõe funções de scan de código de barras para o Dart via js_util
-      //    (Retornam Promise<String|null> — Dart usa promiseToFuture())
+      // ── 3. Helpers ─────────────────────────────────────────────────────────
 
-      // ── Helper: ImageCapture (API nativa iOS 15.4+ / Chrome 59+) ─────────
-      // Permite capturar frames e fotos diretamente do MediaStreamTrack,
-      // contornando a restrição do iOS WebKit que impede leitura de canvas.
-      window._ic = null;
-      window._icTrack = null;
-      window._getImageCapture = function() {
-        try {
-          var video = document.querySelector('video');
-          if (!video || !video.srcObject) return null;
-          var tracks = video.srcObject.getVideoTracks();
-          if (!tracks || !tracks.length) return null;
-          var track = tracks[0];
-          if (!('ImageCapture' in window)) return null;
-          if (!window._ic || window._icTrack !== track || track.readyState !== 'live') {
-            window._ic = new ImageCapture(track);
-            window._icTrack = track;
-          }
-          return window._ic;
-        } catch(e) { return null; }
-      };
-
-      // ── Diagnóstico do stream (chamada síncrona, retorna string JSON) ─────
+      // Diagnóstico síncrono do stream (retorna JSON string)
       window._getStreamDiagnostics = function() {
         try {
           var video = document.querySelector('video');
@@ -122,121 +101,178 @@
         } catch(e) { return '{"err":"' + String(e.message || e) + '"}'; }
       };
 
-      // ── Scan contínuo do frame de vídeo (loop 800ms) ──────────────────────
-      // Prioriza ImageCapture.grabFrame() que funciona no iOS sem restrição de canvas.
-      window._scanCanvas = null;
-      window._zxingScanFrame = async function() {
-        if (!window._barcodeDetector) return null;
-        var video = document.querySelector('video');
-        if (!video || video.readyState < 2) return null;
-        var vw = video.videoWidth, vh = video.videoHeight;
-        if (!vw || !vh) return null;
-
-        // Estratégia 1: ImageCapture.grabFrame() — contorna restrição de canvas iOS
-        var ic = window._getImageCapture();
-        if (ic) {
-          try {
-            var frame = await ic.grabFrame();
-            if (frame) {
-              try {
-                var r = await window._barcodeDetector.detect(frame);
-                if (frame.close) frame.close();
-                if (r && r.length > 0) return r[0].rawValue;
-              } catch(e) { if (frame && frame.close) frame.close(); }
-            }
-          } catch(e) { /* grabFrame indisponível neste browser */ }
-        }
-
-        // Estratégia 2: detect() direto no elemento <video>
+      // Obtém (ou cria) instância de ImageCapture para o track ativo
+      window._ic = null; window._icTrack = null;
+      window._getImageCapture = function() {
         try {
-          var r2 = await window._barcodeDetector.detect(video);
-          if (r2 && r2.length > 0) return r2[0].rawValue;
-        } catch(_) {}
-
-        // Estratégia 3: canvas (pode ser branco no iOS, mas vale tentar)
-        try {
-          if (!window._scanCanvas) window._scanCanvas = document.createElement('canvas');
-          var c = window._scanCanvas;
-          if (c.width !== vw || c.height !== vh) { c.width = vw; c.height = vh; }
-          c.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0, vw, vh);
-          var r3 = await window._barcodeDetector.detect(c);
-          if (r3 && r3.length > 0) return r3[0].rawValue;
-        } catch(_) {}
-
-        return null;
+          var video = document.querySelector('video');
+          if (!video || !video.srcObject) return null;
+          var tracks = video.srcObject.getVideoTracks();
+          if (!tracks || !tracks.length) return null;
+          var track = tracks[0];
+          if (!('ImageCapture' in window)) return null;
+          if (!window._ic || window._icTrack !== track || track.readyState !== 'live') {
+            window._ic = new ImageCapture(track);
+            window._icTrack = track;
+          }
+          return window._ic;
+        } catch(e) { return null; }
       };
 
-      // ── Captura foto do stream atual e detecta (botão "Tirar foto") ───────
-      // Usa ImageCapture.takePhoto() para capturar foto de alta resolução
-      // SEM abrir a câmera nativa do iOS. Processa a imagem com BarcodeDetector.
-      window._captureAndScan = async function() {
-        if (!window._barcodeDetector) return 'ERR:no_detector';
-        var ic = window._getImageCapture();
-        if (!ic) return 'ERR:no_stream';
+      // ── 4. Detecta barcode em blob/file via img+canvas ─────────────────────
+      window._detectInBlob = function(blob, callback) {
+        if (!window._barcodeDetector) { callback(null); return; }
+        var url = URL.createObjectURL(blob);
+        var img = new Image();
+        img.onload = function() {
+          URL.revokeObjectURL(url);
+          var w = img.naturalWidth || img.width;
+          var h = img.naturalHeight || img.height;
+          if (!w || !h) { callback(null); return; }
 
-        var blob;
-        // 1. Tenta takePhoto() (alta resolução, melhor para detectar código)
-        try {
-          blob = await ic.takePhoto();
-        } catch(e) {
-          // takePhoto falhou — tenta grabFrame como fallback
-          console.warn('[EducaStock] takePhoto error:', e && e.message ? e.message : e);
-          try {
-            var frame = await ic.grabFrame();
-            if (frame) {
-              var r = await window._barcodeDetector.detect(frame);
-              if (frame.close) frame.close();
-              if (r && r.length > 0) return r[0].rawValue;
-            }
-          } catch(e2) {}
-          return 'ERR:capture_failed';
-        }
-
-        // 2. Processa o blob da foto: img → canvas → detect
-        return await new Promise(function(resolve) {
-          var url = URL.createObjectURL(blob);
-          var img = new Image();
-          img.onload = async function() {
-            URL.revokeObjectURL(url);
-            var w = img.naturalWidth || img.width;
-            var h = img.naturalHeight || img.height;
-
-            // Tenta detect direto no elemento img
-            try {
-              var r = await window._barcodeDetector.detect(img);
-              if (r && r.length > 0) { resolve(r[0].rawValue); return; }
-            } catch(_) {}
+          // Tenta detect direto no img (sem canvas — mais rápido)
+          window._barcodeDetector.detect(img).then(function(r) {
+            if (r && r.length > 0) { callback(r[0].rawValue); return; }
 
             // Canvas em resolução original
             var canvas = document.createElement('canvas');
             canvas.width = w; canvas.height = h;
             canvas.getContext('2d').drawImage(img, 0, 0);
-            try {
-              var r2 = await window._barcodeDetector.detect(canvas);
-              if (r2 && r2.length > 0) { resolve(r2[0].rawValue); return; }
-            } catch(_) {}
+            window._barcodeDetector.detect(canvas).then(function(r2) {
+              if (r2 && r2.length > 0) { callback(r2[0].rawValue); return; }
 
-            // Canvas reduzido a max 1920px (fotos muito grandes podem atrasar)
-            var scale = Math.min(1, 1920 / Math.max(w, h));
-            if (scale < 0.99) {
-              var sw = Math.round(w * scale), sh = Math.round(h * scale);
-              var small = document.createElement('canvas');
-              small.width = sw; small.height = sh;
-              small.getContext('2d').drawImage(canvas, 0, 0, sw, sh);
-              try {
-                var r3 = await window._barcodeDetector.detect(small);
-                if (r3 && r3.length > 0) { resolve(r3[0].rawValue); return; }
-              } catch(_) {}
-            }
-            resolve(null);
-          };
-          img.onerror = function() { URL.revokeObjectURL(url); resolve(null); };
-          img.src = url;
+              // Canvas reduzido (máx 1920px) para fotos muito grandes
+              var scale = Math.min(1, 1920 / Math.max(w, h));
+              if (scale < 0.99) {
+                var sw = Math.round(w * scale), sh = Math.round(h * scale);
+                var small = document.createElement('canvas');
+                small.width = sw; small.height = sh;
+                small.getContext('2d').drawImage(canvas, 0, 0, sw, sh);
+                window._barcodeDetector.detect(small).then(function(r3) {
+                  callback(r3 && r3.length > 0 ? r3[0].rawValue : null);
+                }, function() { callback(null); });
+              } else {
+                callback(null);
+              }
+            }, function() { callback(null); });
+          }, function() { callback(null); });
+        };
+        img.onerror = function() { URL.revokeObjectURL(url); callback(null); };
+        img.src = url;
+      };
+
+      // ── 5. Scan de frame de vídeo (loop contínuo) ─────────────────────────
+      // Chamado via callback (cb) — evita promiseToFuture no Dart.
+      // Prioriza grabFrame() que não tem restrição de canvas no iOS WebKit.
+      window._scanCanvas = null;
+      window._zxingScanFrameCb = function(cb) {
+        if (!window._barcodeDetector) { cb(null); return; }
+        var video = document.querySelector('video');
+        if (!video || video.readyState < 2) { cb(null); return; }
+        var vw = video.videoWidth, vh = video.videoHeight;
+        if (!vw || !vh) { cb(null); return; }
+
+        function tryCanvas() {
+          // Estratégia 3: canvas (pode retornar preto no iOS, mas tenta)
+          try {
+            if (!window._scanCanvas) window._scanCanvas = document.createElement('canvas');
+            var c = window._scanCanvas;
+            if (c.width !== vw || c.height !== vh) { c.width = vw; c.height = vh; }
+            c.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0, vw, vh);
+            window._barcodeDetector.detect(c).then(
+              function(r) { cb(r && r.length > 0 ? r[0].rawValue : null); },
+              function() { cb(null); }
+            );
+          } catch(e) { cb(null); }
+        }
+
+        function tryDirectVideo() {
+          // Estratégia 2: detect() direto no elemento <video>
+          window._barcodeDetector.detect(video).then(function(r) {
+            if (r && r.length > 0) { cb(r[0].rawValue); return; }
+            tryCanvas();
+          }, function() { tryCanvas(); });
+        }
+
+        // Estratégia 1: ImageCapture.grabFrame() — contorna restrição iOS
+        var ic = window._getImageCapture();
+        if (ic) {
+          ic.grabFrame().then(function(frame) {
+            if (!frame) { tryDirectVideo(); return; }
+            window._barcodeDetector.detect(frame).then(function(r) {
+              if (frame.close) frame.close();
+              if (r && r.length > 0) { cb(r[0].rawValue); return; }
+              tryDirectVideo();
+            }, function() {
+              if (frame && frame.close) frame.close();
+              tryDirectVideo();
+            });
+          }, function() { tryDirectVideo(); });
+        } else {
+          tryDirectVideo();
+        }
+      };
+
+      // ── 6. Captura foto e detecta (botão "Tirar foto") ────────────────────
+      // Chamado via callback (cb). Tenta ImageCapture.takePhoto() primeiro;
+      // se falhar, abre <input type=file capture=environment> como fallback.
+      window._captureAndScanCb = function(cb) {
+        if (!window._barcodeDetector) { cb('ERR:no_detector'); return; }
+
+        var ic = window._getImageCapture();
+
+        function fileInputFallback() {
+          // Fallback: abre câmera nativa para tirar foto
+          var input = document.createElement('input');
+          input.type = 'file'; input.accept = 'image/*';
+          input.setAttribute('capture', 'environment');
+          input.style.cssText = 'position:absolute;top:-9999px;left:-9999px;opacity:0;';
+          var settled = false;
+          function done(v) {
+            if (settled) return; settled = true;
+            document.removeEventListener('visibilitychange', onVis);
+            try { if (document.body.contains(input)) document.body.removeChild(input); } catch(_) {}
+            cb(v);
+          }
+          input.addEventListener('change', function() {
+            var file = input.files && input.files[0];
+            if (!file) { done(null); return; }
+            window._detectInBlob(file, done);
+          });
+          var wasHidden = false;
+          function onVis() {
+            if (document.hidden) { wasHidden = true; }
+            else if (wasHidden) { setTimeout(function() { done(null); }, 2000); }
+          }
+          document.addEventListener('visibilitychange', onVis);
+          document.body.appendChild(input);
+          input.click();
+        }
+
+        if (!ic) { fileInputFallback(); return; }
+
+        // Tenta takePhoto() — captura do stream atual sem abrir câmera nativa
+        ic.takePhoto().then(function(blob) {
+          window._detectInBlob(blob, cb);
+        }, function(err) {
+          console.warn('[EducaStock] takePhoto falhou:', err && err.message ? err.message : err);
+          // Tenta grabFrame como segundo recurso antes do fallback nativo
+          ic.grabFrame().then(function(frame) {
+            if (!frame) { fileInputFallback(); return; }
+            window._barcodeDetector.detect(frame).then(function(r) {
+              if (frame.close) frame.close();
+              if (r && r.length > 0) { cb(r[0].rawValue); return; }
+              fileInputFallback();
+            }, function() {
+              if (frame && frame.close) frame.close();
+              fileInputFallback();
+            });
+          }, function() { fileInputFallback(); });
         });
       };
 
-      // 4. Carrega Flutter SOMENTE após tudo estar pronto
-      const s = document.createElement('script');
+      // ── 7. Carrega Flutter SOMENTE após tudo pronto ────────────────────────
+      var s = document.createElement('script');
       s.src = 'flutter_bootstrap.js';
       document.body.appendChild(s);
     }
