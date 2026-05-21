@@ -54,6 +54,7 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   Timer? _heartbeat;
   Timer? _webScanTimer;
   Timer? _debounce;              // evita duplicatas em DetectionSpeed.normal
+  bool   _webScanBusy = false;  // evita scans web sobrepostos
   final List<_LogEntry> _logs = [];
 
   void _log(String msg, {bool isError = false}) {
@@ -88,14 +89,16 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   void _startWebScanLoop() {
     if (!kIsWeb) return;
     _webScanTimer?.cancel();
-    _log('🔁 Iniciando loop ZXing direto (iOS Safari mode)');
-    _webScanTimer = Timer.periodic(const Duration(milliseconds: 800), (_) {
+    _log('🔁 Iniciando loop ZXing (multi-estratégia)');
+    _webScanTimer = Timer.periodic(const Duration(milliseconds: 350), (_) {
       if (_navigating || !mounted) return;
       _doWebScan();
     });
   }
 
   Future<void> _doWebScan() async {
+    if (_webScanBusy) return;
+    _webScanBusy = true;
     _frameCount++;
     try {
       final barcode = await callWebScanFrame();
@@ -106,6 +109,8 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       }
     } catch (e) {
       _log('⚠️ ZXing erro: $e', isError: true);
+    } finally {
+      _webScanBusy = false;
     }
   }
 
