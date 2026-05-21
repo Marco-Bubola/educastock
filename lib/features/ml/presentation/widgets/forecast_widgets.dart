@@ -275,7 +275,7 @@ class _ForecastBar extends StatelessWidget {
         ),
         const SizedBox(width: 4),
         Text(
-          '${currentStock} / ${forecastMonthly.toStringAsFixed(0)}',
+          '$currentStock / ${forecastMonthly.toStringAsFixed(0)}',
           style: AppTypography.labelSmall.copyWith(
             color: color,
             fontWeight: FontWeight.w700,
