@@ -233,7 +233,7 @@ class _ReportsAppBar extends ConsumerWidget implements PreferredSizeWidget {
                   ),
                   Tab(
                     icon: Icon(Icons.psychology_rounded, size: 18),
-                    text: 'Risco ML',
+                    text: 'Risco',
                     height: 52,
                   ),
                   Tab(
@@ -881,22 +881,37 @@ class _ChartsTab extends ConsumerWidget {
             _InsightsPanel(insights: insights),
             const SizedBox(height: AppSpacing.xl),
 
-            // ─── Próximos a vencer
-            _SectionHeader(
-              title: 'Próximos a Vencer',
-              subtitle: 'Lotes vencendo nos próximos 30 dias',
-              icon: Icons.access_time_rounded,
-              color: AppColors.danger600,
-              count: exp30List.length,
+            // ─── Tips
+            _TabTipCard(
+              tips: const [
+                _TipItem(
+                  icon: Icons.show_chart_rounded,
+                  color: AppColors.brandPrimary600,
+                  title: 'Tendência Mensal',
+                  body: 'Toque nos pontos do gráfico de linha para ver o volume exato de entradas. Picos indicam meses com muitas doações.',
+                ),
+                _TipItem(
+                  icon: Icons.bar_chart_rounded,
+                  color: AppColors.warning600,
+                  title: 'Validade por Faixa',
+                  body: 'Barras vermelhas = lotes vencidos ou críticos. Priorize a distribuição imediata desses itens.',
+                ),
+                _TipItem(
+                  icon: Icons.pie_chart_rounded,
+                  color: AppColors.secondaryBlue600,
+                  title: 'Lotes por Origem',
+                  body: 'Entenda de onde vem o estoque. Se "Doação" dominar, reforce parcerias. Se "Compra" for alto, revise o orçamento.',
+                ),
+                _TipItem(
+                  icon: Icons.inventory_2_rounded,
+                  color: AppColors.success600,
+                  title: 'Top 5 Produtos',
+                  body: 'Produtos com maior estoque — úteis para planejar distribuições. Cruze com a previsão de consumo para evitar desperdício.',
+                ),
+              ],
+              isDark: isDark,
+              cs: cs,
             ),
-            const SizedBox(height: AppSpacing.sm),
-            if (exp30List.isEmpty)
-              const CasaEmptyState(
-                icon: Icons.check_circle_outline_rounded,
-                title: 'Nenhum item vencendo em 30 dias',
-              )
-            else
-              _ExpiryList(batches: exp30List, cs: cs, isDark: isDark),
           ],
         );
       },
@@ -1089,6 +1104,39 @@ class _MlRiskTab extends ConsumerWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         _MlLegend(isDark: isDark, cs: cs),
+        const SizedBox(height: AppSpacing.md),
+
+        // ─── Tips
+        _TabTipCard(
+          tips: const [
+            _TipItem(
+              icon: Icons.psychology_rounded,
+              color: AppColors.brandPrimary600,
+              title: 'Classificação por IA',
+              body: 'A IA analisa dias para vencer, quantidade e histórico para classificar cada lote. Lotes "Críticos" precisam de ação imediata.',
+            ),
+            _TipItem(
+              icon: Icons.bar_chart_rounded,
+              color: AppColors.secondaryBlue600,
+              title: 'Confiança do Modelo',
+              body: 'Barras mais altas = modelo mais certo. Confiança abaixo de 60% pode indicar dados insuficientes ou situação ambígua.',
+            ),
+            _TipItem(
+              icon: Icons.local_shipping_rounded,
+              color: AppColors.danger600,
+              title: 'Ação com Críticos',
+              body: 'Use "Distribuir Críticos" para registrar saídas imediatas. Reduza o risco distribuindo os lotes às famílias prioritárias.',
+            ),
+            _TipItem(
+              icon: Icons.memory_rounded,
+              color: AppColors.success600,
+              title: 'Melhorar o Modelo',
+              body: 'Quanto mais lotes registrados, mais preciso o modelo fica. Execute o Colab para retreinar com dados reais do Firestore.',
+            ),
+          ],
+          isDark: isDark,
+          cs: cs,
+        ),
       ],
     );
   }
@@ -1443,6 +1491,39 @@ class _MovementsTabState extends ConsumerState<_MovementsTab> {
               ],
             );
           },
+        ),
+        const SizedBox(height: AppSpacing.md),
+
+        // ─── Tips
+        _TabTipCard(
+          tips: const [
+            _TipItem(
+              icon: Icons.show_chart_rounded,
+              color: AppColors.brandPrimary600,
+              title: 'Entradas × Saídas',
+              body: 'Barras verdes = entradas no estoque. Barras vermelhas = saídas e descartes. Selecione períodos diferentes para comparar meses.',
+            ),
+            _TipItem(
+              icon: Icons.pie_chart_outline_rounded,
+              color: AppColors.danger600,
+              title: 'Perdas por Motivo',
+              body: 'Identifique os motivos de perda mais frequentes. Se "vencimento" dominar, use a IA de Risco para antecipar-se.',
+            ),
+            _TipItem(
+              icon: Icons.filter_list_rounded,
+              color: AppColors.secondaryBlue600,
+              title: 'Filtros de Tipo',
+              body: 'Use os chips de filtro para ver apenas Entradas, Saídas ou Descartes. Combine com o seletor de período para análises precisas.',
+            ),
+            _TipItem(
+              icon: Icons.date_range_rounded,
+              color: AppColors.success600,
+              title: 'Período Personalizado',
+              body: 'Toque em "Personalizado" para selecionar qualquer intervalo de datas. Ideal para auditorias mensais ou trimestrais.',
+            ),
+          ],
+          isDark: isDark,
+          cs: cs,
         ),
       ],
     );
@@ -3071,6 +3152,200 @@ class _MlLegend extends StatelessWidget {
 
 // ─── Grid de resumo ───────────────────────────────────────────────────────
 
+// ─── Shared: Tab Tip Card ─────────────────────────────────────────────────
+
+@immutable
+class _TipItem {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String body;
+
+  const _TipItem({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.body,
+  });
+}
+
+class _TabTipCard extends StatefulWidget {
+  final List<_TipItem> tips;
+  final bool isDark;
+  final ColorScheme cs;
+
+  const _TabTipCard({
+    required this.tips,
+    required this.isDark,
+    required this.cs,
+  });
+
+  @override
+  State<_TabTipCard> createState() => _TabTipCardState();
+}
+
+class _TabTipCardState extends State<_TabTipCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = widget.cs;
+    final isDark = widget.isDark;
+
+    return AnimatedCrossFade(
+      duration: const Duration(milliseconds: 280),
+      crossFadeState:
+          _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+      firstChild: _buildCollapsed(cs, isDark),
+      secondChild: _buildExpanded(cs, isDark),
+    );
+  }
+
+  Widget _buildCollapsed(ColorScheme cs, bool isDark) {
+    return GestureDetector(
+      onTap: () => setState(() => _expanded = true),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: AppColors.secondaryBlue600.withValues(alpha: isDark ? 0.10 : 0.06),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+              color: AppColors.secondaryBlue600.withValues(alpha: 0.22)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.lightbulb_rounded,
+                size: 16, color: AppColors.secondaryBlue600),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                '${widget.tips.length} dicas para esta aba — toque para expandir',
+                style: AppTypography.labelSmall.copyWith(
+                  color: AppColors.secondaryBlue600,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            Icon(Icons.keyboard_arrow_down_rounded,
+                size: 16, color: AppColors.secondaryBlue600),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpanded(ColorScheme cs, bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.secondaryBlue600.withValues(alpha: isDark ? 0.08 : 0.04),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+            color: AppColors.secondaryBlue600.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header row
+          GestureDetector(
+            onTap: () => setState(() => _expanded = false),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+              child: Row(
+                children: [
+                  Icon(Icons.lightbulb_rounded,
+                      size: 16, color: AppColors.secondaryBlue600),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      'Dicas para esta aba',
+                      style: AppTypography.labelSmall.copyWith(
+                        color: AppColors.secondaryBlue600,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.keyboard_arrow_up_rounded,
+                      size: 16, color: AppColors.secondaryBlue600),
+                ],
+              ),
+            ),
+          ),
+          Divider(
+            height: 1,
+            color: AppColors.secondaryBlue600.withValues(alpha: 0.18),
+          ),
+          // Tip items
+          ...widget.tips.asMap().entries.map((e) {
+            final tip = e.value;
+            final isLast = e.key == widget.tips.length - 1;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: tip.color.withValues(
+                              alpha: isDark ? 0.18 : 0.10),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.small),
+                        ),
+                        child: Icon(tip.icon, size: 15, color: tip.color),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              tip.title,
+                              style: AppTypography.labelSmall.copyWith(
+                                color: cs.onSurface,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              tip.body,
+                              style: AppTypography.bodySmall.copyWith(
+                                color: cs.onSurfaceVariant,
+                                fontSize: 11,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isLast)
+                  Divider(
+                    height: 1,
+                    indent: AppSpacing.md + 30 + AppSpacing.sm,
+                    color: cs.outlineVariant.withValues(alpha: 0.3),
+                  ),
+              ],
+            );
+          }),
+          const SizedBox(height: AppSpacing.xs),
+        ],
+      ),
+    );
+  }
+}
+
 // ─── ML Risk: Actions Row ─────────────────────────────────────────────────
 
 class _MlRiskActionsRow extends ConsumerWidget {
@@ -3572,6 +3847,39 @@ class _ForecastReportTab extends ConsumerWidget {
               ),
           ],
         ],
+
+        const SizedBox(height: AppSpacing.md),
+        // ─── Tips
+        _TabTipCard(
+          tips: const [
+            _TipItem(
+              icon: Icons.science_rounded,
+              color: AppColors.brandPrimary600,
+              title: 'Como gerar previsões',
+              body: 'Abra o arquivo scripts/ml/consumption_forecast.ipynb no Google Colab. Siga os passos para conectar ao Firestore e treinar o modelo Prophet.',
+            ),
+            _TipItem(
+              icon: Icons.trending_up_rounded,
+              color: AppColors.secondaryBlue600,
+              title: 'Entendendo as Tendências',
+              body: 'Crescente = consumo está aumentando — antecipe-se com mais estoque. Decrescente = consumo caindo — cuidado com excesso e vencimento.',
+            ),
+            _TipItem(
+              icon: Icons.bar_chart_rounded,
+              color: AppColors.warning600,
+              title: 'Cobertura de Estoque',
+              body: 'A barra azul mostra o estoque atual; a verde mostra o quanto deve ser consumido em 30 dias. Se azul < verde, precisa repor.',
+            ),
+            _TipItem(
+              icon: Icons.add_shopping_cart_rounded,
+              color: AppColors.success600,
+              title: 'Gerar Pedido de Compra',
+              body: 'Toque em "Gerar Pedido" para exportar um CSV com todos os produtos que precisam de reposição, incluindo a quantidade sugerida.',
+            ),
+          ],
+          isDark: isDark,
+          cs: cs,
+        ),
       ],
     );
   }
