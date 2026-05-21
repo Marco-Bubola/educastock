@@ -5,6 +5,7 @@ class ProductApiResult {
   final String? brand;
   final String? category;
   final String? imageUrl;
+  final String? description;
   final String barcode;
   final bool found;
 
@@ -13,6 +14,7 @@ class ProductApiResult {
     this.brand,
     this.category,
     this.imageUrl,
+    this.description,
     required this.barcode,
     required this.found,
   });
@@ -71,6 +73,10 @@ class OpenFoodFactsDatasource {
           final category = _mapCategory(categoryTags);
           final imageUrl = product['image_front_url'] as String?;
 
+          final genericName = _firstNonEmpty([
+            product['generic_name_pt'] as String?,
+            product['generic_name'] as String?,
+          ]);
           return ProductApiResult(
             barcode: barcode,
             found: true,
@@ -78,6 +84,9 @@ class OpenFoodFactsDatasource {
             brand: brand?.split(',').first.trim(),
             category: category,
             imageUrl: imageUrl,
+            description: (genericName != null && genericName != name)
+                ? genericName
+                : null,
           );
         }
       }
@@ -104,6 +113,7 @@ class OpenFoodFactsDatasource {
                 (item['images'] as List).isNotEmpty
             ? (item['images'] as List).first as String?
             : null;
+        final desc = item['description'] as String?;
         return ProductApiResult(
           barcode: barcode,
           found: title != null && title.trim().isNotEmpty,
@@ -111,6 +121,7 @@ class OpenFoodFactsDatasource {
           brand: brand,
           category: category,
           imageUrl: imageUrl,
+          description: (desc != null && desc.trim().isNotEmpty) ? desc.trim() : null,
         );
       }
     } on DioException {
@@ -141,6 +152,7 @@ class OpenFoodFactsDatasource {
                 (item['images'] as List).isNotEmpty
             ? (item['images'] as List).first as String?
             : null;
+        final desc = item['description'] as String?;
         return ProductApiResult(
           barcode: barcode,
           found: name != null && name.trim().isNotEmpty,
@@ -148,6 +160,7 @@ class OpenFoodFactsDatasource {
           brand: brand,
           category: category,
           imageUrl: imageUrl,
+          description: (desc != null && desc.trim().isNotEmpty) ? desc.trim() : null,
         );
       }
     } on DioException {
