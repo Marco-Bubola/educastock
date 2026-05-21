@@ -34,50 +34,47 @@
 </head>
 <body>
   <!--
-    Passo 1: carrega ZBar WASM + polyfill BarcodeDetector como scripts síncronos.
-    A ordem importa: zbar-wasm ANTES do polyfill.
-    Após execução, `window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill` está disponível.
+    Passo 1: carrega ZXing (pure-JS barcode decoder, sem WASM, funciona no iOS).
+    Expõe: ZXing.MultiFormatReader, ZXing.HTMLCanvasElementLuminanceSource, etc.
   -->
-  <script src="https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/index.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.21/dist/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 
   <script>
-    async function _bootstrapApp() {
+    function _bootstrapApp() {
 
-      // ── 1. Instala BarcodeDetector se necessário ───────────────────────────
-      if (!('BarcodeDetector' in window)) {
-        try {
-          // Polyfill já foi carregado pelos <script> acima.
-          // A variável global é 'barcodeDetectorPolyfill' com a classe dentro.
-          var BDP = (typeof barcodeDetectorPolyfill !== 'undefined')
-            ? (barcodeDetectorPolyfill.BarcodeDetectorPolyfill || barcodeDetectorPolyfill.BarcodeDetector)
-            : null;
-          if (BDP) {
-            window.BarcodeDetector = BDP;
-            console.log('[EducaStock] BarcodeDetectorPolyfill instalado ✅');
-          } else {
-            console.error('[EducaStock] barcodeDetectorPolyfill global não encontrado');
-          }
-        } catch (e) {
-          console.error('[EducaStock] Erro instalando polyfill:', e);
-        }
-      } else {
-        console.log('[EducaStock] BarcodeDetector nativo disponível ✅');
-      }
-
-      // ── 2. Cria instância do detector ──────────────────────────────────────
+      // ── 1. Inicializa ZXing MultiFormatReader ─────────────────────────────
+      window._zxingReady = false;
       try {
-        window._barcodeDetector = new window.BarcodeDetector({
-          formats: [
-            'ean_13', 'ean_8', 'code_128', 'qr_code',
-            'upc_a', 'upc_e', 'code_39', 'code_93', 'itf'
-          ]
-        });
-        console.log('[EducaStock] _barcodeDetector criado ✅');
-      } catch (e) {
-        console.error('[EducaStock] _barcodeDetector init falhou:', e);
-        window._barcodeDetector = null;
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+          ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.CODE_128,
+          ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.UPC_A,
+          ZXing.BarcodeFormat.UPC_E, ZXing.BarcodeFormat.ITF,
+        ]);
+        window._zxingReader = new ZXing.MultiFormatReader();
+        window._zxingReader.setHints(hints);
+        window._zxingReady = true;
+        console.log('[EducaStock] ZXing MultiFormatReader pronto ✅');
+      } catch(e) {
+        console.error('[EducaStock] ZXing init falhou:', e);
+        window._zxingReader = null;
       }
+
+      // ── 2. Decode síncrono de canvas ──────────────────────────────────────
+      window._zxingDecodeCanvas = function(canvas) {
+        if (!window._zxingReader) return null;
+        try {
+          var lum = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+          var bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+          var r = window._zxingReader.decode(bmp);
+          return r ? r.getText() : null;
+        } catch(e) {
+          // NotFoundException é lançada quando não há código — normal
+          return null;
+        }
+      };
 
       // ── 3. Helpers ─────────────────────────────────────────────────────────
 
@@ -96,7 +93,7 @@
             tracks: tracks.length,
             tState: tracks.length > 0 ? tracks[0].readyState : 'none',
             IC: ('ImageCapture' in window),
-            det: !!window._barcodeDetector
+            zx: window._zxingReady
           });
         } catch(e) { return '{"err":"' + String(e.message || e) + '"}'; }
       };
@@ -119,9 +116,9 @@
         } catch(e) { return null; }
       };
 
-      // ── 4. Detecta barcode em blob/file via img+canvas ─────────────────────
+      // ── 4. Detecta barcode em blob/file via img → canvas → ZXing ──────────
       window._detectInBlob = function(blob, callback) {
-        if (!window._barcodeDetector) { callback(null); return; }
+        if (!window._zxingReader) { callback(null); return; }
         var url = URL.createObjectURL(blob);
         var img = new Image();
         img.onload = function() {
@@ -130,110 +127,82 @@
           var h = img.naturalHeight || img.height;
           if (!w || !h) { callback(null); return; }
 
-          // Tenta detect direto no img (sem canvas — mais rápido)
-          window._barcodeDetector.detect(img).then(function(r) {
-            if (r && r.length > 0) { callback(r[0].rawValue); return; }
+          // Tenta resolução original
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          var result = window._zxingDecodeCanvas(canvas);
+          if (result) { callback(result); return; }
 
-            // Canvas em resolução original
-            var canvas = document.createElement('canvas');
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0);
-            window._barcodeDetector.detect(canvas).then(function(r2) {
-              if (r2 && r2.length > 0) { callback(r2[0].rawValue); return; }
+          // Tenta escala reduzida (máx 1920px) para fotos muito grandes
+          var scale = Math.min(1, 1920 / Math.max(w, h));
+          if (scale < 0.99) {
+            var sw = Math.round(w * scale), sh = Math.round(h * scale);
+            var small = document.createElement('canvas');
+            small.width = sw; small.height = sh;
+            small.getContext('2d').drawImage(img, 0, 0, sw, sh);
+            var r2 = window._zxingDecodeCanvas(small);
+            if (r2) { callback(r2); return; }
+          }
 
-              // Canvas reduzido (máx 1920px) para fotos muito grandes
-              var scale = Math.min(1, 1920 / Math.max(w, h));
-              if (scale < 0.99) {
-                var sw = Math.round(w * scale), sh = Math.round(h * scale);
-                var small = document.createElement('canvas');
-                small.width = sw; small.height = sh;
-                small.getContext('2d').drawImage(canvas, 0, 0, sw, sh);
-                window._barcodeDetector.detect(small).then(function(r3) {
-                  callback(r3 && r3.length > 0 ? r3[0].rawValue : null);
-                }, function() { callback(null); });
-              } else {
-                callback(null);
-              }
-            }, function() { callback(null); });
-          }, function() { callback(null); });
+          callback(null);
         };
         img.onerror = function() { URL.revokeObjectURL(url); callback(null); };
         img.src = url;
       };
 
       // ── 5. Scan de frame de vídeo (loop contínuo) ─────────────────────────
-      // Chamado via callback (cb) — evita promiseToFuture no Dart.
-      // Prioriza grabFrame() que não tem restrição de canvas no iOS WebKit.
-      window._scanCanvas = null;
+      // ZXing é síncrono — sem promise chains problemáticas no iOS.
+      // grabFrame() → canvas fresh (não tainted) → ZXing.decode
       window._zxingScanFrameCb = function(cb) {
-        if (!window._barcodeDetector) { cb(null); return; }
+        if (!window._zxingReader) { cb(null); return; }
         var video = document.querySelector('video');
         if (!video || video.readyState < 2) { cb(null); return; }
         var vw = video.videoWidth, vh = video.videoHeight;
         if (!vw || !vh) { cb(null); return; }
 
-        function tryCanvas() {
-          // Estratégia 3: canvas (pode retornar preto no iOS, mas tenta)
+        function decodeFromVideo() {
+          // Último recurso: canvas desenhado diretamente do <video>
+          // (pode ser preto no iOS WebKit, mas tenta)
           try {
-            if (!window._scanCanvas) window._scanCanvas = document.createElement('canvas');
-            var c = window._scanCanvas;
-            if (c.width !== vw || c.height !== vh) { c.width = vw; c.height = vh; }
-            c.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0, vw, vh);
-            window._barcodeDetector.detect(c).then(
-              function(r) { cb(r && r.length > 0 ? r[0].rawValue : null); },
-              function() { cb(null); }
-            );
+            var c = document.createElement('canvas');
+            c.width = vw; c.height = vh;
+            c.getContext('2d').drawImage(video, 0, 0, vw, vh);
+            cb(window._zxingDecodeCanvas(c));
           } catch(e) { cb(null); }
         }
 
-        function tryDirectVideo() {
-          // Estratégia 2: detect() direto no elemento <video>
-          window._barcodeDetector.detect(video).then(function(r) {
-            if (r && r.length > 0) { cb(r[0].rawValue); return; }
-            tryCanvas();
-          }, function() { tryCanvas(); });
-        }
-
-        // Estratégia 1: ImageCapture.grabFrame() → canvas fresh (NÃO tainted no iOS)
-        // CRÍTICO: um canvas desenhado a partir de ImageBitmap NÃO herda a taint
-        // do video element. A restrição do iOS WebKit só se aplica quando se faz
-        // canvas.drawImage(videoElement) diretamente. Com ImageBitmap de grabFrame()
-        // o canvas permanece limpo e getImageData() funciona normalmente.
+        // Preferência: grabFrame() → ImageBitmap → canvas fresh
+        // Canvas de ImageBitmap NÃO é tainted no iOS WebKit.
         var ic = window._getImageCapture();
         if (ic) {
           ic.grabFrame().then(function(frame) {
-            if (!frame) { tryDirectVideo(); return; }
+            if (!frame) { decodeFromVideo(); return; }
             try {
-              var fw = frame.width || vw;
-              var fh = frame.height || vh;
               var fc = document.createElement('canvas');
-              fc.width = fw; fc.height = fh;
+              fc.width = frame.width || vw;
+              fc.height = frame.height || vh;
               fc.getContext('2d').drawImage(frame, 0, 0);
               if (frame.close) frame.close();
-              window._barcodeDetector.detect(fc).then(function(r) {
-                if (r && r.length > 0) { cb(r[0].rawValue); return; }
-                tryDirectVideo();
-              }, function() { tryDirectVideo(); });
+              var result = window._zxingDecodeCanvas(fc);
+              cb(result);
             } catch(e) {
               if (frame && frame.close) frame.close();
-              tryDirectVideo();
+              decodeFromVideo();
             }
-          }, function() { tryDirectVideo(); });
+          }, function() { decodeFromVideo(); });
         } else {
-          tryDirectVideo();
+          decodeFromVideo();
         }
       };
 
       // ── 6. Captura foto e detecta (botão "Tirar foto") ────────────────────
-      // Chamado via callback (cb). Tenta ImageCapture.takePhoto() primeiro;
-      // se falhar, abre <input type=file capture=environment> como fallback.
       window._captureAndScanCb = function(cb) {
-        if (!window._barcodeDetector) { cb('ERR:no_detector'); return; }
+        if (!window._zxingReader) { cb('ERR:no_detector'); return; }
 
         var ic = window._getImageCapture();
 
         function fileInputFallback() {
-          // Fallback: abre câmera nativa para tirar foto
           var input = document.createElement('input');
           input.type = 'file'; input.accept = 'image/*';
           input.setAttribute('capture', 'environment');
@@ -262,29 +231,28 @@
 
         if (!ic) { fileInputFallback(); return; }
 
-        // Tenta takePhoto() — captura do stream atual sem abrir câmera nativa
+        // takePhoto() captura em alta resolução sem abrir câmera nativa
         ic.takePhoto().then(function(blob) {
-          window._detectInBlob(blob, cb);
+          window._detectInBlob(blob, function(result) {
+            if (result) { cb(result); return; }
+            // takePhoto deu imagem mas não detectou — tenta grabFrame como fallback
+            ic.grabFrame().then(function(frame) {
+              if (!frame) { cb(null); return; }
+              try {
+                var fc = document.createElement('canvas');
+                fc.width = frame.width; fc.height = frame.height;
+                fc.getContext('2d').drawImage(frame, 0, 0);
+                if (frame.close) frame.close();
+                cb(window._zxingDecodeCanvas(fc));
+              } catch(e) {
+                if (frame && frame.close) frame.close();
+                cb(null);
+              }
+            }, function() { cb(null); });
+          });
         }, function(err) {
           console.warn('[EducaStock] takePhoto falhou:', err && err.message ? err.message : err);
-          // Tenta grabFrame como segundo recurso antes do fallback nativo
-          ic.grabFrame().then(function(frame) {
-            if (!frame) { fileInputFallback(); return; }
-            try {
-              var fw = frame.width; var fh = frame.height;
-              var fc = document.createElement('canvas');
-              fc.width = fw; fc.height = fh;
-              fc.getContext('2d').drawImage(frame, 0, 0);
-              if (frame.close) frame.close();
-              window._barcodeDetector.detect(fc).then(function(r) {
-                if (r && r.length > 0) { cb(r[0].rawValue); return; }
-                fileInputFallback();
-              }, function() { fileInputFallback(); });
-            } catch(e) {
-              if (frame && frame.close) frame.close();
-              fileInputFallback();
-            }
-          }, function() { fileInputFallback(); });
+          fileInputFallback();
         });
       };
 
