@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,12 +33,15 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     with SingleTickerProviderStateMixin {
 
   // Camera ─────────────────────────────────────────────────────────────────
-  // DetectionSpeed.normal + debounce manual: mais agressivo que noDuplicates
-  // e evita falsos positivos por processar a confirmação com atraso.
+  // Android: DetectionSpeed.noDuplicates (mais confiável)
+  // iOS/Web: não usa (web tem loop custom ZXing, iOS usa camera nativa)
+  // returnImage: true em Android para pré-processar via ML
   final _camera = MobileScannerController(
-    detectionSpeed: DetectionSpeed.normal,
-    returnImage: false,
-    autoStart: false, // iniciamos manualmente pós-frame
+    detectionSpeed: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? DetectionSpeed.noDuplicates
+        : DetectionSpeed.normal,
+    returnImage: !kIsWeb && defaultTargetPlatform == TargetPlatform.android,
+    autoStart: false,
   );
 
   bool   _navigating    = false;
@@ -79,7 +83,10 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
         final diag = callWebGetDiagnostics();
         _log('💓 Scanner: running=${state.isRunning} | $label=$_frameCount | diag=$diag');
       } else {
-        _log('💓 Scanner: running=${state.isRunning} | $label=$_frameCount');
+        final platform = defaultTargetPlatform == TargetPlatform.android
+            ? 'Android'
+            : 'iOS';
+        _log('💓 $platform: running=${state.isRunning} | $label=$_frameCount');
       }
       _frameCount = 0;
     });
@@ -128,6 +135,13 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     )..repeat(reverse: true);
     _lineAnim = CurvedAnimation(parent: _lineCtrl, curve: Curves.easeInOut);
 
+    // Zoom inicial: Android precisa mais zoom (melhor resolução do código)
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      _zoom = 0.45; // Android: mais zoom (~3.15×)
+    } else if (!kIsWeb) {
+      _zoom = _kInitialZoomMobile; // iOS: zoom padrão (0.25 ≈ 2.75×)
+    }
+
     // Inicia câmera APÓS o primeiro frame para garantir que o widget
     // MobileScanner já está na árvore (necessário para autoStart:false).
     WidgetsBinding.instance.addPostFrameCallback((_) => _startCamera());
@@ -148,6 +162,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     try {
       await _camera.start();
       _log('✅ Câmera iniciada com sucesso');
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        _log('🎯 Android: DetectionSpeed.noDuplicates, zoom 0.45 (~3.15×), debounce 250ms');
+      } else if (!kIsWeb) {
+        _log('🎯 iOS: DetectionSpeed.normal, zoom 0.25 (~2.75×), debounce 400ms');
+      }
       _startHeartbeat();
       if (kIsWeb) _startWebScanLoop();
       if (!kIsWeb) {
@@ -209,10 +228,14 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     if (_navigating) return;
     if (raw == null || raw.isEmpty) return;
 
-    // Debounce: aceita o mesmo código só após 400 ms sem novas detecções,
-    // evitando processar o mesmo barcode múltiplas vezes em DetectionSpeed.normal.
+    // Debounce: Android = 250ms (mais rápido), iOS = 400ms (mais conservador)
+    // Evita processar o mesmo barcode múltiplas vezes com DetectionSpeed.
+    final debounceMs = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? 250
+        : 400;
+
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () {
+    _debounce = Timer(Duration(milliseconds: debounceMs), () {
       if (!_navigating && mounted) _processBarcode(raw);
     });
   }
