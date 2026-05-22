@@ -37,12 +37,27 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
   // Camera ─────────────────────────────────────────────────────────────────
   // Nativo (Android + iOS): noDuplicates — o SDK nativo gerencia deduplicação
-  // e entrega cada barcode apenas uma vez, sem precisar de debounce agressivo.
-  // Web: DetectionSpeed.normal — o loop ZXing customizado já tem busy-guard.
+  // e entrega cada barcode apenas uma vez, sem debounce agressivo.
+  // Web: DetectionSpeed.normal — o loop ZXing customizado tem busy-guard próprio.
+  //
+  // formats: limita aos formatos usados em produtos de ONG brasileira.
+  // Isso evita que o ML Kit (Android) e Vision (iOS) rodem todos os algoritmos
+  // a cada frame — impacto direto na velocidade de detecção e no uso de CPU.
   final _camera = MobileScannerController(
     detectionSpeed: kIsWeb ? DetectionSpeed.normal : DetectionSpeed.noDuplicates,
     returnImage: false,
     autoStart: false,
+    formats: const [
+      BarcodeFormat.ean13,
+      BarcodeFormat.ean8,
+      BarcodeFormat.upcA,
+      BarcodeFormat.upcE,
+      BarcodeFormat.code128,
+      BarcodeFormat.code39,
+      BarcodeFormat.qrCode,
+      BarcodeFormat.itf,
+      BarcodeFormat.dataMatrix,
+    ],
   );
 
   bool   _navigating    = false;
@@ -67,12 +82,11 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     final ts  = '${now.hour.toString().padLeft(2,'0')}:'
                 '${now.minute.toString().padLeft(2,'0')}:'
                 '${now.second.toString().padLeft(2,'0')}';
-    if (mounted) {
-      setState(() {
-        _logs.insert(0, _LogEntry(ts: ts, msg: msg, isError: isError));
-        if (_logs.length > 40) _logs.removeLast();
-      });
-    }
+    // Sempre grava em memória, mas só dispara setState quando o painel está aberto.
+    // Evita rebuilds da árvore toda na frequência dos frames da câmera.
+    _logs.insert(0, _LogEntry(ts: ts, msg: msg, isError: isError));
+    if (_logs.length > 40) _logs.removeLast();
+    if (_showDebugLog && mounted) setState(() {});
   }
 
   void _startHeartbeat() {
@@ -219,17 +233,21 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
   // ── Detecção contínua ────────────────────────────────────────────────────
   void _onDetect(BarcodeCapture capture) {
     _frameCount++;
-    final raw = capture.barcodes.firstOrNull?.rawValue;
-    if (capture.barcodes.isNotEmpty || _frameCount % 10 == 0) {
+
+    // Log de frame: só quando o painel de debug está visível.
+    // SEM esse guard, _log → setState toda frame → jank na animação do Android.
+    if (_showDebugLog && (capture.barcodes.isNotEmpty || _frameCount % 10 == 0)) {
+      final dbgRaw = capture.barcodes.firstOrNull?.rawValue;
       _log('📡 Frame #$_frameCount | barcodes: ${capture.barcodes.length}'
-          '${raw != null ? " | valor: $raw" : ""}');
+          '${dbgRaw != null ? " | valor: $dbgRaw" : ""}');
     }
 
     if (_navigating) return;
+    final raw = capture.barcodes.firstOrNull?.rawValue;
     if (raw == null || raw.isEmpty) return;
 
-    // noDuplicates já garante que o mesmo barcode não chega duas vezes seguidas.
-    // Debounce leve (150ms) apenas para estabilidade da UI (evita double-tap acidental).
+    // noDuplicates garante que o mesmo barcode não chega duas vezes seguidas.
+    // Debounce leve (150ms) apenas para estabilidade da UI.
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 150), () {
       if (!_navigating && mounted) _processBarcode(raw);
@@ -713,14 +731,18 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
 
             // ── Overlay escuro + cantos + linha de scan ──────────────────
-            AnimatedBuilder(
-              animation: _lineAnim,
-              builder: (_, __) => CustomPaint(
-                size: Size(sw, sh),
-                painter: _ScanOverlayPainter(
-                  scanWindow: scanWin,
-                  lineProgress: _lineAnim.value,
-                  detected: _detected,
+            // RepaintBoundary isola a animação do resto da árvore:
+            // qualquer rebuild do Scaffold não repinta o overlay, e vice-versa.
+            RepaintBoundary(
+              child: AnimatedBuilder(
+                animation: _lineAnim,
+                builder: (_, __) => CustomPaint(
+                  size: Size(sw, sh),
+                  painter: _ScanOverlayPainter(
+                    scanWindow: scanWin,
+                    lineProgress: _lineAnim.value,
+                    detected: _detected,
+                  ),
                 ),
               ),
             ),
