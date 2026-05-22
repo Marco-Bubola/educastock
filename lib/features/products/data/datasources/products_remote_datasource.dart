@@ -71,6 +71,10 @@ class ProductsRemoteDatasource {
     return product.id;
   }
 
+  Future<void> updateImageUrl(String productId, String imageUrl) async {
+    await _col.doc(productId).update({'imageUrl': imageUrl});
+  }
+
   Future<void> deleteProduct(String id) async {
     await _col.doc(id).update({'isActive': false});
   }
