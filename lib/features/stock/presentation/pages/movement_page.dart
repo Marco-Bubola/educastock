@@ -404,8 +404,13 @@ class _MovementPageState extends ConsumerState<MovementPage> {
       floatingActionButton: _mode == _OutputMode.products
           ? KeyedSubtree(
               key: _keyConfirmFab,
-              child: _ConfirmFab(
+              child: _ConfirmFabWithSummary(
                 isLoading: _isLoading,
+                selectedCount: _selectedQtyByProduct.values
+                    .where((v) => v > 0)
+                    .length,
+                totalUnits: _selectedQtyByProduct.values
+                    .fold(0, (s, v) => s + v),
                 label: 'Confirmar Distribuição',
                 icon: Icons.outbound_rounded,
                 onPressed: () => _openSummary(productsAsync.valueOrNull ?? []),
@@ -414,8 +419,10 @@ class _MovementPageState extends ConsumerState<MovementPage> {
           : recipesAsync.valueOrNull?.any((r) => r.id == _selectedRecipeId) == true
               ? KeyedSubtree(
                   key: _keyConfirmFab,
-                  child: _ConfirmFab(
+                  child: _ConfirmFabWithSummary(
                     isLoading: _isLoading,
+                    selectedCount: 1,
+                    totalUnits: 0,
                     label: 'Executar Receita',
                     icon: Icons.play_arrow_rounded,
                     onPressed: () {
@@ -740,71 +747,156 @@ class _MovementPageState extends ConsumerState<MovementPage> {
   }
 }
 
-// ─── FAB de confirmação ────────────────────────────────────────────────────
+// ─── FAB de confirmação com resumo de seleção ─────────────────────────────
 
-class _ConfirmFab extends StatelessWidget {
+class _ConfirmFabWithSummary extends StatelessWidget {
   final bool isLoading;
+  final int selectedCount;
+  final int totalUnits;
   final String label;
   final IconData icon;
   final VoidCallback? onPressed;
-  const _ConfirmFab(
-      {required this.isLoading,
-      required this.label,
-      required this.icon,
-      required this.onPressed});
+
+  const _ConfirmFabWithSummary({
+    required this.isLoading,
+    required this.selectedCount,
+    required this.totalUnits,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final hasItems = selectedCount > 0;
+    final isDisabled = !hasItems || isLoading;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: onPressed == null || isLoading
-                ? null
-                : const LinearGradient(colors: [
-                    AppColors.brandPrimary600,
-                    AppColors.secondaryBlue600
-                  ]),
-            color:
-                onPressed == null || isLoading ? AppColors.neutral500 : null,
-            borderRadius: BorderRadius.circular(AppRadius.button),
-            boxShadow: onPressed == null
-                ? []
-                : [
-                    BoxShadow(
-                        color: AppColors.brandPrimary600
-                            .withValues(alpha: 0.35),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4))
-                  ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Strip de resumo (aparece quando há itens selecionados) ──
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            child: hasItems
+                ? Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.brandPrimary500.withValues(alpha: 0.35)),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 12, offset: const Offset(0, 4)),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.brandPrimary600.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.shopping_basket_rounded, color: Color(0xFF60A5FA), size: 16),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              children: [
+                                TextSpan(
+                                  text: '$selectedCount produto${selectedCount != 1 ? 's' : ''}',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                                ),
+                                const TextSpan(text: '  ·  '),
+                                TextSpan(
+                                  text: '$totalUnits unidade${totalUnits != 1 ? 's' : ''}',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                                ),
+                                const TextSpan(text: ' selecionadas'),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.success600.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.success600.withValues(alpha: 0.30)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.check_rounded, size: 12, color: AppColors.success600),
+                              const SizedBox(width: 4),
+                              Text('Pronto', style: AppTypography.labelSmall.copyWith(color: AppColors.success600, fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
           ),
-          child: ElevatedButton.icon(
-            onPressed: isLoading ? null : onPressed,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.button)),
-            ),
-            icon: isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2))
-                : Icon(icon, size: 20, color: Colors.white),
-            label: Text(
-              label,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15),
+          // ── Botão principal ──
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: isDisabled
+                    ? null
+                    : const LinearGradient(
+                        colors: [Color(0xFF1D4ED8), Color(0xFF2563EB), Color(0xFF0EA5E9)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                color: isDisabled ? const Color(0xFFD1D5DB) : null,
+                borderRadius: BorderRadius.circular(AppRadius.button),
+                boxShadow: isDisabled
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.45),
+                          blurRadius: 16,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+              ),
+              child: ElevatedButton.icon(
+                onPressed: isDisabled ? null : onPressed,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                ),
+                icon: isLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      )
+                    : Icon(icon, size: 20, color: isDisabled ? AppColors.neutral500 : Colors.white),
+                label: Text(
+                  label,
+                  style: TextStyle(
+                    color: isDisabled ? AppColors.neutral500 : Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
