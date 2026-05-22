@@ -15,6 +15,16 @@ import '../controllers/products_provider.dart';
 
 enum _SortMode { name, category, perishable }
 
+IconData _categoryIcon(ProductCategory cat) => switch (cat) {
+  ProductCategory.alimento       => Icons.restaurant_rounded,
+  ProductCategory.bebida         => Icons.local_drink_rounded,
+  ProductCategory.limpeza        => Icons.cleaning_services_rounded,
+  ProductCategory.higienePessoal => Icons.soap_rounded,
+  ProductCategory.escolar        => Icons.auto_stories_rounded,
+  ProductCategory.roupas         => Icons.checkroom_rounded,
+  ProductCategory.outro          => Icons.category_rounded,
+};
+
 class ProductListPage extends ConsumerStatefulWidget {
   const ProductListPage({super.key});
 
@@ -340,10 +350,10 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                         AppSpacing.xs, AppSpacing.md, AppSpacing.xxxl),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
+                      crossAxisCount: 3,
                       mainAxisSpacing: AppSpacing.sm,
                       crossAxisSpacing: AppSpacing.sm,
-                      childAspectRatio: 0.82,
+                      childAspectRatio: 0.72,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
@@ -370,10 +380,10 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                   padding: const EdgeInsets.all(AppSpacing.md),
                   gridDelegate:
                       const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
+                    crossAxisCount: 3,
                     mainAxisSpacing: AppSpacing.xs,
                     crossAxisSpacing: AppSpacing.xs,
-                    childAspectRatio: 0.82,
+                    childAspectRatio: 0.72,
                   ),
                   itemCount: 8,
                   itemBuilder: (_, __) => const CasaCardSkeleton(),
@@ -887,161 +897,318 @@ class _FilterModalState extends State<_FilterModal> {
     _sortMode = widget.sortMode;
   }
 
+  int get _activeCount =>
+      (_filterPerishable ? 1 : 0) +
+      (_filterNonPerishable ? 1 : 0) +
+      (_filterCategory != null ? 1 : 0) +
+      (_sortMode != _SortMode.name ? 1 : 0);
+
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final cs   = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final count = _activeCount;
 
     return Container(
       decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
+        color: isDark ? const Color(0xFF0F172A) : cs.surface,
         borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
+            const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Handle
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: AppSpacing.md),
-              decoration: BoxDecoration(
-                color: cs.outlineVariant,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-              ),
+          // ── Handle ────────────────────────────────────────────────────
+          Container(
+            width: 36, height: 4,
+            margin: const EdgeInsets.only(top: 12, bottom: 4),
+            decoration: BoxDecoration(
+              color: cs.outlineVariant,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
             ),
           ),
-          Row(
-            children: [
-              Text('Filtros',
-                  style: AppTypography.headingSmall.copyWith(
-                      color: cs.onSurface, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _filterPerishable = false;
-                    _filterNonPerishable = false;
-                    _filterCategory = null;
-                    _sortMode = _SortMode.name;
-                  });
-                  widget.onClearAll();
-                },
-                child: Text('Limpar tudo',
-                    style: AppTypography.labelSmall
-                        .copyWith(color: AppColors.danger600)),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text('Tipo',
-              style: AppTypography.labelMedium.copyWith(
-                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
-          const SizedBox(height: AppSpacing.xs),
-          Wrap(
-            spacing: AppSpacing.xs,
-            runSpacing: AppSpacing.xs,
-            children: [
-              _FilterChip(
-                label: 'Perecível',
-                icon: Icons.schedule_rounded,
-                selected: _filterPerishable,
-                color: AppColors.warning600,
-                onTap: () {
-                  setState(() => _filterPerishable = !_filterPerishable);
-                  widget.onTogglePerishable();
-                },
-              ),
-              _FilterChip(
-                label: 'Não perecível',
-                icon: Icons.shield_outlined,
-                selected: _filterNonPerishable,
-                color: AppColors.success600,
-                onTap: () {
-                  setState(
-                      () => _filterNonPerishable = !_filterNonPerishable);
-                  widget.onToggleNonPerishable();
-                },
-              ),
-            ],
-          ),
-          if (widget.categories.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.md),
-            Text('Categoria',
-                style: AppTypography.labelMedium.copyWith(
-                    color: cs.onSurfaceVariant,
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: AppSpacing.xs),
-            Wrap(
-              spacing: AppSpacing.xs,
-              runSpacing: AppSpacing.xs,
-              children: widget.categories.map((cat) {
-                final label = widget.categoryLabelMap[cat] ?? cat;
-                return _FilterChip(
-                  label: label,
-                  icon: Icons.category_outlined,
-                  selected: _filterCategory == cat,
-                  color: AppColors.secondaryBlue600,
-                  onTap: () {
-                    final next = _filterCategory == cat ? null : cat;
-                    setState(() => _filterCategory = next);
-                    widget.onCategoryChanged(next);
+
+          // ── Header ────────────────────────────────────────────────────
+          Padding(
+            padding:
+                const EdgeInsets.fromLTRB(20, 10, 12, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1D5FA8), Color(0xFF2563EB)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(11),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2563EB).withValues(alpha: 0.30),
+                        blurRadius: 8, offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.tune_rounded,
+                      color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Filtros',
+                          style: AppTypography.headingSmall.copyWith(
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w800)),
+                      if (count > 0)
+                        Text(
+                          '$count filtro${count > 1 ? 's' : ''} ativo${count > 1 ? 's' : ''}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.brandPrimary600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _filterPerishable   = false;
+                      _filterNonPerishable = false;
+                      _filterCategory     = null;
+                      _sortMode           = _SortMode.name;
+                    });
+                    widget.onClearAll();
                   },
-                );
-              }).toList(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.danger600,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                  ),
+                  child: const Text('Limpar',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                ),
+              ],
             ),
-          ],
-          const SizedBox(height: AppSpacing.md),
-          Text('Ordenar por',
-              style: AppTypography.labelMedium.copyWith(
-                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
-          const SizedBox(height: AppSpacing.xs),
-          Wrap(
-            spacing: AppSpacing.xs,
-            runSpacing: AppSpacing.xs,
-            children: [
-              _SortChip(
-                label: 'A–Z',
-                selected: _sortMode == _SortMode.name,
-                onTap: () {
-                  setState(() => _sortMode = _SortMode.name);
-                  widget.onSortChanged(_SortMode.name);
-                },
-              ),
-              _SortChip(
-                label: 'Categoria',
-                selected: _sortMode == _SortMode.category,
-                onTap: () {
-                  setState(() => _sortMode = _SortMode.category);
-                  widget.onSortChanged(_SortMode.category);
-                },
-              ),
-              _SortChip(
-                label: 'Perecíveis primeiro',
-                selected: _sortMode == _SortMode.perishable,
-                onTap: () {
-                  setState(() => _sortMode = _SortMode.perishable);
-                  widget.onSortChanged(_SortMode.perishable);
-                },
-              ),
-            ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.brandPrimary600,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.button)),
+
+          const SizedBox(height: 8),
+          Divider(
+              color: cs.outlineVariant.withValues(alpha: 0.40),
+              height: 1),
+
+          // ── Corpo scrollable ──────────────────────────────────────────
+          Flexible(
+            child: SingleChildScrollView(
+              padding:
+                  const EdgeInsets.fromLTRB(20, 20, 20, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Seção: Tipo
+                  _FilterSectionLabel(label: 'TIPO DE PRODUTO'),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _TypeToggleCard(
+                          icon: Icons.schedule_rounded,
+                          label: 'Perecível',
+                          sublabel: 'Com validade',
+                          selected: _filterPerishable,
+                          color: AppColors.warning600,
+                          isDark: isDark,
+                          cs: cs,
+                          onTap: () {
+                            setState(() =>
+                                _filterPerishable = !_filterPerishable);
+                            widget.onTogglePerishable();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _TypeToggleCard(
+                          icon: Icons.shield_rounded,
+                          label: 'Permanente',
+                          sublabel: 'Sem validade',
+                          selected: _filterNonPerishable,
+                          color: AppColors.success600,
+                          isDark: isDark,
+                          cs: cs,
+                          onTap: () {
+                            setState(() =>
+                                _filterNonPerishable = !_filterNonPerishable);
+                            widget.onToggleNonPerishable();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Seção: Categoria
+                  if (widget.categories.isNotEmpty) ...[
+                    const SizedBox(height: 22),
+                    _FilterSectionLabel(label: 'CATEGORIA'),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: widget.categories.map((cat) {
+                        final label =
+                            widget.categoryLabelMap[cat] ?? cat;
+                        final catEnum = ProductCategory.values.firstWhere(
+                          (c) => c.name == cat,
+                          orElse: () => ProductCategory.outro,
+                        );
+                        return _CategoryFilterChip(
+                          icon: _categoryIcon(catEnum),
+                          label: label,
+                          selected: _filterCategory == cat,
+                          isDark: isDark,
+                          cs: cs,
+                          onTap: () {
+                            final next =
+                                _filterCategory == cat ? null : cat;
+                            setState(() => _filterCategory = next);
+                            widget.onCategoryChanged(next);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+
+                  // Seção: Ordenar
+                  const SizedBox(height: 22),
+                  _FilterSectionLabel(label: 'ORDENAR POR'),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? cs.surfaceContainerHighest
+                          : cs.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color:
+                              cs.outlineVariant.withValues(alpha: 0.30)),
+                    ),
+                    child: Column(
+                      children: [
+                        _SortOptionItem(
+                          icon: Icons.sort_by_alpha_rounded,
+                          label: 'Nome (A → Z)',
+                          selected: _sortMode == _SortMode.name,
+                          isFirst: true, isLast: false,
+                          cs: cs,
+                          onTap: () {
+                            setState(
+                                () => _sortMode = _SortMode.name);
+                            widget.onSortChanged(_SortMode.name);
+                          },
+                        ),
+                        Divider(
+                            height: 1,
+                            indent: 50,
+                            color: cs.outlineVariant
+                                .withValues(alpha: 0.25)),
+                        _SortOptionItem(
+                          icon: Icons.category_rounded,
+                          label: 'Categoria',
+                          selected: _sortMode == _SortMode.category,
+                          isFirst: false, isLast: false,
+                          cs: cs,
+                          onTap: () {
+                            setState(() =>
+                                _sortMode = _SortMode.category);
+                            widget.onSortChanged(
+                                _SortMode.category);
+                          },
+                        ),
+                        Divider(
+                            height: 1,
+                            indent: 50,
+                            color: cs.outlineVariant
+                                .withValues(alpha: 0.25)),
+                        _SortOptionItem(
+                          icon: Icons.schedule_rounded,
+                          label: 'Perecíveis primeiro',
+                          selected:
+                              _sortMode == _SortMode.perishable,
+                          isFirst: false, isLast: true,
+                          cs: cs,
+                          onTap: () {
+                            setState(() =>
+                                _sortMode = _SortMode.perishable);
+                            widget.onSortChanged(
+                                _SortMode.perishable);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // ── Botão aplicar com gradiente ───────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF1D5FA8),
+                            Color(0xFF2563EB),
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF2563EB)
+                                .withValues(alpha: 0.35),
+                            blurRadius: 14,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_rounded,
+                                    color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  count > 0
+                                      ? 'Aplicar $count filtro${count > 1 ? 's' : ''}'
+                                      : 'Ver todos os produtos',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              child: const Text('Aplicar filtros'),
             ),
           ),
         ],
@@ -1050,47 +1217,145 @@ class _FilterModalState extends State<_FilterModal> {
   }
 }
 
-class _FilterChip extends StatelessWidget {
+// ─── Widgets auxiliares do modal de filtro ────────────────────────────────
+
+class _FilterSectionLabel extends StatelessWidget {
   final String label;
-  final IconData icon;
-  final bool selected;
-  final Color color;
-  final VoidCallback onTap;
-  const _FilterChip(
-      {required this.label,
-      required this.icon,
-      required this.selected,
-      required this.color,
-      required this.onTap});
+  const _FilterSectionLabel({required this.label});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Container(
+          width: 3, height: 13,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2563EB), Color(0xFF38BDF8)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            letterSpacing: 1.0,
+            fontWeight: FontWeight.w800,
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TypeToggleCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String sublabel;
+  final bool selected;
+  final Color color;
+  final bool isDark;
+  final ColorScheme cs;
+  final VoidCallback onTap;
+
+  const _TypeToggleCard({
+    required this.icon,
+    required this.label,
+    required this.sublabel,
+    required this.selected,
+    required this.color,
+    required this.isDark,
+    required this.cs,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         decoration: BoxDecoration(
-          color:
-              selected ? color.withValues(alpha: 0.15) : cs.surfaceContainer,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
+          color: selected
+              ? color.withValues(alpha: isDark ? 0.14 : 0.08)
+              : cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: selected
-                  ? color.withValues(alpha: 0.5)
-                  : cs.outlineVariant.withValues(alpha: 0.4)),
+            color: selected
+                ? color.withValues(alpha: 0.50)
+                : cs.outlineVariant.withValues(alpha: 0.30),
+            width: selected ? 1.5 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.18),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [],
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 11, color: selected ? color : cs.onSurfaceVariant),
-            const SizedBox(width: 4),
+            Row(
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? color.withValues(alpha: 0.18)
+                        : cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(icon,
+                      size: 17,
+                      color: selected ? color : cs.onSurfaceVariant),
+                ),
+                const Spacer(),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 18, height: 18,
+                  decoration: BoxDecoration(
+                    color: selected ? color : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected
+                          ? color
+                          : cs.outlineVariant.withValues(alpha: 0.40),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: selected
+                      ? const Icon(Icons.check_rounded,
+                          size: 11, color: Colors.white)
+                      : null,
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
             Text(
               label,
-              style: AppTypography.labelSmall.copyWith(
-                color: selected ? color : cs.onSurfaceVariant,
-                fontSize: 11,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: selected ? color : cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              sublabel,
+              style: TextStyle(
+                fontSize: 10.5,
+                color: cs.onSurfaceVariant,
               ),
             ),
           ],
@@ -1100,46 +1365,153 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _SortChip extends StatelessWidget {
+class _CategoryFilterChip extends StatelessWidget {
+  final IconData icon;
   final String label;
   final bool selected;
+  final bool isDark;
+  final ColorScheme cs;
   final VoidCallback onTap;
-  const _SortChip(
-      {required this.label, required this.selected, required this.onTap});
+
+  const _CategoryFilterChip({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.isDark,
+    required this.cs,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    const color = AppColors.secondaryBlue600;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.brandPrimary600.withValues(alpha: 0.12)
-              : cs.surfaceContainer,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
+              ? color.withValues(alpha: isDark ? 0.16 : 0.09)
+              : cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-              color: selected
-                  ? AppColors.brandPrimary600.withValues(alpha: 0.4)
-                  : cs.outlineVariant.withValues(alpha: 0.4)),
-        ),
-        child: Text(
-          label,
-          style: AppTypography.labelSmall.copyWith(
-            color:
-                selected ? AppColors.brandPrimary600 : cs.onSurfaceVariant,
-            fontSize: 10,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected
+                ? color.withValues(alpha: 0.50)
+                : cs.outlineVariant.withValues(alpha: 0.30),
+            width: selected ? 1.5 : 1,
           ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 14,
+                color:
+                    selected ? color : cs.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected
+                    ? FontWeight.w700
+                    : FontWeight.w500,
+                color: selected ? color : cs.onSurface,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// ─── Card do grid (2 por linha) ───────────────────────────────────────────
+class _SortOptionItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final bool isFirst;
+  final bool isLast;
+  final ColorScheme cs;
+  final VoidCallback onTap;
+
+  const _SortOptionItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.isFirst,
+    required this.isLast,
+    required this.cs,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const color = AppColors.brandPrimary600;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.vertical(
+        top: isFirst ? const Radius.circular(14) : Radius.zero,
+        bottom: isLast ? const Radius.circular(14) : Radius.zero,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: 14, vertical: 13),
+        child: Row(
+          children: [
+            Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(
+                color: selected
+                    ? color.withValues(alpha: 0.12)
+                    : cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(icon,
+                  size: 17,
+                  color: selected ? color : cs.onSurfaceVariant),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: selected
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                  color: selected ? color : cs.onSurface,
+                ),
+              ),
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 20, height: 20,
+              decoration: BoxDecoration(
+                color: selected ? color : Colors.transparent,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected
+                      ? color
+                      : cs.outlineVariant.withValues(alpha: 0.40),
+                  width: 1.5,
+                ),
+              ),
+              child: selected
+                  ? const Icon(Icons.check_rounded,
+                      size: 12, color: Colors.white)
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Card do grid (3 por linha) ───────────────────────────────────────────
 
 class _ProductGridCard extends ConsumerWidget {
   final Product product;
@@ -1159,16 +1531,6 @@ class _ProductGridCard extends ConsumerWidget {
   static const _paletteGreen  = [Color(0xFF059669), Color(0xFF047857)];
   static const _paletteBlue   = [Color(0xFF2563EB), Color(0xFF1D4ED8)];
 
-  IconData _categoryIcon(ProductCategory cat) => switch (cat) {
-    ProductCategory.alimento      => Icons.restaurant_rounded,
-    ProductCategory.bebida        => Icons.local_drink_rounded,
-    ProductCategory.limpeza       => Icons.cleaning_services_rounded,
-    ProductCategory.higienePessoal => Icons.soap_rounded,
-    ProductCategory.escolar       => Icons.auto_stories_rounded,
-    ProductCategory.roupas        => Icons.checkroom_rounded,
-    ProductCategory.outro         => Icons.category_rounded,
-  };
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1187,151 +1549,126 @@ class _ProductGridCard extends ConsumerWidget {
     // Status de validade
     Color expiryColor;
     IconData expiryIcon;
-    String? expiryLabel;
+    String? expiryBadge; // rótulo curto para o badge do header
     List<Color> palette;
 
     if (!product.isPerishable || batchData == null) {
       expiryColor = const Color(0xFF60A5FA);
-      expiryIcon = Icons.all_inclusive_rounded;
-      expiryLabel = null;
-      palette = _paletteBlue;
+      expiryIcon  = Icons.all_inclusive_rounded;
+      expiryBadge = null;
+      palette     = _paletteBlue;
     } else if (batchData.isExpired) {
       expiryColor = const Color(0xFFF87171);
-      expiryIcon = Icons.cancel_rounded;
-      expiryLabel = 'VENCIDO';
-      palette = _paletteRed;
+      expiryIcon  = Icons.cancel_rounded;
+      expiryBadge = 'VENCIDO';
+      palette     = _paletteRed;
     } else if (batchData.daysToExpiry <= 7) {
       expiryColor = const Color(0xFFFCA5A5);
-      expiryIcon = Icons.warning_amber_rounded;
-      expiryLabel = batchData.expiryDate != null
-          ? '${dateFmt.format(batchData.expiryDate!)} · ${batchData.daysToExpiry}d'
-          : 'Crítico';
+      expiryIcon  = Icons.warning_amber_rounded;
+      expiryBadge = batchData.expiryDate != null
+          ? '${dateFmt.format(batchData.expiryDate!)}·${batchData.daysToExpiry}d'
+          : 'CRÍTICO';
       palette = _paletteRed;
     } else if (batchData.daysToExpiry <= 30) {
       expiryColor = const Color(0xFFFDE68A);
-      expiryIcon = Icons.schedule_rounded;
-      expiryLabel = batchData.expiryDate != null
-          ? '${dateFmt.format(batchData.expiryDate!)} · ${batchData.daysToExpiry}d'
-          : 'Atenção';
+      expiryIcon  = Icons.schedule_rounded;
+      expiryBadge = batchData.expiryDate != null
+          ? '${dateFmt.format(batchData.expiryDate!)}·${batchData.daysToExpiry}d'
+          : 'ATENÇÃO';
       palette = _paletteYellow;
     } else {
       expiryColor = const Color(0xFF6EE7B7);
-      expiryIcon = Icons.check_circle_rounded;
-      expiryLabel = batchData.expiryDate != null
-          ? '${dateFmt.format(batchData.expiryDate!)} · ${batchData.daysToExpiry}d'
-          : null;
-      palette = _paletteGreen;
+      expiryIcon  = Icons.check_circle_rounded;
+      expiryBadge = null; // seguro: não polui o header
+      palette     = _paletteGreen;
     }
 
-    final accent     = palette[0];
-    final accentDark = palette[1];
-    final cardBg     = isDark ? const Color(0xFF0F172A) : Colors.white;
-    final borderColor = accent.withValues(alpha: isDark ? 0.38 : 0.22);
+    final accent      = palette[0];
+    final accentDark  = palette[1];
+    final cardBg      = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final borderColor = accent.withValues(alpha: isDark ? 0.35 : 0.20);
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 200 + index * 10),
+      duration: Duration(milliseconds: 180 + index * 8),
       curve: Curves.easeOutCubic,
       builder: (_, v, child) => Opacity(
         opacity: v,
-        child: Transform.translate(
-          offset: Offset(0, 12 * (1 - v)),
-          child: child,
-        ),
+        child: Transform.translate(offset: Offset(0, 10 * (1 - v)), child: child),
       ),
       child: GestureDetector(
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
             color: cardBg,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: borderColor, width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: isDark ? 0.22 : 0.14),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: accent.withValues(alpha: isDark ? 0.20 : 0.12),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ─── Header gradiente com ícone e badge ──────────────────
+              // ─── Header compacto com gradiente e ícone de categoria ───
               Stack(
                 children: [
                   Container(
-                    height: 82,
+                    height: 62,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [
-                          accent,
-                          accentDark,
-                          accentDark.withValues(alpha: 0.85),
-                        ],
+                        colors: [accent, accentDark],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       borderRadius:
-                          const BorderRadius.vertical(top: Radius.circular(15)),
+                          const BorderRadius.vertical(top: Radius.circular(13)),
                     ),
                     child: Stack(
                       children: [
-                        // Círculos decorativos
+                        // Círculo decorativo
                         Positioned(
-                          right: -14, top: -14,
+                          right: -10, top: -10,
                           child: Container(
-                            width: 60, height: 60,
+                            width: 44, height: 44,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.07),
+                              color: Colors.white.withValues(alpha: 0.08),
                             ),
                           ),
                         ),
-                        Positioned(
-                          left: -8, bottom: -10,
-                          child: Container(
-                            width: 40, height: 40,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.05),
-                            ),
-                          ),
-                        ),
-                        // Ícone ou imagem do produto
                         Center(
                           child: product.imageUrl != null &&
                                   product.imageUrl!.isNotEmpty
                               ? ClipRRect(
                                   borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(15)),
+                                      top: Radius.circular(13)),
                                   child: Image.network(
                                     product.imageUrl!,
                                     fit: BoxFit.cover,
                                     width: double.infinity,
-                                    height: 82,
+                                    height: 62,
                                   ),
                                 )
                               : Container(
-                                  width: 48,
-                                  height: 48,
+                                  width: 36,
+                                  height: 36,
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.16),
-                                    borderRadius: BorderRadius.circular(12),
+                                    color: Colors.white.withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(9),
                                     border: Border.all(
-                                      color: Colors.white.withValues(alpha: 0.28),
-                                      width: 1.5,
+                                      color: Colors.white.withValues(alpha: 0.30),
+                                      width: 1.2,
                                     ),
                                   ),
                                   child: Icon(
                                     _categoryIcon(product.category),
                                     color: Colors.white,
-                                    size: 24,
+                                    size: 18,
                                   ),
                                 ),
                         ),
@@ -1339,33 +1676,33 @@ class _ProductGridCard extends ConsumerWidget {
                     ),
                   ),
 
-                  // Badge de validade (top-right)
-                  if (product.isPerishable && expiryLabel != null)
+                  // Badge de validade (topo-direito do header)
+                  if (expiryBadge != null)
                     Positioned(
-                      top: 7, right: 7,
+                      top: 5, right: 5,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 3),
+                            horizontal: 5, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.50),
-                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.black.withValues(alpha: 0.52),
+                          borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: expiryColor.withValues(alpha: 0.65),
-                            width: 1,
+                            color: expiryColor.withValues(alpha: 0.60),
+                            width: 0.8,
                           ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(expiryIcon, size: 9, color: expiryColor),
-                            const SizedBox(width: 3),
+                            Icon(expiryIcon, size: 7, color: expiryColor),
+                            const SizedBox(width: 2),
                             Text(
-                              expiryLabel.split(' ').first,
+                              expiryBadge.split('·').first.trim(),
                               style: TextStyle(
-                                fontSize: 9,
+                                fontSize: 7.5,
                                 color: expiryColor,
                                 fontWeight: FontWeight.w800,
-                                letterSpacing: 0.2,
+                                letterSpacing: 0.1,
                               ),
                             ),
                           ],
@@ -1373,25 +1710,25 @@ class _ProductGridCard extends ConsumerWidget {
                       ),
                     ),
 
-                  // Badge sem validade
+                  // Badge "∞" para não perecível
                   if (!product.isPerishable)
                     Positioned(
-                      top: 7, right: 7,
+                      top: 5, right: 5,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 3),
+                            horizontal: 5, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.38),
-                          borderRadius: BorderRadius.circular(7),
+                          color: Colors.black.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.20),
-                            width: 1,
+                            color: Colors.white.withValues(alpha: 0.18),
+                            width: 0.8,
                           ),
                         ),
                         child: const Text(
                           '∞',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 9,
                             color: Colors.white70,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1401,14 +1738,14 @@ class _ProductGridCard extends ConsumerWidget {
                 ],
               ),
 
-              // ─── Corpo ───────────────────────────────────────────────
+              // ─── Corpo compacto ───────────────────────────────────────
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
+                  padding: const EdgeInsets.fromLTRB(7, 7, 7, 7),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Nome
+                      // Nome do produto
                       Text(
                         product.name,
                         style: TextStyle(
@@ -1416,88 +1753,48 @@ class _ProductGridCard extends ConsumerWidget {
                               ? const Color(0xFFF1F5F9)
                               : const Color(0xFF0F172A),
                           fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          height: 1.25,
+                          fontSize: 10.5,
+                          height: 1.20,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
 
-                      // Marca (se houver)
-                      if (product.brand != null &&
-                          product.brand!.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          product.brand!,
-                          style: TextStyle(
-                            color: isDark
-                                ? const Color(0xFF94A3B8)
-                                : const Color(0xFF64748B),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-
                       const Spacer(),
 
-                      // Linha de validade (data · dias)
-                      if (product.isPerishable && expiryLabel != null) ...[
-                        Row(
-                          children: [
-                            Icon(expiryIcon, size: 11, color: expiryColor),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                expiryLabel,
-                                style: TextStyle(
-                                  fontSize: 9.5,
-                                  color: expiryColor,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-
-                      // Quantidade + Categoria
+                      // Linha: quantidade + categoria
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // Quantidade
+                          // Qty pill
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 7, vertical: 3),
+                                horizontal: 5, vertical: 2),
                             decoration: BoxDecoration(
                               color: accent.withValues(
-                                  alpha: isDark ? 0.20 : 0.10),
-                              borderRadius: BorderRadius.circular(7),
+                                  alpha: isDark ? 0.22 : 0.11),
+                              borderRadius: BorderRadius.circular(5),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(Icons.layers_rounded,
-                                    size: 11, color: accent),
-                                const SizedBox(width: 3),
+                                    size: 9, color: accent),
+                                const SizedBox(width: 2),
                                 Text(
                                   '$totalQty',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 9.5,
                                     color: accent,
                                     fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                                const SizedBox(width: 2),
+                                const SizedBox(width: 1),
                                 Text(
                                   product.unit,
                                   style: TextStyle(
-                                    fontSize: 9,
-                                    color: accent.withValues(alpha: 0.80),
+                                    fontSize: 8,
+                                    color: accent.withValues(alpha: 0.75),
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -1509,21 +1806,21 @@ class _ProductGridCard extends ConsumerWidget {
                           Flexible(
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 7, vertical: 3),
+                                  horizontal: 5, vertical: 2),
                               decoration: BoxDecoration(
                                 color: accent.withValues(
                                     alpha: isDark ? 0.12 : 0.07),
-                                borderRadius: BorderRadius.circular(7),
+                                borderRadius: BorderRadius.circular(5),
                                 border: Border.all(
                                   color: accent.withValues(
-                                      alpha: isDark ? 0.22 : 0.15),
-                                  width: 0.8,
+                                      alpha: isDark ? 0.20 : 0.14),
+                                  width: 0.7,
                                 ),
                               ),
                               child: Text(
                                 catLabel,
                                 style: TextStyle(
-                                  fontSize: 9,
+                                  fontSize: 8,
                                   color: accent,
                                   fontWeight: FontWeight.w600,
                                 ),
