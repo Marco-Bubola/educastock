@@ -465,88 +465,139 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                     title: 'Validade',
                     cs: cs,
                     child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: AppSpacing.xs,
-                        runSpacing: AppSpacing.xs,
-                        children: [
-                          _QuickDateChip(label: '+30 dias', onTap: () => setState(() => _expiryDate = DateTime.now().add(const Duration(days: 30)))),
-                          _QuickDateChip(label: '+90 dias', onTap: () => setState(() => _expiryDate = DateTime.now().add(const Duration(days: 90)))),
-                          _QuickDateChip(label: '+180 dias', onTap: () => setState(() => _expiryDate = DateTime.now().add(const Duration(days: 180)))),
-                          _QuickDateChip(label: '+1 ano', onTap: () => setState(() => _expiryDate = DateTime.now().add(const Duration(days: 365)))),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: _pickExpiryDate,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            decoration: BoxDecoration(
+                              gradient: _expiryDate != null
+                                  ? LinearGradient(
+                                      colors: [
+                                        AppColors.success600.withValues(alpha: 0.1),
+                                        AppColors.brandPrimary600.withValues(alpha: 0.04),
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    )
+                                  : null,
+                              color: _expiryDate == null ? cs.surfaceContainer : null,
+                              borderRadius: BorderRadius.circular(AppRadius.input),
+                              border: Border.all(
                                 color: _expiryDate != null
-                                    ? AppColors.success600.withValues(alpha: 0.08)
-                                    : cs.surfaceContainer,
-                                borderRadius: BorderRadius.circular(AppRadius.input),
-                                border: Border.all(
-                                  color: _expiryDate != null
-                                      ? AppColors.success600.withValues(alpha: 0.45)
-                                      : cs.outlineVariant.withValues(alpha: 0.4),
-                                ),
+                                    ? AppColors.success600.withValues(alpha: 0.55)
+                                    : cs.outlineVariant.withValues(alpha: 0.5),
+                                width: _expiryDate != null ? 1.5 : 1.0,
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.calendar_month_rounded, size: 18,
-                                      color: _expiryDate != null ? AppColors.success600 : cs.onSurfaceVariant),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _expiryDate != null ? fmt.format(_expiryDate!) : 'Selecione a validade',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: _expiryDate != null ? FontWeight.w700 : FontWeight.w400,
-                                      color: _expiryDate != null ? cs.onSurface : cs.onSurfaceVariant,
+                              boxShadow: _expiryDate != null
+                                  ? [BoxShadow(color: AppColors.success600.withValues(alpha: 0.12), blurRadius: 10, offset: const Offset(0, 3))]
+                                  : [],
+                            ),
+                            child: Row(
+                              children: [
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 250),
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: _expiryDate != null
+                                          ? [AppColors.success600, const Color(0xFF22C55E)]
+                                          : [AppColors.warning600, AppColors.brandPrimary600],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
                                     ),
+                                    borderRadius: BorderRadius.circular(11),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (_expiryDate != null ? AppColors.success600 : AppColors.warning600).withValues(alpha: 0.35),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
                                   ),
-                                  if (_expiryDate != null) ...[
-                                    const SizedBox(width: 6),
-                                    GestureDetector(
-                                      onTap: () => setState(() => _expiryDate = null),
-                                      child: Icon(Icons.close_rounded, size: 14, color: cs.onSurfaceVariant),
+                                  child: const Icon(Icons.calendar_month_rounded, size: 20, color: Colors.white),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _expiryDate != null ? 'Data de validade' : 'Toque para selecionar',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: _expiryDate != null
+                                              ? AppColors.success600.withValues(alpha: 0.85)
+                                              : cs.onSurfaceVariant,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        _expiryDate != null ? fmt.format(_expiryDate!) : 'dd/mm/aaaa',
+                                        style: TextStyle(
+                                          fontSize: _expiryDate != null ? 19 : 14,
+                                          fontWeight: _expiryDate != null ? FontWeight.w800 : FontWeight.w400,
+                                          color: _expiryDate != null ? cs.onSurface : cs.onSurfaceVariant.withValues(alpha: 0.5),
+                                          letterSpacing: _expiryDate != null ? 1.2 : 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_expiryDate != null)
+                                  GestureDetector(
+                                    onTap: () => setState(() => _expiryDate = null),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: cs.outlineVariant.withValues(alpha: 0.18),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(Icons.close_rounded, size: 15, color: cs.onSurfaceVariant),
                                     ),
-                                  ],
-                                ],
-                              ),
+                                  )
+                                else
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.brandPrimary600.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.brandPrimary600),
+                                  ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.sm),
-                          OutlinedButton.icon(
-                            onPressed: _pickExpiryDate,
-                            icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                            label: const Text('Outra data'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.brandPrimary600,
-                              side: const BorderSide(color: AppColors.brandPrimary600),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.button)),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Row(
+                          children: [
+                            Icon(Icons.touch_app_rounded, size: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.45)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Toque para abrir o calendário',
+                              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.55)),
                             ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          ExpiryOcrButton(
-                            onDateSuggested: (date) {
-                              setState(() => _expiryDate = date);
-                              showCasaSnackbar(
-                                context,
-                                message: 'Data lida: ${DateFormat('dd/MM/yyyy').format(date)} — confirme se está correta',
-                                isSuccess: true,
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                            const Spacer(),
+                            ExpiryOcrButton(
+                              onDateSuggested: (date) {
+                                setState(() => _expiryDate = date);
+                                showCasaSnackbar(
+                                  context,
+                                  message: 'Data lida: ${DateFormat('dd/MM/yyyy').format(date)} — confirme se está correta',
+                                  isSuccess: true,
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }),
@@ -781,12 +832,23 @@ class _BatchSection extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
+                  gradient: LinearGradient(
+                    colors: [iconColor, iconColor.withValues(alpha: 0.7)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: iconColor.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                child: Icon(icon, size: 14, color: iconColor),
+                child: Icon(icon, size: 14, color: Colors.white),
               ),
               const SizedBox(width: AppSpacing.sm),
               Text(
@@ -840,32 +902,6 @@ class _QtyBtn extends StatelessWidget {
   }
 }
 
-// --- Chip de data rapida ---
-
-class _QuickDateChip extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  const _QuickDateChip({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: AppColors.brandPrimary600.withValues(alpha: 0.09),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: AppColors.brandPrimary600.withValues(alpha: 0.35)),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.brandPrimary600),
-        ),
-      ),
-    );
-  }
-}
 
 // --- Card de origem ---
 
