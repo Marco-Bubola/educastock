@@ -1,6 +1,9 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
@@ -42,6 +45,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
   String? _selectedLocationLabel;
   bool _prefilledProductName = false;
   int _quantity = 1;
+  Uint8List? _imageBytes;
 
 
   @override
@@ -83,6 +87,18 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     if (picked != null) {
       setState(() => _expiryDate = picked);
     }
+  }
+
+  Future<void> _pickImage() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 480,
+      maxHeight: 480,
+      imageQuality: 72,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (mounted) setState(() => _imageBytes = bytes);
   }
 
   Future<void> _submit() async {
@@ -233,6 +249,12 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
 
     final state = ref.read(batchFormProvider);
     if (!mounted) return;
+
+    if (_imageBytes != null && effectiveProductId.isNotEmpty) {
+      final dataUri = 'data:image/jpeg;base64,${base64Encode(_imageBytes!)}';
+      await ref.read(productsDatasourceProvider).updateImageUrl(effectiveProductId, dataUri);
+    }
+
     state.when(
       data: (id) {
         if (id != null) {
@@ -263,7 +285,6 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: ModernProfileAppBar(
         title: 'Cadastrar Lote',
         subtitle: productName != null ? 'Produto: $productName' : 'Adicionar ao estoque',
@@ -324,6 +345,14 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
             children: [
+
+              // --- Imagem do produto ---
+              _ImagePickerSection(
+                imageBytes: _imageBytes,
+                onPick: _pickImage,
+                onRemove: () => setState(() => _imageBytes = null),
+              ),
+              const SizedBox(height: AppSpacing.lg),
 
               // â”€â”€â”€ SeÃ§Ã£o 1: NÃºmero do lote + Quantidade â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               KeyedSubtree(
@@ -801,7 +830,7 @@ class _BatchSaveFab extends StatelessWidget {
   }
 }
 
-// --- Secao de card do formulario ---
+// --- Cabecalho de secao (sem card) ---
 
 class _BatchSection extends StatelessWidget {
   final IconData icon;
@@ -818,49 +847,185 @@ class _BatchSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [iconColor, iconColor.withValues(alpha: 0.7)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [iconColor, iconColor.withValues(alpha: 0.7)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: [
+                  BoxShadow(
+                    color: iconColor.withValues(alpha: 0.28),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: iconColor.withValues(alpha: 0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
+                ],
+              ),
+              child: Icon(icon, size: 15, color: Colors.white),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              title,
+              style: AppTypography.labelLarge.copyWith(
+                  color: cs.onSurface, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        child,
+      ],
+    );
+  }
+}
+
+// --- Seletor de imagem do produto ---
+
+class _ImagePickerSection extends StatelessWidget {
+  final Uint8List? imageBytes;
+  final VoidCallback onPick;
+  final VoidCallback onRemove;
+
+  const _ImagePickerSection({
+    required this.imageBytes,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasImage = imageBytes != null;
+
+    return GestureDetector(
+      onTap: onPick,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        height: 120,
+        decoration: BoxDecoration(
+          color: hasImage ? null : cs.surfaceContainer,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: hasImage
+                ? AppColors.brandPrimary600.withValues(alpha: 0.5)
+                : cs.outlineVariant.withValues(alpha: 0.4),
+            width: hasImage ? 1.5 : 1.0,
+          ),
+          boxShadow: hasImage
+              ? [
+                  BoxShadow(
+                    color: AppColors.brandPrimary600.withValues(alpha: 0.15),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  )
+                ]
+              : [],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.card - 1),
+          child: hasImage
+              ? Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.memory(imageBytes!, fit: BoxFit.cover),
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.45),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 8,
+                      left: 0,
+                      right: 0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.edit_rounded,
+                              size: 13, color: Colors.white),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Trocar foto',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: GestureDetector(
+                        onTap: onRemove,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.close_rounded,
+                              size: 13, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.brandPrimary600.withValues(alpha: isDark ? 0.25 : 0.12),
+                            AppColors.secondaryBlue600.withValues(alpha: isDark ? 0.2 : 0.08),
+                          ],
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.add_photo_alternate_rounded,
+                        size: 26,
+                        color: AppColors.brandPrimary600.withValues(alpha: isDark ? 0.85 : 0.7),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Adicionar foto do produto',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      'opcional',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.55),
+                      ),
                     ),
                   ],
                 ),
-                child: Icon(icon, size: 14, color: Colors.white),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                title,
-                style: AppTypography.labelLarge.copyWith(
-                    color: cs.onSurface, fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          child,
-        ],
+        ),
       ),
     );
   }
@@ -1095,52 +1260,52 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.brandPrimary600, AppColors.secondaryBlue600],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.brandPrimary600, AppColors.secondaryBlue600],
+                ),
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brandPrimary600.withValues(alpha: 0.28),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: const Icon(Icons.layers_rounded,
-                    size: 14, color: Colors.white),
+                ],
               ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                'Localização no Estoque',
-                style: AppTypography.labelLarge.copyWith(
-                  color: cs.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
+              child: const Icon(Icons.layers_rounded,
+                  size: 15, color: Colors.white),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              'Localização no Estoque',
+              style: AppTypography.labelLarge.copyWith(
+                color: cs.onSurface,
+                fontWeight: FontWeight.w700,
               ),
-              const Spacer(),
-              TextButton(
-                onPressed: widget.onManageLocations,
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.brandPrimary600,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  textStyle: const TextStyle(fontSize: 11),
-                ),
-                child: const Text('Gerenciar'),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: widget.onManageLocations,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary600,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(fontSize: 11),
               ),
-            ],
-          ),
+              child: const Text('Gerenciar'),
+            ),
+          ],
+        ),
 
           const SizedBox(height: AppSpacing.md),
 
@@ -1230,8 +1395,7 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
             ),
           ),
         ],
-      ),
-    );
+      );
   }
 
   Widget _buildLevels(ColorScheme cs, bool isDark) {
