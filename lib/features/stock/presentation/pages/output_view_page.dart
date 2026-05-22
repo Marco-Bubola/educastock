@@ -9,6 +9,57 @@ const _kHeaderGradient = LinearGradient(
   end: Alignment.bottomRight,
 );
 
+// ─── Helpers de localização ───────────────────────────────────────────────────
+
+/// Interpreta "NomeLoc • Secao A • Prateleira 2 • Nivel 3 • Sala X"
+Map<String, String?> _parseLocation(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return {};
+  final parts = raw.split('•').map((p) => p.trim()).where((p) => p.isNotEmpty);
+  String? name, section, shelf, level, room;
+  for (final p in parts) {
+    if (p.startsWith('Secao ')) {
+      section = p.substring(6).trim();
+    } else if (p.startsWith('Prateleira ')) {
+      shelf = p.substring(11).trim();
+    } else if (p.startsWith('Nivel ')) {
+      level = p.substring(6).trim();
+    } else if (p.startsWith('Sala ')) {
+      room = p.substring(5).trim();
+    } else {
+      name ??= p;
+    }
+  }
+  return {'name': name, 'section': section, 'shelf': shelf, 'level': level, 'room': room};
+}
+
+Color _sectionColor(String? section) {
+  if (section == null || section.isEmpty) return const Color(0xFF64748B);
+  const palette = [
+    Color(0xFF2563EB),
+    Color(0xFF059669),
+    Color(0xFFD97706),
+    Color(0xFF7C3AED),
+    Color(0xFFDB2777),
+    Color(0xFF0891B2),
+    Color(0xFFDC2626),
+  ];
+  return palette[section.codeUnitAt(0) % palette.length];
+}
+
+/// Gera uma chave única de localização para agrupamento
+String _locationKey(Map<String, String?> loc) {
+  final parts = [
+    if (loc['section'] != null) 'S${loc['section']}',
+    if (loc['shelf'] != null) 'P${loc['shelf']}',
+    if (loc['level'] != null) 'N${loc['level']}',
+    if (loc['room'] != null) 'R${loc['room']}',
+    if (loc['name'] != null) loc['name']!,
+  ];
+  return parts.isEmpty ? 'sem_local' : parts.join('-');
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
+
 class OutputViewPage extends StatefulWidget {
   final Map<String, dynamic> output;
   const OutputViewPage({super.key, required this.output});
@@ -58,7 +109,7 @@ class _OutputViewPageState extends State<OutputViewPage> with SingleTickerProvid
             controller: _tabController,
             children: [
               _ResumoTab(output: widget.output, movements: movements),
-              _ItensTab(movements: movements),
+              _LotesTab(movements: movements),
               _LocalizacoesTab(movements: movements),
             ],
           ),
@@ -68,7 +119,7 @@ class _OutputViewPageState extends State<OutputViewPage> with SingleTickerProvid
   }
 }
 
-// ─── Sliver AppBar with gradient + tabs ──────────────────────────────────────
+// ─── Sliver AppBar ────────────────────────────────────────────────────────────
 
 class _OutputSliverAppBar extends StatelessWidget {
   final TabController tabController;
@@ -137,7 +188,7 @@ class _OutputSliverAppBar extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      _StatPill(label: '$totalItems produto${totalItems != 1 ? 's' : ''}', icon: Icons.inventory_2_outlined),
+                      _StatPill(label: '$totalItems lote${totalItems != 1 ? 's' : ''}', icon: Icons.layers_outlined),
                       const SizedBox(width: 8),
                       _StatPill(label: '$totalConsumed unidade${totalConsumed != 1 ? 's' : ''}', icon: Icons.output_rounded),
                     ],
@@ -216,7 +267,6 @@ class _ResumoTab extends StatelessWidget {
     final fmt = DateFormat('dd/MM/yyyy HH:mm');
     final totalConsumed = movements.fold<int>(0, (s, m) => s + ((m['consumed'] as num?)?.toInt() ?? 0));
 
-    // Group by product to count distinct products
     final distinctProducts = <String>{};
     for (final m in movements) {
       final pid = m['productId'] as String?;
@@ -289,7 +339,7 @@ class _ResumoTab extends StatelessWidget {
 
         const SizedBox(height: AppSpacing.lg),
 
-        // ── FEFO instruction ──
+        // ── FEFO info ──
         Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
@@ -309,7 +359,7 @@ class _ResumoTab extends StatelessWidget {
                     Text('Critério FEFO aplicado', style: AppTypography.labelSmall.copyWith(color: AppColors.warning600, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 4),
                     Text(
-                      'Os lotes foram selecionados automaticamente por ordem de vencimento (First Expired, First Out). Retire os itens na ordem indicada na aba Lotes.',
+                      'Os lotes foram selecionados automaticamente por ordem de vencimento. Retire os itens na ordem indicada na aba Lotes.',
                       style: AppTypography.bodySmall.copyWith(color: AppColors.warning600),
                     ),
                   ],
@@ -321,7 +371,6 @@ class _ResumoTab extends StatelessWidget {
 
         const SizedBox(height: AppSpacing.lg),
 
-        // ── Quick list ──
         Text('Itens desta saída', style: AppTypography.labelMedium.copyWith(fontWeight: FontWeight.w700, color: AppColors.neutral700)),
         const SizedBox(height: AppSpacing.sm),
         ...movements.asMap().entries.map((entry) {
@@ -329,7 +378,7 @@ class _ResumoTab extends StatelessWidget {
           final m = entry.value;
           final expiry = m['expiryDate'] as String?;
           final expiryDt = expiry != null ? DateTime.tryParse(expiry) : null;
-          final daysLeft = expiryDt != null ? expiryDt.difference(DateTime.now()).inDays : null;
+          final daysLeft = expiryDt?.difference(DateTime.now()).inDays;
           return _QuickItemRow(
             index: idx + 1,
             productName: m['productName'] as String? ?? '-',
@@ -456,7 +505,10 @@ class _QuickItemRow extends StatelessWidget {
               if (expiryDt != null)
                 Text(
                   DateFormat('dd/MM/yy').format(expiryDt!),
-                  style: AppTypography.bodySmall.copyWith(color: urgentColor, fontWeight: daysLeft != null && daysLeft! <= 7 ? FontWeight.w700 : FontWeight.normal),
+                  style: AppTypography.bodySmall.copyWith(
+                    color: urgentColor,
+                    fontWeight: daysLeft != null && daysLeft! <= 7 ? FontWeight.w700 : FontWeight.normal,
+                  ),
                 ),
             ],
           ),
@@ -466,17 +518,17 @@ class _QuickItemRow extends StatelessWidget {
   }
 }
 
-// ─── Tab 2: Lotes / Itens ────────────────────────────────────────────────────
+// ─── Tab 2: Lotes ─────────────────────────────────────────────────────────────
 
-class _ItensTab extends StatelessWidget {
+class _LotesTab extends StatelessWidget {
   final List<Map<String, dynamic>> movements;
-  const _ItensTab({required this.movements});
+  const _LotesTab({required this.movements});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     if (movements.isEmpty) {
-      return const CasaEmptyState(icon: Icons.inventory_2_outlined, title: 'Sem itens', description: 'Nenhum item registrado nesta saída.');
+      return const CasaEmptyState(icon: Icons.inventory_2_outlined, title: 'Sem lotes', description: 'Nenhum lote registrado nesta saída.');
     }
 
     return ListView.builder(
@@ -486,11 +538,12 @@ class _ItensTab extends StatelessWidget {
         final m = movements[i];
         final expiry = m['expiryDate'] as String?;
         final expiryDt = expiry != null ? DateTime.tryParse(expiry) : null;
-        final daysLeft = expiryDt != null ? expiryDt.difference(DateTime.now()).inDays : null;
+        final daysLeft = expiryDt?.difference(DateTime.now()).inDays;
         final after = (m['after'] as num?)?.toInt() ?? 0;
         final consumed = (m['consumed'] as num?)?.toInt() ?? 0;
         final before = (m['before'] as num?)?.toInt() ?? 0;
-        final location = m['shelfLocation'] as String?;
+        final locationRaw = m['shelfLocation'] as String?;
+        final loc = _parseLocation(locationRaw);
 
         Color urgency = AppColors.success600;
         String urgencyLabel = 'OK';
@@ -513,6 +566,9 @@ class _ItensTab extends StatelessWidget {
           }
         }
 
+        final sectionColor = _sectionColor(loc['section']);
+        final hasLocation = loc.isNotEmpty && loc.values.any((v) => v != null);
+
         return Container(
           margin: const EdgeInsets.only(bottom: AppSpacing.md),
           decoration: BoxDecoration(
@@ -526,7 +582,7 @@ class _ItensTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header strip ──
+              // ── Header ──
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
                 decoration: BoxDecoration(
@@ -535,6 +591,19 @@ class _ItensTab extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
+                    // Índice de ordem
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: urgency.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Text('${i + 1}', style: AppTypography.labelSmall.copyWith(color: urgency, fontWeight: FontWeight.w800)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         m['productName'] as String? ?? '-',
@@ -562,14 +631,23 @@ class _ItensTab extends StatelessWidget {
                   ],
                 ),
               ),
-              // ── Body ──
+
+              // ── Corpo ──
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Column(
                   children: [
+                    // Lote + Validade
                     Row(
                       children: [
-                        Expanded(child: _FieldTile(icon: Icons.qr_code_2_rounded, label: 'Lote', value: m['batchId'] as String? ?? '-')),
+                        Expanded(
+                          child: _FieldTile(
+                            icon: Icons.qr_code_2_rounded,
+                            label: 'Lote',
+                            value: m['batchId'] as String? ?? '-',
+                            monospace: true,
+                          ),
+                        ),
                         Expanded(
                           child: _FieldTile(
                             icon: Icons.calendar_today_outlined,
@@ -581,28 +659,55 @@ class _ItensTab extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _FieldTile(
-                            icon: Icons.place_outlined,
-                            label: 'Localização',
-                            value: location?.isNotEmpty == true ? location! : 'Não informada',
-                            valueColor: location?.isNotEmpty == true ? AppColors.brandPrimary600 : null,
+
+                    // Localização visual
+                    if (hasLocation) ...[
+                      _LocationAddressRow(loc: loc, sectionColor: sectionColor),
+                      const SizedBox(height: AppSpacing.sm),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _FieldTile(
+                              icon: Icons.place_outlined,
+                              label: 'Localização',
+                              value: 'Não informada',
+                              valueColor: AppColors.neutral500,
+                            ),
                           ),
+                          const Expanded(child: SizedBox()),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
+
+                    // Quantidade a retirar
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1D4ED8), Color(0xFF2563EB)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
                         ),
-                        Expanded(
-                          child: _FieldTile(
-                            icon: Icons.output_rounded,
-                            label: 'Retirar',
-                            value: '$consumed unidade${consumed != 1 ? 's' : ''}',
-                            valueColor: AppColors.brandPrimary700,
+                        borderRadius: BorderRadius.circular(AppRadius.card),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.output_rounded, color: Colors.white, size: 18),
+                          const SizedBox(width: 10),
+                          Text('Retirar desta localização:', style: AppTypography.bodySmall.copyWith(color: Colors.white70)),
+                          const Spacer(),
+                          Text(
+                            '$consumed unidade${consumed != 1 ? 's' : ''}',
+                            style: AppTypography.labelMedium.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    // ── Stock bar ──
+
+                    // Barra de estoque
                     _StockProgressBar(before: before, after: after, consumed: consumed),
                   ],
                 ),
@@ -615,12 +720,89 @@ class _ItensTab extends StatelessWidget {
   }
 }
 
+// ─── Widget de endereço de localização ───────────────────────────────────────
+
+class _LocationAddressRow extends StatelessWidget {
+  final Map<String, String?> loc;
+  final Color sectionColor;
+  const _LocationAddressRow({required this.loc, required this.sectionColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: sectionColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: sectionColor.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          // Ícone de localização colorido
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: sectionColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.place_rounded, color: sectionColor, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (loc['name'] != null)
+                  Text(loc['name']!, style: AppTypography.labelSmall.copyWith(color: AppColors.neutral700, fontWeight: FontWeight.w700)),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    if (loc['section'] != null)
+                      _AddrChip(label: 'Seção ${loc['section']}', color: sectionColor),
+                    if (loc['shelf'] != null)
+                      _AddrChip(label: 'Prateleira ${loc['shelf']}', color: const Color(0xFF0891B2)),
+                    if (loc['level'] != null)
+                      _AddrChip(label: 'Nível ${loc['level']}', color: const Color(0xFF7C3AED)),
+                    if (loc['room'] != null)
+                      _AddrChip(label: 'Sala ${loc['room']}', color: const Color(0xFF059669)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddrChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _AddrChip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
+      ),
+      child: Text(label, style: AppTypography.labelSmall.copyWith(color: color, fontWeight: FontWeight.w700, fontSize: 10)),
+    );
+  }
+}
+
 class _FieldTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final Color? valueColor;
-  const _FieldTile({required this.icon, required this.label, required this.value, this.valueColor});
+  final bool monospace;
+  const _FieldTile({required this.icon, required this.label, required this.value, this.valueColor, this.monospace = false});
 
   @override
   Widget build(BuildContext context) {
@@ -634,7 +816,16 @@ class _FieldTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label, style: AppTypography.bodySmall.copyWith(color: AppColors.neutral500)),
-              Text(value, style: AppTypography.labelSmall.copyWith(fontWeight: FontWeight.w700, color: valueColor ?? AppColors.neutral900), maxLines: 2, overflow: TextOverflow.ellipsis),
+              Text(
+                value,
+                style: AppTypography.labelSmall.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: valueColor ?? AppColors.neutral900,
+                  fontFamily: monospace ? 'monospace' : null,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),
@@ -690,209 +881,495 @@ class _LocalizacoesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    // Group by location
-    final Map<String, List<Map<String, dynamic>>> byLocation = {};
+    // Agrupar por localização parseada
+    final Map<String, _LocationGroup> groups = {};
     for (final m in movements) {
-      final loc = (m['shelfLocation'] as String?)?.isNotEmpty == true
-          ? m['shelfLocation'] as String
-          : 'Sem localização';
-      byLocation.putIfAbsent(loc, () => []).add(m);
+      final raw = m['shelfLocation'] as String?;
+      final loc = _parseLocation(raw);
+      final key = loc.isEmpty ? 'sem_local' : _locationKey(loc);
+      groups.putIfAbsent(key, () => _LocationGroup(raw: raw, loc: loc, items: [])).items.add(m);
     }
 
-    if (byLocation.isEmpty) {
+    if (groups.isEmpty) {
       return const CasaEmptyState(icon: Icons.place_outlined, title: 'Sem localizações', description: 'Nenhuma localização registrada.');
     }
 
-    final hasLocation = byLocation.keys.any((k) => k != 'Sem localização');
+    final hasAnyLocation = groups.values.any((g) => g.loc.isNotEmpty);
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.md),
       children: [
-        if (hasLocation)
+        // ── Banner ──
+        if (hasAnyLocation)
           Container(
             margin: const EdgeInsets.only(bottom: AppSpacing.md),
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: AppColors.brandPrimary100,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E3A8A), Color(0xFF1D4ED8)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
               borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(color: AppColors.brandPrimary500.withValues(alpha: 0.30)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.map_outlined, color: AppColors.brandPrimary700, size: 20),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.route_rounded, color: Colors.white, size: 18),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Retire os itens nos endereços indicados abaixo. Os lotes estão ordenados por vencimento (FEFO).',
-                    style: AppTypography.bodySmall.copyWith(color: AppColors.brandPrimary700),
+                    'Siga a ordem abaixo para retirar os itens. Os lotes estão organizados por vencimento (FEFO).',
+                    style: AppTypography.bodySmall.copyWith(color: Colors.white),
                   ),
                 ),
               ],
             ),
           ),
-        ...byLocation.entries.toList().asMap().entries.map((entry) {
-          final locationName = entry.value.key;
-          final items = entry.value.value;
-          final isNoLocation = locationName == 'Sem localização';
 
-          return Container(
-            margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        // ── Grupos por localização ──
+        ...groups.entries.toList().asMap().entries.map((mapEntry) {
+          final stepIndex = mapEntry.key;
+          final group = mapEntry.value.value;
+          return _LocationGroupCard(
+            stepIndex: stepIndex + 1,
+            group: group,
+            cs: cs,
+          );
+        }),
+      ],
+    );
+  }
+}
+
+class _LocationGroup {
+  final String? raw;
+  final Map<String, String?> loc;
+  final List<Map<String, dynamic>> items;
+  _LocationGroup({required this.raw, required this.loc, required this.items});
+}
+
+class _LocationGroupCard extends StatelessWidget {
+  final int stepIndex;
+  final _LocationGroup group;
+  final ColorScheme cs;
+
+  const _LocationGroupCard({
+    required this.stepIndex,
+    required this.group,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final loc = group.loc;
+    final isNoLocation = loc.isEmpty;
+    final sectionColor = isNoLocation ? AppColors.neutral500 : _sectionColor(loc['section']);
+    final section = loc['section'];
+    final shelf = loc['shelf'];
+    final level = loc['level'];
+    final room = loc['room'];
+    final name = loc['name'];
+    final totalConsumed = group.items.fold<int>(0, (s, m) => s + ((m['consumed'] as num?)?.toInt() ?? 0));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card + 4),
+        border: Border.all(
+          color: isNoLocation
+              ? const Color(0xFFD1D5DB)
+              : sectionColor.withValues(alpha: 0.30),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(color: sectionColor.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header da localização ──
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: BorderRadius.circular(AppRadius.card + 2),
-              border: Border.all(
-                color: isNoLocation
-                    ? AppColors.neutral500.withValues(alpha: 0.20)
-                    : AppColors.brandPrimary500.withValues(alpha: 0.25),
-              ),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
-              ],
+              color: isNoLocation ? AppColors.neutral100 : sectionColor.withValues(alpha: 0.07),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.card + 4)),
             ),
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Location header ──
+                // Número do passo
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
+                  width: 32,
+                  height: 32,
                   decoration: BoxDecoration(
-                    color: isNoLocation
-                        ? AppColors.neutral100
-                        : AppColors.brandPrimary100,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card + 2)),
+                    gradient: isNoLocation
+                        ? null
+                        : LinearGradient(
+                            colors: [sectionColor, sectionColor.withValues(alpha: 0.75)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                    color: isNoLocation ? AppColors.neutral500 : null,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: isNoLocation
+                        ? []
+                        : [BoxShadow(color: sectionColor.withValues(alpha: 0.30), blurRadius: 6, offset: const Offset(0, 2))],
                   ),
+                  child: Center(
+                    child: Text('$stepIndex', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isNoLocation)
+                        Text('Sem localização definida', style: AppTypography.labelMedium.copyWith(fontWeight: FontWeight.w700, color: AppColors.neutral700))
+                      else ...[
+                        if (name != null)
+                          Text(name, style: AppTypography.labelMedium.copyWith(fontWeight: FontWeight.w800, color: AppColors.neutral900)),
+                        // ── Endereço em chips ──
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (section != null)
+                              _AddrChip(label: 'Seção $section', color: sectionColor),
+                            if (shelf != null)
+                              _AddrChip(label: 'Prateleira $shelf', color: const Color(0xFF0891B2)),
+                            if (level != null)
+                              _AddrChip(label: 'Nível $level', color: const Color(0xFF7C3AED)),
+                            if (room != null)
+                              _AddrChip(label: 'Sala $room', color: const Color(0xFF059669)),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: sectionColor.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${group.items.length} lote${group.items.length != 1 ? 's' : ''}',
+                        style: AppTypography.labelSmall.copyWith(color: sectionColor, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$totalConsumed un.',
+                      style: AppTypography.labelSmall.copyWith(color: AppColors.neutral700, fontWeight: FontWeight.w600, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // ── Diagrama visual de prateleira/nível ──
+          if (!isNoLocation && (shelf != null || level != null))
+            _ShelfDiagram(section: section, shelf: shelf, level: level, sectionColor: sectionColor),
+
+          // ── Itens nesta localização ──
+          ...group.items.asMap().entries.map((ie) {
+            final isLast = ie.key == group.items.length - 1;
+            final m = ie.value;
+            final expiry = m['expiryDate'] as String?;
+            final expiryDt = expiry != null ? DateTime.tryParse(expiry) : null;
+            final daysLeft = expiryDt?.difference(DateTime.now()).inDays;
+            final consumed = (m['consumed'] as num?)?.toInt() ?? 0;
+
+            Color urgency = AppColors.success600;
+            if (daysLeft != null) {
+              if (daysLeft <= 0) {
+                urgency = AppColors.neutral500;
+              } else if (daysLeft <= 7) {
+                urgency = AppColors.danger600;
+              } else if (daysLeft <= 30) {
+                urgency = AppColors.warning600;
+              }
+            }
+
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
                   child: Row(
                     children: [
-                      Icon(
-                        isNoLocation ? Icons.help_outline_rounded : Icons.place_rounded,
-                        color: isNoLocation ? AppColors.neutral500 : AppColors.brandPrimary700,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          locationName,
-                          style: AppTypography.labelMedium.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: isNoLocation ? AppColors.neutral700 : AppColors.brandPrimary700,
-                          ),
-                        ),
-                      ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
-                          color: isNoLocation
-                              ? AppColors.neutral500.withValues(alpha: 0.12)
-                              : AppColors.brandPrimary600.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
+                          color: urgency.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: urgency.withValues(alpha: 0.20)),
+                        ),
+                        child: Center(child: Icon(Icons.inventory_2_outlined, size: 18, color: urgency)),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              m['productName'] as String? ?? '-',
+                              style: AppTypography.labelSmall.copyWith(fontWeight: FontWeight.w700),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(Icons.qr_code_2_rounded, size: 11, color: AppColors.neutral500),
+                                const SizedBox(width: 3),
+                                Expanded(
+                                  child: Text(
+                                    m['batchId'] as String? ?? '-',
+                                    style: AppTypography.bodySmall.copyWith(
+                                      color: AppColors.neutral500,
+                                      fontFamily: 'monospace',
+                                      fontSize: 10,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (expiryDt != null)
+                              Row(
+                                children: [
+                                  Icon(Icons.calendar_today_outlined, size: 11, color: urgency),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'Val: ${DateFormat('dd/MM/yyyy').format(expiryDt)}',
+                                    style: AppTypography.bodySmall.copyWith(color: urgency, fontWeight: daysLeft != null && daysLeft <= 7 ? FontWeight.w700 : FontWeight.normal, fontSize: 10),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1D4ED8), Color(0xFF2563EB)],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.25), blurRadius: 6, offset: const Offset(0, 2)),
+                          ],
                         ),
                         child: Text(
-                          '${items.length} lote${items.length != 1 ? 's' : ''}',
-                          style: AppTypography.labelSmall.copyWith(
-                            color: isNoLocation ? AppColors.neutral500 : AppColors.brandPrimary600,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          '$consumed un.',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
                         ),
                       ),
                     ],
                   ),
                 ),
-                // ── Items in this location ──
-                ...items.asMap().entries.map((ie) {
-                  final isLast = ie.key == items.length - 1;
-                  final m = ie.value;
-                  final expiry = m['expiryDate'] as String?;
-                  final expiryDt = expiry != null ? DateTime.tryParse(expiry) : null;
-                  final daysLeft = expiryDt != null ? expiryDt.difference(DateTime.now()).inDays : null;
-                  final consumed = (m['consumed'] as num?)?.toInt() ?? 0;
+                if (!isLast)
+                  Divider(height: 1, indent: AppSpacing.md, endIndent: AppSpacing.md, color: cs.outlineVariant.withValues(alpha: 0.4)),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
 
-                  return Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: AppColors.brandPrimary100,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Center(
-                                child: Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.brandPrimary700),
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    m['productName'] as String? ?? '-',
-                                    style: AppTypography.labelSmall.copyWith(fontWeight: FontWeight.w700),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.qr_code_2_rounded, size: 12, color: AppColors.neutral500),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          m['batchId'] as String? ?? '-',
-                                          style: AppTypography.bodySmall.copyWith(color: AppColors.neutral500),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.brandPrimary600.withValues(alpha: 0.10),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    '$consumed un.',
-                                    style: AppTypography.labelSmall.copyWith(
-                                      color: AppColors.brandPrimary700,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                                if (expiryDt != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Val: ${DateFormat('dd/MM/yy').format(expiryDt)}',
-                                    style: AppTypography.bodySmall.copyWith(
-                                      color: daysLeft != null && daysLeft <= 7 ? AppColors.danger600 : AppColors.neutral500,
-                                      fontWeight: daysLeft != null && daysLeft <= 7 ? FontWeight.w700 : FontWeight.normal,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!isLast) Divider(height: 1, indent: AppSpacing.md, endIndent: AppSpacing.md, color: cs.outlineVariant.withValues(alpha: 0.4)),
-                    ],
-                  );
-                }),
+// ─── Diagrama visual de prateleira / nível ────────────────────────────────────
+
+class _ShelfDiagram extends StatelessWidget {
+  final String? section;
+  final String? shelf;
+  final String? level;
+  final Color sectionColor;
+
+  const _ShelfDiagram({
+    required this.section,
+    required this.shelf,
+    required this.level,
+    required this.sectionColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Tenta parsear o nível como número; se não conseguir usa string
+    final levelNum = level != null ? int.tryParse(level!) : null;
+    const maxLevels = 4; // número máximo de níveis a mostrar no diagrama
+    final targetLevel = (levelNum != null && levelNum >= 1 && levelNum <= maxLevels) ? levelNum : null;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: sectionColor.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: sectionColor.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Seção badge
+          if (section != null) ...[
+            Column(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: sectionColor,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(
+                      section!,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text('Seção', style: AppTypography.bodySmall.copyWith(color: AppColors.neutral500, fontSize: 9)),
               ],
             ),
-          );
-        }),
+            // Seta
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.chevron_right_rounded, color: sectionColor.withValues(alpha: 0.50), size: 18),
+            ),
+          ],
+
+          // Prateleira badge
+          if (shelf != null) ...[
+            Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0891B2).withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF0891B2).withValues(alpha: 0.30)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.view_week_outlined, size: 14, color: Color(0xFF0891B2)),
+                      const SizedBox(width: 4),
+                      Text(shelf!, style: const TextStyle(color: Color(0xFF0891B2), fontWeight: FontWeight.w800, fontSize: 14)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text('Prateleira', style: AppTypography.bodySmall.copyWith(color: AppColors.neutral500, fontSize: 9)),
+              ],
+            ),
+          ],
+
+          // Seta + nível
+          if (level != null) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.chevron_right_rounded, color: const Color(0xFF7C3AED).withValues(alpha: 0.50), size: 18),
+            ),
+            Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF7C3AED).withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.30)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.layers_outlined, size: 14, color: Color(0xFF7C3AED)),
+                      const SizedBox(width: 4),
+                      Text(level!, style: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w800, fontSize: 14)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text('Nível', style: AppTypography.bodySmall.copyWith(color: AppColors.neutral500, fontSize: 9)),
+              ],
+            ),
+          ],
+
+          const Spacer(),
+
+          // Mini visualização vertical de níveis
+          if (targetLevel != null)
+            _MiniLevelStack(targetLevel: targetLevel, totalLevels: maxLevels, color: const Color(0xFF7C3AED)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pilha vertical mostrando qual nível está destacado
+class _MiniLevelStack extends StatelessWidget {
+  final int targetLevel;
+  final int totalLevels;
+  final Color color;
+  const _MiniLevelStack({required this.targetLevel, required this.totalLevels, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        // Níveis de cima para baixo
+        for (int lvl = totalLevels; lvl >= 1; lvl--)
+          Container(
+            margin: const EdgeInsets.only(bottom: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: lvl == targetLevel ? color : color.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: lvl == targetLevel ? color : color.withValues(alpha: 0.20),
+                width: lvl == targetLevel ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (lvl == targetLevel)
+                  const Icon(Icons.arrow_left_rounded, size: 12, color: Colors.white),
+                Text(
+                  'N$lvl',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: lvl == targetLevel ? Colors.white : color.withValues(alpha: 0.40),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
