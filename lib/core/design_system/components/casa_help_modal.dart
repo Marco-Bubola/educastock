@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../tokens/color_tokens.dart';
 import '../tokens/spacing_tokens.dart';
 import '../tokens/typography_tokens.dart';
 import 'casa_button.dart';
