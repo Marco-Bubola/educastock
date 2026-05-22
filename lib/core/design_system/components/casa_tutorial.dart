@@ -16,8 +16,7 @@ const _kSkyBlueSoft = Color(0xFF7DD3FC);
 const _kTextHigh = Colors.white;
 const _kTextMid = Color(0xCCFFFFFF);   // 80% white
 const _kTextLow = Color(0x80FFFFFF);   // 50% white
-const _kCardRadius = 22.0;
-const _kCardWidth = 328.0;
+const _kCardRadius = 20.0;
 
 class TutorialStep {
   final GlobalKey key;
@@ -182,29 +181,30 @@ class _TutorialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isLast = stepIndex == totalSteps - 1;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardWidth = (screenWidth - 20).clamp(280.0, 480.0);
 
     return SizedBox(
-      width: _kCardWidth,
+      width: cardWidth,
       child: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF060F1E), Color(0xFF0A1628), Color(0xFF0D1F3C)],
+            colors: [Color(0xFF060D1A), Color(0xFF091525), Color(0xFF0C1E38)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(_kCardRadius),
-          border: Border.all(color: _kSkyBlue.withValues(alpha: 0.30), width: 1),
           boxShadow: [
             BoxShadow(
-              color: _kSkyBlue.withValues(alpha: 0.20),
-              blurRadius: 34,
+              color: _kSkyBlue.withValues(alpha: 0.18),
+              blurRadius: 40,
               spreadRadius: 0,
-              offset: const Offset(0, 10),
+              offset: const Offset(0, 12),
             ),
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.65),
-              blurRadius: 18,
-              spreadRadius: 2,
+              color: Colors.black.withValues(alpha: 0.70),
+              blurRadius: 24,
+              spreadRadius: 4,
             ),
           ],
         ),
@@ -214,210 +214,269 @@ class _TutorialCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Faixa topo com gradiente azul ──────────────────────────────
+              // ── Cabeçalho imersivo ─────────────────────────────────────────
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF1D5FA8).withValues(alpha: 0.95),
-                      const Color(0xFF0F3060).withValues(alpha: 0.85),
+                      const Color(0xFF1A4A8A).withValues(alpha: 0.90),
+                      const Color(0xFF0D2B5C).withValues(alpha: 0.80),
                     ],
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                   ),
                 ),
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Ícone em círculo
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _kSkyBlue.withValues(alpha: 0.15),
-                        border: Border.all(
-                          color: _kSkyBlue.withValues(alpha: 0.55),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Icon(step.icon, color: _kSkyBlue, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            step.title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: _kTextHigh,
-                              height: 1.2,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          // Barra de progresso
-                          Container(
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: FractionallySizedBox(
-                                widthFactor: (stepIndex + 1) / totalSteps,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [_kSkyBlue, _kSkyBlueSoft],
-                                    ),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
+                        // Ícone com glow
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          width: 46,
+                          height: 46,
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: _kSkyBlue.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: Text(
-                            '${stepIndex + 1}/$totalSteps',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: _kSkyBlue.withValues(alpha: 0.95),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: onSkip,
-                          behavior: HitTestBehavior.opaque,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.08),
-                              ),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.close_rounded,
-                                    size: 12, color: _kTextLow),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Pular',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: _kTextLow,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                _kSkyBlue.withValues(alpha: 0.25),
+                                _kSkyBlue.withValues(alpha: 0.08),
                               ],
                             ),
+                            border: Border.all(
+                              color: _kSkyBlue.withValues(alpha: 0.50),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _kSkyBlue.withValues(alpha: 0.30),
+                                blurRadius: 12,
+                                spreadRadius: 0,
+                              ),
+                            ],
+                          ),
+                          child: Icon(step.icon, color: _kSkyBlue, size: 22),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            step.title,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: _kTextHigh,
+                              height: 1.15,
+                              letterSpacing: -0.3,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        // Contador + fechar
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: _kSkyBlue.withValues(alpha: 0.30),
+                                ),
+                              ),
+                              child: Text(
+                                '${stepIndex + 1} / $totalSteps',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: _kSkyBlue.withValues(alpha: 0.95),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            GestureDetector(
+                              onTap: onSkip,
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.close_rounded,
+                                        size: 11, color: _kTextLow),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Pular',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: _kTextLow,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Barra de progresso segmentada
+                    Row(
+                      children: List.generate(totalSteps, (i) {
+                        final done = i <= stepIndex;
+                        return Expanded(
+                          child: Container(
+                            margin: EdgeInsets.only(right: i < totalSteps - 1 ? 4 : 0),
+                            height: 3,
+                            decoration: BoxDecoration(
+                              gradient: done
+                                  ? const LinearGradient(
+                                      colors: [_kSkyBlue, _kSkyBlueSoft],
+                                    )
+                                  : null,
+                              color: done
+                                  ? null
+                                  : Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: done
+                                  ? [
+                                      BoxShadow(
+                                        color: _kSkyBlue.withValues(alpha: 0.40),
+                                        blurRadius: 6,
+                                      ),
+                                    ]
+                                  : [],
+                            ),
+                          ),
+                        );
+                      }),
                     ),
                   ],
                 ),
               ),
 
-              // ── Corpo ──────────────────────────────────────────────────────
+              // ── Corpo do conteúdo ──────────────────────────────────────────
               ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 260),
+                constraints: const BoxConstraints(maxHeight: 240),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'O que fazer',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          letterSpacing: 0.8,
-                          color: _kSkyBlue.withValues(alpha: 0.85),
-                          fontWeight: FontWeight.w700,
-                        ),
+                      // Label seção
+                      Row(
+                        children: [
+                          Container(
+                            width: 3,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [_kSkyBlue, _kSkyBlueSoft],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'COMO USAR',
+                            style: TextStyle(
+                              fontSize: 10,
+                              letterSpacing: 1.2,
+                              color: _kSkyBlue.withValues(alpha: 0.80),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Text(
                         step.description,
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 13.5,
                           color: _kTextMid,
-                          height: 1.5,
+                          height: 1.55,
                           fontWeight: FontWeight.w400,
                         ),
                       ),
                       if (step.hints.isNotEmpty) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 14),
+                        // Separador com gradiente
                         Container(
                           height: 1,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
                                 Colors.transparent,
-                                _kSkyBlue.withValues(alpha: 0.25),
+                                _kSkyBlue.withValues(alpha: 0.30),
                                 Colors.transparent,
                               ],
                             ),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Dicas rápidas',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            letterSpacing: 0.6,
-                            color: _kSkyBlue.withValues(alpha: 0.85),
-                            fontWeight: FontWeight.w700,
-                          ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Container(
+                              width: 3,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF818CF8),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'DICAS RÁPIDAS',
+                              style: TextStyle(
+                                fontSize: 10,
+                                letterSpacing: 1.2,
+                                color: const Color(0xFF818CF8).withValues(alpha: 0.90),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 10),
                         ...step.hints.map(
                           (h) => Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
+                            padding: const EdgeInsets.only(bottom: 8),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Container(
-                                  margin: const EdgeInsets.only(top: 5, right: 8),
-                                  width: 6,
-                                  height: 6,
-                                  decoration: const BoxDecoration(
+                                  margin: const EdgeInsets.only(top: 6, right: 10),
+                                  width: 5,
+                                  height: 5,
+                                  decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: _kSkyBlue,
+                                    color: _kSkyBlue.withValues(alpha: 0.80),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _kSkyBlue.withValues(alpha: 0.50),
+                                        blurRadius: 4,
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 Expanded(
                                   child: Text(
                                     h,
                                     style: const TextStyle(
-                                      fontSize: 12,
+                                      fontSize: 12.5,
                                       color: _kTextMid,
-                                      height: 1.45,
+                                      height: 1.50,
                                     ),
                                   ),
                                 ),
@@ -430,10 +489,10 @@ class _TutorialCard extends StatelessWidget {
                   ),
                 ),
               ),
-                // ── Navegação ──────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
 
+              // ── Navegação ──────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
                 child: Row(
                   children: [
                     if (onPrevious != null)
