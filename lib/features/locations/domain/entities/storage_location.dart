@@ -29,23 +29,23 @@ class StorageLocation {
     required this.normalizedKey,
   });
 
+  // Key used for grouping in the list — uses section letter for old data,
+  // shelf name for new data (section='').
+  String get groupKey => section.isNotEmpty ? section : shelf;
+
   String get label {
-    final parts = <String>[
-      if ((locationName ?? '').isNotEmpty) locationName!,
-      'Secao $section',
-      'Prateleira $shelf',
-      if ((level ?? '').isNotEmpty) 'Nivel $level',
-      if ((room ?? '').isNotEmpty) 'Sala $room',
-    ];
-    return parts.join(' • ');
+    if ((locationName ?? '').isNotEmpty) return locationName!;
+    final shelfPart = shelf.isNotEmpty ? 'Prateleira $shelf' : 'Local';
+    final levelPart = (level?.isNotEmpty == true) ? ' · Nível $level' : '';
+    return '$shelfPart$levelPart';
   }
 
   factory StorageLocation.fromMap(Map<String, dynamic> map, String id) {
     return StorageLocation(
       id: id,
       locationName: map['locationName'] as String?,
-      section: map['section'] as String,
-      shelf: map['shelf'] as String,
+      section: map['section'] as String? ?? '',
+      shelf: map['shelf'] as String? ?? '',
       level: map['level'] as String?,
       room: map['room'] as String?,
       shelvesCount: (map['shelvesCount'] as num?)?.toInt(),
@@ -54,7 +54,7 @@ class StorageLocation {
       capacity: (map['capacity'] as num?)?.toInt(),
       isActive: map['isActive'] as bool? ?? true,
       createdAt: DateTime.parse(map['createdAt'] as String),
-      normalizedKey: map['normalizedKey'] as String,
+      normalizedKey: map['normalizedKey'] as String? ?? '',
     );
   }
 
