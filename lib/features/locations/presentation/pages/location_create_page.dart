@@ -11,58 +11,32 @@ class LocationCreatePage extends ConsumerStatefulWidget {
 }
 
 class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
-  final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
-  final _customSectionCtrl = TextEditingController();
   final _customShelfCtrl = TextEditingController();
-  final _levelCtrl = TextEditingController();
-  final _roomCtrl = TextEditingController();
-  final _capacityCtrl = TextEditingController();
 
   bool _saving = false;
-
-  static const _presetSections = ['A', 'B', 'C', 'D', 'E', 'F'];
-  String? _selectedSection;
-  bool _customSection = false;
-
-  static const _presetShelves = ['1', '2', '3', '4', '5', '6', '7', '8'];
   String? _selectedShelf;
   bool _customShelf = false;
-
-  static const _presetLevels = [
-    'Superior', 'Médio', 'Inferior', '1', '2', '3', '4'
-  ];
-  String? _selectedLevel;
-  bool _showLevel = false;
+  int _level = 1;
+  int _productsPerLevel = 20;
   bool _showCapacity = false;
-  bool _showExtras = false;
-  final _keySaveBtn = GlobalKey();
-  final _keyNameField = GlobalKey();
+  bool _showName = false;
+
+  static const _presetShelves = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _customSectionCtrl.dispose();
     _customShelfCtrl.dispose();
-    _levelCtrl.dispose();
-    _roomCtrl.dispose();
-    _capacityCtrl.dispose();
     super.dispose();
   }
 
-  String get _effectiveSection =>
-      _customSection ? _customSectionCtrl.text.trim() : (_selectedSection ?? '');
   String get _effectiveShelf =>
       _customShelf ? _customShelfCtrl.text.trim() : (_selectedShelf ?? '');
-  String get _effectiveLevel {
-    if (_selectedLevel != null) return _selectedLevel!;
-    return _levelCtrl.text.trim();
-  }
 
-  bool get _hasSection => _effectiveSection.isNotEmpty;
-  bool get _hasShelf => _effectiveShelf.isNotEmpty;
+  bool get _isValid => _effectiveShelf.isNotEmpty;
 
-  Color _sectionColor(String s) {
+  Color _shelfColor(String s) {
     if (s.isEmpty) return AppColors.brandPrimary600;
     const colors = [
       AppColors.brandPrimary600,
@@ -71,49 +45,39 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
       Color(0xFF7C3AED),
       Color(0xFF0891B2),
       AppColors.warning600,
+      Color(0xFFDB2777),
+      Color(0xFF059669),
     ];
     return colors[s.codeUnitAt(0) % colors.length];
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (!_hasSection) {
+    if (_effectiveShelf.isEmpty) {
       showCasaSnackbar(context,
-          message: 'Selecione ou informe a Seção.', isError: true);
+          message: 'Escolha uma prateleira.', isError: true);
       return;
     }
-    if (!_hasShelf) {
-      showCasaSnackbar(context,
-          message: 'Selecione ou informe a Prateleira.', isError: true);
-      return;
-    }
-
     setState(() => _saving = true);
     await ref.read(locationsNotifierProvider.notifier).createLocation(
-          locationName:
-              _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
-          section: _effectiveSection,
-          shelf: _effectiveShelf,
-          level:
-              (_showLevel && _effectiveLevel.isNotEmpty) ? _effectiveLevel : null,
-          room: (_showExtras && _roomCtrl.text.trim().isNotEmpty)
-              ? _roomCtrl.text.trim()
+          locationName: (_showName && _nameCtrl.text.trim().isNotEmpty)
+              ? _nameCtrl.text.trim()
               : null,
-          productsPerLevel:
-              _showCapacity ? int.tryParse(_capacityCtrl.text.trim()) : null,
+          shelf: _effectiveShelf,
+          level: _level.toString(),
+          productsPerLevel: _showCapacity ? _productsPerLevel : null,
         );
-
     setState(() => _saving = false);
-    final state = ref.read(locationsNotifierProvider);
+    final st = ref.read(locationsNotifierProvider);
     if (!mounted) return;
-    state.when(
+    st.when(
       data: (_) {
         showCasaSnackbar(context,
-            message: 'Localização cadastrada com sucesso!', isSuccess: true);
+            message: 'Localização cadastrada!', isSuccess: true);
         Navigator.pop(context);
       },
       error: (e, _) => showCasaSnackbar(context,
-          message: e.toString().replaceFirst('Exception: ', ''), isError: true),
+          message: e.toString().replaceFirst('Exception: ', ''),
+          isError: true),
       loading: () {},
     );
   }
@@ -121,404 +85,217 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cs = Theme.of(context).colorScheme;
-    final accent = _hasSection ? _sectionColor(_effectiveSection) : AppColors.brandPrimary600;
+    final accent =
+        _isValid ? _shelfColor(_effectiveShelf) : AppColors.brandPrimary600;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F1520) : const Color(0xFFF5F7FB),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF141B2D) : Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        leading: IconButton(
-          icon: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: isDark ? 0.15 : 0.08),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.arrow_back_ios_new_rounded, color: accent, size: 16),
+      backgroundColor:
+          isDark ? const Color(0xFF0F1520) : const Color(0xFFF5F7FB),
+      appBar: _buildAppBar(isDark, accent),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
+        children: [
+          // ── Prévia animada ──
+          _PreviewCard(
+            isDark: isDark,
+            accent: accent,
+            shelf: _effectiveShelf,
+            level: _level,
+            capacity: _showCapacity ? _productsPerLevel : null,
+            name: _showName ? _nameCtrl.text.trim() : '',
           ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [accent, accent.withValues(alpha: 0.7)],
-                ),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.add_location_alt_rounded,
-                  color: Colors.white, size: 17),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Nova Localização',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? Colors.white : const Color(0xFF111827),
-                    fontFamily: 'Poppins',
-                  ),
-                ),
-                Text(
-                  'Configure seção, prateleira e mais',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark
-                        ? const Color(0xFFADB5BD)
-                        : const Color(0xFF6B7280),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          buildHelpButton(
-            context: context,
-            onPressed: () => showCasaTutorial(
-              context: context,
-              steps: [
-                TutorialStep(
-                  key: _keyNameField,
-                  title: 'Nome da Localização',
-                  description: 'Informe um nome claro e único para identificar este local de armazenamento. Use um sistema de nomenclatura consistente para toda a instituição.',
-                  icon: Icons.edit_location_alt_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Seja específico: "Prateleira B-2" é melhor que "Prateleira"',
-                    'Inclua referências físicas: sala, corredor, nível',
-                    'Ex: "Despensa Principal", "Armário Cozinha", "Galpão Fundo"',
-                  ],
-                ),
-                TutorialStep(
-                  key: _keySaveBtn,
-                  title: 'Salvar Localização',
-                  description: 'Salve a nova localização para que ela fique disponível ao cadastrar lotes de estoque. A localização aparece imediatamente nas opções de seleção.',
-                  icon: Icons.save_as_rounded,
-                  align: ContentAlign.top,
-                  hints: const [
-                    'Localizações ficam disponíveis para toda a equipe',
-                    'Você pode criar quantas localizações precisar',
-                    'Edite o nome posteriormente se necessário',
-                  ],
-                ),
-              ],
-            ),
+          const SizedBox(height: AppSpacing.xl),
+
+          // ── Prateleira ──
+          _ShelfPickerCard(
+            isDark: isDark,
+            presets: _presetShelves,
+            selected: _customShelf ? null : _selectedShelf,
+            customActive: _customShelf,
+            customCtrl: _customShelfCtrl,
+            onSelect: (v) => setState(() {
+              _selectedShelf = v;
+              _customShelf = false;
+            }),
+            onCustomToggle: () => setState(() {
+              _customShelf = !_customShelf;
+              _selectedShelf = null;
+            }),
+            onCustomChanged: () => setState(() {}),
+            shelfColorFn: _shelfColor,
           ),
-          if (_hasSection && _hasShelf)
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: _saving
-                  ? SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          color: accent, strokeWidth: 2))
-                  : GestureDetector(
-                      key: _keySaveBtn,
-                      onTap: _save,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 7),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [accent, accent.withValues(alpha: 0.8)],
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: accent.withValues(alpha: 0.35),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: const Text(
-                          'Salvar',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
+          const SizedBox(height: AppSpacing.md),
+
+          // ── Nível ──
+          _LevelCard(
+            isDark: isDark,
+            level: _level,
+            accent: accent,
+            onDecrement: () => setState(() {
+              if (_level > 1) _level--;
+            }),
+            onIncrement: () => setState(() {
+              if (_level < 20) _level++;
+            }),
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // ── Capacidade (opcional) ──
+          _CapacityCard(
+            isDark: isDark,
+            accent: AppColors.warning600,
+            enabled: _showCapacity,
+            value: _productsPerLevel,
+            onToggle: () => setState(() => _showCapacity = !_showCapacity),
+            onDecrement: () => setState(() {
+              if (_productsPerLevel >= 5) _productsPerLevel -= 5;
+            }),
+            onIncrement: () =>
+                setState(() => _productsPerLevel += 5),
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // ── Nome personalizado (opcional) ──
+          _NameCard(
+            isDark: isDark,
+            enabled: _showName,
+            ctrl: _nameCtrl,
+            onToggle: () => setState(() => _showName = !_showName),
+            onChanged: () => setState(() {}),
+          ),
+
+          const SizedBox(height: AppSpacing.xxl),
+          CasaButton(
+            label: 'Salvar Localização',
+            icon: Icons.add_location_alt_rounded,
+            onPressed: (_saving || !_isValid) ? null : _save,
+            isLoading: _saving,
+          ),
+          const SizedBox(height: AppSpacing.lg),
         ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          children: [
-            // ── Card prévia ──
-            _PreviewCard(
-              isDark: isDark,
-              accent: accent,
-              hasSection: _hasSection,
-              hasShelf: _hasShelf,
-              section: _effectiveSection,
-              shelf: _effectiveShelf,
-              level: _showLevel ? _effectiveLevel : '',
-              room: _showExtras ? _roomCtrl.text.trim() : '',
-              capacity: _showCapacity ? _capacityCtrl.text.trim() : '',
-              name: _nameCtrl.text.trim(),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            // ── Seção: Nome ──
-            _SectionCard(
-              isDark: isDark,
-              icon: Icons.badge_outlined,
-              title: 'Nome da localização',
-              subtitle: 'Opcional — identifica com facilidade',
-              color: AppColors.brandPrimary600,
-              child: CasaTextField(
-                key: _keyNameField,
-                label: '',
-                hint: 'Ex: Depósito Principal, Sala Fria...',
-                controller: _nameCtrl,
-                prefixIcon:
-                    const Icon(Icons.badge_outlined, size: 18),
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-
-            // ── Seção: Seção ──
-            _SectionCard(
-              isDark: isDark,
-              icon: Icons.grid_view_rounded,
-              title: 'Seção',
-              subtitle: 'Obrigatório',
-              color: AppColors.brandPrimary600,
-              required: true,
-              child: Column(
-                children: [
-                  _ChipSelector(
-                    presets: _presetSections,
-                    selected: _customSection ? null : _selectedSection,
-                    onSelect: (v) => setState(() {
-                      _selectedSection = v;
-                      _customSection = false;
-                    }),
-                    isCustom: _customSection,
-                    onCustomToggle: () => setState(() {
-                      _customSection = !_customSection;
-                      _selectedSection = null;
-                    }),
-                    activeColor: AppColors.brandPrimary600,
-                  ),
-                  if (_customSection) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    CasaTextField(
-                      label: '',
-                      hint: 'Ex: G, H, Ext-1...',
-                      controller: _customSectionCtrl,
-                      prefixIcon: const Icon(Icons.grid_view_rounded, size: 18),
-                      textInputAction: TextInputAction.next,
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Informe a seção'
-                          : null,
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-
-            // ── Seção: Prateleira ──
-            _SectionCard(
-              isDark: isDark,
-              icon: Icons.layers_rounded,
-              title: 'Prateleira',
-              subtitle: 'Obrigatório',
-              color: AppColors.secondaryBlue600,
-              required: true,
-              child: Column(
-                children: [
-                  _ChipSelector(
-                    presets: _presetShelves,
-                    selected: _customShelf ? null : _selectedShelf,
-                    onSelect: (v) => setState(() {
-                      _selectedShelf = v;
-                      _customShelf = false;
-                    }),
-                    isCustom: _customShelf,
-                    onCustomToggle: () => setState(() {
-                      _customShelf = !_customShelf;
-                      _selectedShelf = null;
-                    }),
-                    activeColor: AppColors.secondaryBlue600,
-                  ),
-                  if (_customShelf) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    CasaTextField(
-                      label: '',
-                      hint: 'Ex: 9, 10, A-1...',
-                      controller: _customShelfCtrl,
-                      prefixIcon: const Icon(Icons.layers_rounded, size: 18),
-                      textInputAction: TextInputAction.next,
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Informe a prateleira'
-                          : null,
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-
-            // ── Seção: Nível (opcional) ──
-            _ExpandableSectionCard(
-              isDark: isDark,
-              icon: Icons.format_list_numbered_rounded,
-              title: 'Nível',
-              subtitle: 'Superior, Médio, Inferior...',
-              color: AppColors.success600,
-              expanded: _showLevel,
-              onToggle: () => setState(() {
-                _showLevel = !_showLevel;
-                if (!_showLevel) _selectedLevel = null;
-              }),
-              child: Column(
-                children: [
-                  _ChipSelector(
-                    presets: _presetLevels,
-                    selected: _selectedLevel,
-                    onSelect: (v) => setState(() {
-                      _selectedLevel = v;
-                      _levelCtrl.clear();
-                    }),
-                    isCustom: false,
-                    onCustomToggle: () {},
-                    activeColor: AppColors.success600,
-                    showCustom: false,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  CasaTextField(
-                    label: '',
-                    hint: 'Ou informe manualmente...',
-                    controller: _levelCtrl,
-                    prefixIcon:
-                        const Icon(Icons.format_list_numbered_rounded, size: 18),
-                    textInputAction: TextInputAction.next,
-                    onChanged: (v) => setState(() {
-                      if (v.isNotEmpty) _selectedLevel = null;
-                    }),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-
-            // ── Seção: Capacidade (opcional) ──
-            _ExpandableSectionCard(
-              isDark: isDark,
-              icon: Icons.inventory_2_rounded,
-              title: 'Capacidade por nível',
-              subtitle: 'Qtd máxima de produtos',
-              color: AppColors.warning600,
-              expanded: _showCapacity,
-              onToggle: () => setState(() => _showCapacity = !_showCapacity),
-              child: CasaTextField(
-                label: '',
-                hint: 'Ex: 30 itens',
-                controller: _capacityCtrl,
-                prefixIcon: const Icon(Icons.inventory_2_rounded, size: 18),
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-
-            // ── Seção: Sala/Depósito (opcional) ──
-            _ExpandableSectionCard(
-              isDark: isDark,
-              icon: Icons.meeting_room_rounded,
-              title: 'Sala / Depósito',
-              subtitle: 'Localização física adicional',
-              color: const Color(0xFF7C3AED),
-              expanded: _showExtras,
-              onToggle: () => setState(() => _showExtras = !_showExtras),
-              child: CasaTextField(
-                label: '',
-                hint: 'Ex: Depósito A, Sala Fria...',
-                controller: _roomCtrl,
-                prefixIcon: const Icon(Icons.meeting_room_rounded, size: 18),
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _save(),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-
-            const SizedBox(height: AppSpacing.xxl),
-
-            // ── Botão salvar ──
-            CasaButton(
-              label: 'Salvar Localização',
-              icon: Icons.add_location_alt_rounded,
-              onPressed: _saving ? null : _save,
-              isLoading: _saving,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-          ],
-        ),
       ),
     );
   }
 
-  String _buildPreviewText() {
-    final parts = <String>[];
-    if (_nameCtrl.text.trim().isNotEmpty) parts.add(_nameCtrl.text.trim());
-    if (_effectiveSection.isNotEmpty) parts.add('Seção $_effectiveSection');
-    if (_effectiveShelf.isNotEmpty) parts.add('P$_effectiveShelf');
-    if (_showLevel && _effectiveLevel.isNotEmpty) parts.add('N$_effectiveLevel');
-    if (_showExtras && _roomCtrl.text.trim().isNotEmpty) {
-      parts.add(_roomCtrl.text.trim());
-    }
-    return parts.join(' • ');
+  AppBar _buildAppBar(bool isDark, Color accent) {
+    return AppBar(
+      backgroundColor: isDark ? const Color(0xFF141B2D) : Colors.white,
+      elevation: 0,
+      scrolledUnderElevation: 1,
+      leading: IconButton(
+        icon: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: isDark ? 0.15 : 0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child:
+              Icon(Icons.arrow_back_ios_new_rounded, color: accent, size: 16),
+        ),
+        onPressed: () => Navigator.pop(context),
+      ),
+      title: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [accent, accent.withValues(alpha: 0.7)],
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.shelves, color: Colors.white, size: 17),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Nova Localização',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF111827),
+                  fontFamily: 'Poppins',
+                ),
+              ),
+              Text(
+                'Depósito · Prateleira · Nível',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark
+                      ? const Color(0xFFADB5BD)
+                      : const Color(0xFF6B7280),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        if (_isValid)
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _saving
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        color: accent, strokeWidth: 2.5),
+                  )
+                : GestureDetector(
+                    onTap: _save,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [accent, accent.withValues(alpha: 0.8)],
+                        ),
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: accent.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: const Text(
+                        'Salvar',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+      ],
+    );
   }
 }
 
-// ─── Preview Card ─────────────────────────────────────────────────────────────
+// ─── Preview Card ──────────────────────────────────────────────────────────────
 
 class _PreviewCard extends StatelessWidget {
   final bool isDark;
   final Color accent;
-  final bool hasSection;
-  final bool hasShelf;
-  final String section;
   final String shelf;
-  final String level;
-  final String room;
-  final String capacity;
+  final int level;
+  final int? capacity;
   final String name;
 
   const _PreviewCard({
     required this.isDark,
     required this.accent,
-    required this.hasSection,
-    required this.hasShelf,
-    required this.section,
     required this.shelf,
     required this.level,
-    required this.room,
     required this.capacity,
     required this.name,
   });
@@ -527,23 +304,27 @@ class _PreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cardBg = isDark ? const Color(0xFF1A2234) : Colors.white;
     final textColor = isDark ? Colors.white : const Color(0xFF111827);
-    final subColor = isDark ? const Color(0xFFADB5BD) : const Color(0xFF6B7280);
+    final subColor =
+        isDark ? const Color(0xFFADB5BD) : const Color(0xFF6B7280);
+    final hasShelf = shelf.isNotEmpty;
+    final displayName =
+        name.isNotEmpty ? name : (hasShelf ? 'Prateleira $shelf' : null);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: (hasSection || hasShelf)
+          color: hasShelf
               ? accent.withValues(alpha: 0.4)
               : Colors.transparent,
         ),
         boxShadow: [
           BoxShadow(
-            color: accent.withValues(alpha: isDark ? 0.15 : 0.12),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            color: accent.withValues(alpha: isDark ? 0.18 : 0.12),
+            blurRadius: 18,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -551,12 +332,11 @@ class _PreviewCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Topo colorido
           Container(
-            height: 5,
+            height: 4,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [accent, accent.withValues(alpha: 0.5)],
+                colors: [accent, accent.withValues(alpha: 0.4)],
               ),
             ),
           ),
@@ -564,51 +344,98 @@ class _PreviewCard extends StatelessWidget {
             padding: const EdgeInsets.all(AppSpacing.md),
             child: Row(
               children: [
-                Container(
-                  width: 42,
-                  height: 42,
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
-                    color: accent.withValues(alpha: isDark ? 0.18 : 0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    gradient: hasShelf
+                        ? LinearGradient(
+                            colors: [accent, accent.withValues(alpha: 0.7)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
+                    color: hasShelf
+                        ? null
+                        : (isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.black.withValues(alpha: 0.05)),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: hasShelf
+                        ? [
+                            BoxShadow(
+                              color: accent.withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            )
+                          ]
+                        : [],
                   ),
-                  child: Icon(Icons.inventory_2_rounded, color: accent, size: 22),
+                  child: Center(
+                    child: hasShelf
+                        ? Text(
+                            shelf[0].toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              fontFamily: 'Poppins',
+                              height: 1,
+                            ),
+                          )
+                        : Icon(Icons.shelves,
+                            size: 24,
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.3)
+                                : Colors.black.withValues(alpha: 0.2)),
+                  ),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Prévia da localização',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: accent,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        'Prévia',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: accent,
+                          letterSpacing: 0.8,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        name.isNotEmpty ? name : (hasSection || hasShelf ? _buildLabel() : 'Preencha os campos...'),
+                        displayName ?? 'Preencha os campos...',
                         style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: textColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: hasShelf ? textColor : subColor,
+                          fontFamily: 'Poppins',
+                          height: 1.2,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (hasShelf) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Nível $level${capacity != null ? ' · $capacity itens' : ''}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: subColor,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          if (hasSection || hasShelf) ...[
+          if (hasShelf)
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
@@ -616,42 +443,30 @@ class _PreviewCard extends StatelessWidget {
                 spacing: 5,
                 runSpacing: 5,
                 children: [
-                  if (hasSection)
-                    _PreviewTag('Seção $section', Icons.grid_view_rounded, accent, isDark),
-                  if (hasShelf)
-                    _PreviewTag('P$shelf', Icons.layers_rounded, accent, isDark),
-                  if (level.isNotEmpty)
-                    _PreviewTag('Nível $level', Icons.format_list_numbered_rounded,
-                        AppColors.success600, isDark),
-                  if (capacity.isNotEmpty)
-                    _PreviewTag('$capacity itens/nível', Icons.inventory_2_rounded,
+                  _Tag('Prat. $shelf', Icons.shelves, accent, isDark),
+                  _Tag(
+                      'Nível $level',
+                      Icons.layers_rounded,
+                      AppColors.secondaryBlue600,
+                      isDark),
+                  if (capacity != null)
+                    _Tag('$capacity itens', Icons.inventory_2_rounded,
                         AppColors.warning600, isDark),
-                  if (room.isNotEmpty)
-                    _PreviewTag(room, Icons.meeting_room_rounded,
-                        const Color(0xFF7C3AED), isDark),
                 ],
               ),
             ),
-          ],
         ],
       ),
     );
   }
-
-  String _buildLabel() {
-    final parts = <String>[];
-    if (section.isNotEmpty) parts.add('Seção $section');
-    if (shelf.isNotEmpty) parts.add('Prateleira $shelf');
-    return parts.join(' • ');
-  }
 }
 
-class _PreviewTag extends StatelessWidget {
+class _Tag extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
   final bool isDark;
-  const _PreviewTag(this.label, this.icon, this.color, this.isDark);
+  const _Tag(this.label, this.icon, this.color, this.isDark);
 
   @override
   Widget build(BuildContext context) {
@@ -660,58 +475,59 @@ class _PreviewTag extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: isDark ? 0.18 : 0.1),
         borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: color.withValues(alpha: isDark ? 0.3 : 0.25)),
+        border: Border.all(
+            color: color.withValues(alpha: isDark ? 0.3 : 0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 10, color: color),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10, fontWeight: FontWeight.w700, color: color)),
         ],
       ),
     );
   }
 }
 
-// ─── Section Card ─────────────────────────────────────────────────────────────
+// ─── Shelf Picker ──────────────────────────────────────────────────────────────
 
-class _SectionCard extends StatelessWidget {
+class _ShelfPickerCard extends StatelessWidget {
   final bool isDark;
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final bool required;
-  final Widget child;
+  final List<String> presets;
+  final String? selected;
+  final bool customActive;
+  final TextEditingController customCtrl;
+  final ValueChanged<String> onSelect;
+  final VoidCallback onCustomToggle;
+  final VoidCallback onCustomChanged;
+  final Color Function(String) shelfColorFn;
 
-  const _SectionCard({
+  const _ShelfPickerCard({
     required this.isDark,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.child,
-    this.required = false,
+    required this.presets,
+    required this.selected,
+    required this.customActive,
+    required this.customCtrl,
+    required this.onSelect,
+    required this.onCustomToggle,
+    required this.onCustomChanged,
+    required this.shelfColorFn,
   });
 
   @override
   Widget build(BuildContext context) {
     final cardBg = isDark ? const Color(0xFF1A2234) : Colors.white;
     final textColor = isDark ? Colors.white : const Color(0xFF111827);
-    final subColor = isDark ? const Color(0xFFADB5BD) : const Color(0xFF6B7280);
+    final subColor =
+        isDark ? const Color(0xFFADB5BD) : const Color(0xFF6B7280);
 
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
@@ -731,10 +547,12 @@ class _SectionCard extends StatelessWidget {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: isDark ? 0.18 : 0.1),
+                    color: AppColors.brandPrimary600
+                        .withValues(alpha: isDark ? 0.18 : 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, size: 17, color: color),
+                  child: const Icon(Icons.shelves,
+                      size: 17, color: AppColors.brandPrimary600),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -743,41 +561,65 @@ class _SectionCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            title,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: textColor,
-                            ),
+                          Text('Prateleira / Armário',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: textColor)),
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 5,
+                            height: 5,
+                            decoration: const BoxDecoration(
+                                color: AppColors.danger600,
+                                shape: BoxShape.circle),
                           ),
-                          if (required) ...[
-                            const SizedBox(width: 4),
-                            Container(
-                              width: 5,
-                              height: 5,
-                              decoration: const BoxDecoration(
-                                  color: AppColors.danger600,
-                                  shape: BoxShape.circle),
-                            ),
-                          ],
                         ],
                       ),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: subColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      Text('Qual unidade de armazenamento',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: subColor,
+                              fontWeight: FontWeight.w500)),
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            child,
+            // Grid de prateleiras
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ...presets.map((s) => _ShelfTile(
+                      label: s,
+                      selected: !customActive && selected == s,
+                      color: shelfColorFn(s),
+                      isDark: isDark,
+                      onTap: () => onSelect(s),
+                    )),
+                _ShelfTile(
+                  label: customActive ? 'Outro' : '+',
+                  selected: customActive,
+                  color: AppColors.brandPrimary600,
+                  isDark: isDark,
+                  isCustom: true,
+                  onTap: onCustomToggle,
+                ),
+              ],
+            ),
+            if (customActive) ...[
+              const SizedBox(height: AppSpacing.sm),
+              CasaTextField(
+                label: '',
+                hint: 'Ex: Armário 1, Estante Fria...',
+                controller: customCtrl,
+                prefixIcon: const Icon(Icons.edit_rounded, size: 18),
+                textInputAction: TextInputAction.next,
+                onChanged: (_) => onCustomChanged(),
+              ),
+            ],
           ],
         ),
       ),
@@ -785,42 +627,261 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-// ─── Expandable Section Card ──────────────────────────────────────────────────
-
-class _ExpandableSectionCard extends StatelessWidget {
-  final bool isDark;
-  final IconData icon;
-  final String title;
-  final String subtitle;
+class _ShelfTile extends StatelessWidget {
+  final String label;
+  final bool selected;
   final Color color;
-  final bool expanded;
-  final VoidCallback onToggle;
-  final Widget child;
+  final bool isDark;
+  final bool isCustom;
+  final VoidCallback onTap;
 
-  const _ExpandableSectionCard({
-    required this.isDark,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
+  const _ShelfTile({
+    required this.label,
+    required this.selected,
     required this.color,
-    required this.expanded,
-    required this.onToggle,
-    required this.child,
+    required this.isDark,
+    required this.onTap,
+    this.isCustom = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        width: 58,
+        height: 56,
+        decoration: BoxDecoration(
+          gradient: selected
+              ? LinearGradient(
+                  colors: [color, color.withValues(alpha: 0.75)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: selected ? null : cs.surfaceContainer,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? Colors.transparent
+                : color.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  )
+                ]
+              : [],
+        ),
+        child: Center(
+          child: isCustom
+              ? Icon(
+                  selected ? Icons.edit_rounded : Icons.add_rounded,
+                  size: 22,
+                  color: selected ? Colors.white : color,
+                )
+              : Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: selected ? Colors.white : color,
+                    fontFamily: 'Poppins',
+                    height: 1,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Level Card ────────────────────────────────────────────────────────────────
+
+class _LevelCard extends StatelessWidget {
+  final bool isDark;
+  final int level;
+  final Color accent;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  const _LevelCard({
+    required this.isDark,
+    required this.level,
+    required this.accent,
+    required this.onDecrement,
+    required this.onIncrement,
   });
 
   @override
   Widget build(BuildContext context) {
     final cardBg = isDark ? const Color(0xFF1A2234) : Colors.white;
     final textColor = isDark ? Colors.white : const Color(0xFF111827);
-    final subColor = isDark ? const Color(0xFFADB5BD) : const Color(0xFF6B7280);
+    final subColor =
+        isDark ? const Color(0xFFADB5BD) : const Color(0xFF6B7280);
+    final color = AppColors.secondaryBlue600;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: isDark ? 0.18 : 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child:
+                      Icon(Icons.layers_rounded, size: 17, color: color),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text('Nível',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: textColor)),
+                          const SizedBox(width: 4),
+                          Container(
+                            width: 5,
+                            height: 5,
+                            decoration: const BoxDecoration(
+                                color: AppColors.danger600,
+                                shape: BoxShape.circle),
+                          ),
+                        ],
+                      ),
+                      Text('Qual prateleira dentro da unidade',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: subColor,
+                              fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _StepBtn(
+                  icon: Icons.remove_rounded,
+                  enabled: level > 1,
+                  onTap: onDecrement,
+                  color: color,
+                ),
+                const SizedBox(width: AppSpacing.xl),
+                Column(
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      transitionBuilder: (child, anim) => ScaleTransition(
+                        scale: anim,
+                        child: child,
+                      ),
+                      child: Text(
+                        level.toString(),
+                        key: ValueKey(level),
+                        style: TextStyle(
+                          fontSize: 52,
+                          fontWeight: FontWeight.w900,
+                          fontFamily: 'Poppins',
+                          color: color,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      level == 1 ? 'nível inferior' : 'de baixo para cima',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: subColor,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: AppSpacing.xl),
+                _StepBtn(
+                  icon: Icons.add_rounded,
+                  enabled: level < 20,
+                  onTap: onIncrement,
+                  color: color,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Capacity Card ─────────────────────────────────────────────────────────────
+
+class _CapacityCard extends StatelessWidget {
+  final bool isDark;
+  final Color accent;
+  final bool enabled;
+  final int value;
+  final VoidCallback onToggle;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  const _CapacityCard({
+    required this.isDark,
+    required this.accent,
+    required this.enabled,
+    required this.value,
+    required this.onToggle,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cardBg = isDark ? const Color(0xFF1A2234) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF111827);
+    final subColor =
+        isDark ? const Color(0xFFADB5BD) : const Color(0xFF6B7280);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: expanded
-            ? Border.all(color: color.withValues(alpha: 0.4))
+        borderRadius: BorderRadius.circular(16),
+        border: enabled
+            ? Border.all(color: accent.withValues(alpha: 0.4))
             : null,
         boxShadow: [
           BoxShadow(
@@ -844,72 +905,97 @@ class _ExpandableSectionCard extends StatelessWidget {
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(
-                      color: expanded
-                          ? color.withValues(alpha: isDark ? 0.25 : 0.15)
-                          : color.withValues(alpha: isDark ? 0.1 : 0.06),
+                      color: accent.withValues(
+                          alpha: enabled
+                              ? (isDark ? 0.25 : 0.15)
+                              : (isDark ? 0.1 : 0.06)),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(
-                      expanded ? Icons.check_rounded : icon,
-                      size: 17,
-                      color: color,
-                    ),
+                    child: Icon(Icons.inventory_2_rounded,
+                        size: 17, color: accent),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: expanded ? color : textColor,
-                          ),
-                        ),
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: subColor,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        Text('Itens por nível',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: enabled ? accent : textColor,
+                            )),
+                        Text('Quantos produtos cabem neste nível',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: subColor,
+                                fontWeight: FontWeight.w500)),
                       ],
                     ),
                   ),
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: expanded
-                          ? color.withValues(alpha: 0.1)
-                          : (isDark
-                              ? Colors.white.withValues(alpha: 0.05)
-                              : Colors.black.withValues(alpha: 0.04)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      expanded ? Icons.remove_rounded : Icons.add_rounded,
-                      size: 16,
-                      color: expanded ? color : subColor,
-                    ),
+                  Switch.adaptive(
+                    value: enabled,
+                    onChanged: (_) => onToggle(),
+                    activeTrackColor: accent,
                   ),
                 ],
               ),
             ),
           ),
-          if (expanded) ...[
+          if (enabled) ...[
             Container(
               height: 1,
-              margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              color: color.withValues(alpha: 0.15),
+              margin:
+                  const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              color: accent.withValues(alpha: 0.15),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.md),
-              child: child,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _StepBtn(
+                    icon: Icons.remove_rounded,
+                    enabled: value >= 5,
+                    onTap: onDecrement,
+                    color: accent,
+                  ),
+                  const SizedBox(width: AppSpacing.xl),
+                  Column(
+                    children: [
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 160),
+                        transitionBuilder: (child, anim) =>
+                            ScaleTransition(scale: anim, child: child),
+                        child: Text(
+                          value.toString(),
+                          key: ValueKey(value),
+                          style: TextStyle(
+                            fontSize: 44,
+                            fontWeight: FontWeight.w900,
+                            fontFamily: 'Poppins',
+                            color: accent,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text('itens por nível',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: subColor,
+                              fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                  const SizedBox(width: AppSpacing.xl),
+                  _StepBtn(
+                    icon: Icons.add_rounded,
+                    enabled: value < 500,
+                    onTap: onIncrement,
+                    color: accent,
+                  ),
+                ],
+              ),
             ),
           ],
         ],
@@ -918,117 +1004,162 @@ class _ExpandableSectionCard extends StatelessWidget {
   }
 }
 
-// ─── Chip Selector ────────────────────────────────────────────────────────────
+// ─── Name Card ─────────────────────────────────────────────────────────────────
 
-class _ChipSelector extends StatelessWidget {
-  final List<String> presets;
-  final String? selected;
-  final ValueChanged<String> onSelect;
-  final bool isCustom;
-  final VoidCallback onCustomToggle;
-  final Color activeColor;
-  final bool showCustom;
+class _NameCard extends StatelessWidget {
+  final bool isDark;
+  final bool enabled;
+  final TextEditingController ctrl;
+  final VoidCallback onToggle;
+  final VoidCallback onChanged;
 
-  const _ChipSelector({
-    required this.presets,
-    required this.selected,
-    required this.onSelect,
-    required this.isCustom,
-    required this.onCustomToggle,
-    required this.activeColor,
-    this.showCustom = true,
+  const _NameCard({
+    required this.isDark,
+    required this.enabled,
+    required this.ctrl,
+    required this.onToggle,
+    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Wrap(
-      spacing: AppSpacing.xs,
-      runSpacing: AppSpacing.xs,
-      children: [
-        ...presets.map((p) {
-          final sel = selected == p;
-          return GestureDetector(
-            onTap: () => onSelect(p),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: sel
-                    ? LinearGradient(colors: [
-                        activeColor,
-                        activeColor.withValues(alpha: 0.75)
-                      ])
-                    : null,
-                color: sel ? null : cs.surfaceContainer,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-                border: Border.all(
-                  color: sel
-                      ? Colors.transparent
-                      : activeColor.withValues(alpha: 0.3),
-                ),
-                boxShadow: sel
-                    ? [
-                        BoxShadow(
-                          color: activeColor.withValues(alpha: 0.35),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        )
-                      ]
-                    : [],
-              ),
-              child: Text(
-                p,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: sel ? Colors.white : activeColor,
-                ),
-              ),
-            ),
-          );
-        }),
-        if (showCustom)
+    final cardBg = isDark ? const Color(0xFF1A2234) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF111827);
+    final subColor =
+        isDark ? const Color(0xFFADB5BD) : const Color(0xFF6B7280);
+    const color = Color(0xFF7C3AED);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: enabled ? Border.all(color: color.withValues(alpha: 0.4)) : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
           GestureDetector(
-            onTap: onCustomToggle,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: isCustom
-                    ? activeColor.withValues(alpha: 0.1)
-                    : cs.surfaceContainer,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-                border: Border.all(
-                  color: isCustom
-                      ? activeColor.withValues(alpha: 0.5)
-                      : cs.outlineVariant,
-                ),
-              ),
+            onTap: onToggle,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    isCustom ? Icons.edit_rounded : Icons.add_rounded,
-                    size: 13,
-                    color: isCustom ? activeColor : cs.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    isCustom ? 'Personalizado' : 'Outro',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isCustom ? activeColor : cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: color.withValues(
+                          alpha: enabled
+                              ? (isDark ? 0.25 : 0.15)
+                              : (isDark ? 0.1 : 0.06)),
+                      borderRadius: BorderRadius.circular(10),
                     ),
+                    child: Icon(Icons.badge_outlined, size: 17, color: color),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Nome personalizado',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: enabled ? color : textColor,
+                            )),
+                        Text('Opcional · Ex: Armário da Cozinha',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: subColor,
+                                fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ),
+                  Switch.adaptive(
+                    value: enabled,
+                    onChanged: (_) => onToggle(),
+                    activeTrackColor: color,
                   ),
                 ],
               ),
             ),
           ),
-      ],
+          if (enabled) ...[
+            Container(
+              height: 1,
+              margin:
+                  const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              color: color.withValues(alpha: 0.15),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.md),
+              child: CasaTextField(
+                label: '',
+                hint: 'Ex: Armário da Cozinha, Estante Fria...',
+                controller: ctrl,
+                prefixIcon: const Icon(Icons.badge_outlined, size: 18),
+                textInputAction: TextInputAction.done,
+                onChanged: (_) => onChanged(),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Stepper Button ────────────────────────────────────────────────────────────
+
+class _StepBtn extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _StepBtn({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          color: enabled
+              ? color.withValues(alpha: 0.12)
+              : Colors.grey.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color: enabled
+                ? color.withValues(alpha: 0.35)
+                : Colors.grey.withValues(alpha: 0.12),
+            width: 1.5,
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 24,
+          color: enabled ? color : Colors.grey.withValues(alpha: 0.35),
+        ),
+      ),
     );
   }
 }
