@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../tokens/color_tokens.dart';
-import '../tokens/spacing_tokens.dart';
 import '../tokens/typography_tokens.dart';
 
 /// Global flag: when true, AppBars and TabBars should hide themselves so the
