@@ -255,24 +255,23 @@ class _MovementPageState extends ConsumerState<MovementPage> {
             activity: null,
           );
       if (!mounted) return;
-      showCasaSnackbar(
-        context,
-        message: 'Saída registrada com sucesso!',
-        isSuccess: true,
+      // Limpa estado e para o loading ANTES de navegar para não travar o botão
+      setState(() {
+        _isLoading = false;
+        _selectedQtyByProduct.clear();
+      });
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute(builder: (_) => OutputViewPage(output: result)),
       );
-      setState(() => _selectedQtyByProduct.clear());
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => OutputViewPage(output: result),
-      ));
     } catch (error) {
       if (!mounted) return;
+      setState(() => _isLoading = false);
       showCasaSnackbar(
         context,
         message: error.toString().replaceFirst('Exception: ', ''),
         isError: true,
       );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -645,11 +644,59 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                           );
                         }
 
-                        return Column(
-                          children: [
-                            KeyedSubtree(
-                              key: _keyRecipeGrid,
-                              child: GridView.builder(
+                        return KeyedSubtree(
+                          key: _keyRecipeGrid,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // ── Cabeçalho da seção ──
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(Icons.menu_book_rounded, color: Colors.white, size: 14),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '${filtered.length} receita${filtered.length != 1 ? 's' : ''} disponível${filtered.length != 1 ? 'is' : ''}',
+                                      style: AppTypography.labelSmall.copyWith(
+                                        color: AppColors.neutral700,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    if (_selectedRecipeId != null)
+                                      GestureDetector(
+                                        onTap: () => setState(() => _selectedRecipeId = null),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.neutral100,
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.close_rounded, size: 12, color: AppColors.neutral500),
+                                              const SizedBox(width: 3),
+                                              Text('Limpar', style: AppTypography.labelSmall.copyWith(color: AppColors.neutral500, fontSize: 10)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              // ── Grid de receitas ──
+                              GridView.builder(
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
                                 itemCount: filtered.length,
@@ -657,72 +704,21 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                                   crossAxisCount: width >= 700 ? 4 : 2,
                                   mainAxisSpacing: AppSpacing.sm,
                                   crossAxisSpacing: AppSpacing.sm,
-                                  childAspectRatio: 1.1,
+                                  childAspectRatio: 0.88,
                                 ),
                                 itemBuilder: (_, i) {
                                   final r = filtered[i];
                                   final selected = _selectedRecipeId == r.id;
-                                  return InkWell(
-                                    onTap: () => setState(() => _selectedRecipeId = r.id),
-                                    borderRadius: BorderRadius.circular(AppRadius.card),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(AppSpacing.md),
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context).colorScheme.surfaceContainerLow,
-                                        borderRadius: BorderRadius.circular(AppRadius.card),
-                                        border: Border.all(
-                                          color: selected
-                                              ? AppColors.brandPrimary600
-                                              : Theme.of(context).dividerColor.withValues(alpha: 0.35),
-                                        ),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  r.name,
-                                                  maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: AppTypography.labelLarge.copyWith(
-                                                    color: onSurface,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                              ),
-                                              if (selected)
-                                                const Icon(Icons.check_circle_rounded,
-                                                    color: AppColors.brandPrimary600, size: 18),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            '${r.items.length} itens',
-                                            style: AppTypography.bodySmall.copyWith(
-                                              color: onSurfaceVariant,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Expanded(
-                                            child: Text(
-                                              r.description ?? 'Sem descrição',
-                                              maxLines: 3,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: AppTypography.bodySmall.copyWith(
-                                                color: onSurfaceVariant,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                  return _RecipeCard(
+                                    recipe: r,
+                                    index: i,
+                                    selected: selected,
+                                    onTap: () => setState(() => _selectedRecipeId = selected ? null : r.id),
                                   );
                                 },
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         );
                       },
                       loading: () => const Center(child: CircularProgressIndicator()),
@@ -747,7 +743,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
   }
 }
 
-// ─── FAB de confirmação com resumo de seleção ─────────────────────────────
+// ─── FAB unificado: carrinho + confirmar num só botão ─────────────────────
 
 class _ConfirmFabWithSummary extends StatelessWidget {
   final bool isLoading;
@@ -773,130 +769,146 @@ class _ConfirmFabWithSummary extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ── Strip de resumo (aparece quando há itens selecionados) ──
-          AnimatedSize(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
-            child: hasItems
-                ? Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A).withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.brandPrimary500.withValues(alpha: 0.35)),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 12, offset: const Offset(0, 4)),
-                      ],
+      child: SizedBox(
+        width: double.infinity,
+        height: 60,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: isDisabled
+                ? null
+                : const LinearGradient(
+                    colors: [Color(0xFF1E40AF), Color(0xFF2563EB), Color(0xFF0EA5E9)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+            color: isDisabled ? const Color(0xFFCBD5E1) : null,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: isDisabled
+                ? []
+                : [
+                    BoxShadow(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.40),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
                     ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: AppColors.brandPrimary600.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(Icons.shopping_basket_rounded, color: Color(0xFF60A5FA), size: 16),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: RichText(
-                            text: TextSpan(
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
-                              children: [
-                                TextSpan(
-                                  text: '$selectedCount produto${selectedCount != 1 ? 's' : ''}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                                ),
-                                const TextSpan(text: '  ·  '),
-                                TextSpan(
-                                  text: '$totalUnits unidade${totalUnits != 1 ? 's' : ''}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                                ),
-                                const TextSpan(text: ' selecionadas'),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppColors.success600.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppColors.success600.withValues(alpha: 0.30)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.check_rounded, size: 12, color: AppColors.success600),
-                              const SizedBox(width: 4),
-                              Text('Pronto', style: AppTypography.labelSmall.copyWith(color: AppColors.success600, fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : const SizedBox.shrink(),
+                  ],
           ),
-          // ── Botão principal ──
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: isDisabled
-                    ? null
-                    : const LinearGradient(
-                        colors: [Color(0xFF1D4ED8), Color(0xFF2563EB), Color(0xFF0EA5E9)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                color: isDisabled ? const Color(0xFFD1D5DB) : null,
-                borderRadius: BorderRadius.circular(AppRadius.button),
-                boxShadow: isDisabled
-                    ? []
-                    : [
-                        BoxShadow(
-                          color: const Color(0xFF2563EB).withValues(alpha: 0.45),
-                          blurRadius: 16,
-                          offset: const Offset(0, 5),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: isDisabled ? null : onPressed,
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    // ── Lado esquerdo: badge de quantidade ou ícone ──
+                    if (isLoading)
+                      const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
                         ),
-                      ],
-              ),
-              child: ElevatedButton.icon(
-                onPressed: isDisabled ? null : onPressed,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.button),
-                  ),
-                ),
-                icon: isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                       )
-                    : Icon(icon, size: 20, color: isDisabled ? AppColors.neutral500 : Colors.white),
-                label: Text(
-                  label,
-                  style: TextStyle(
-                    color: isDisabled ? AppColors.neutral500 : Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    letterSpacing: 0.3,
-                  ),
+                    else if (hasItems)
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.20),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.30)),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '$selectedCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                height: 1,
+                              ),
+                            ),
+                            Text(
+                              selectedCount == 1 ? 'prod' : 'prods',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.80),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 9,
+                                height: 1.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Icon(
+                        Icons.shopping_basket_outlined,
+                        color: const Color(0xFF94A3B8),
+                        size: 22,
+                      ),
+
+                    const SizedBox(width: 12),
+
+                    // ── Texto central ──
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isLoading
+                                ? 'Registrando saída...'
+                                : hasItems
+                                    ? label
+                                    : 'Selecione produtos',
+                            style: TextStyle(
+                              color: isDisabled && !isLoading
+                                  ? const Color(0xFF94A3B8)
+                                  : Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (hasItems && !isLoading)
+                            Text(
+                              '$totalUnits unidade${totalUnits != 1 ? 's' : ''} selecionadas',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.70),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    // ── Lado direito: seta ou check ──
+                    if (!isLoading && hasItems)
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1563,6 +1575,219 @@ class _SummarySheet extends StatelessWidget {
                     ],
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Card moderno de receita ───────────────────────────────────────────────
+
+class _RecipeCard extends StatelessWidget {
+  final StockRecipe recipe;
+  final int index;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _RecipeCard({
+    required this.recipe,
+    required this.index,
+    required this.selected,
+    required this.onTap,
+  });
+
+  static const _gradients = [
+    [Color(0xFF1E3A8A), Color(0xFF2563EB)],
+    [Color(0xFF064E3B), Color(0xFF059669)],
+    [Color(0xFF4C1D95), Color(0xFF7C3AED)],
+    [Color(0xFF7C2D12), Color(0xFFD97706)],
+    [Color(0xFF831843), Color(0xFFDB2777)],
+    [Color(0xFF0C4A6E), Color(0xFF0891B2)],
+  ];
+
+  static const _icons = [
+    Icons.restaurant_rounded,
+    Icons.inventory_2_rounded,
+    Icons.volunteer_activism_rounded,
+    Icons.shopping_bag_rounded,
+    Icons.favorite_rounded,
+    Icons.local_grocery_store_rounded,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _gradients[index % _gradients.length];
+    final iconData = _icons[index % _icons.length];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? palette[1] : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+            width: selected ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: selected
+                  ? palette[1].withValues(alpha: 0.30)
+                  : Colors.black.withValues(alpha: isDark ? 0.15 : 0.05),
+              blurRadius: selected ? 12 : 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Header colorido ──
+            Container(
+              height: 64,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: palette,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+              ),
+              child: Stack(
+                children: [
+                  // Círculo decorativo
+                  Positioned(
+                    right: -12,
+                    top: -12,
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 8,
+                    bottom: -14,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.06),
+                      ),
+                    ),
+                  ),
+                  // Ícone
+                  Center(
+                    child: Icon(iconData, color: Colors.white.withValues(alpha: 0.90), size: 26),
+                  ),
+                  // Check de selecionado
+                  if (selected)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 4),
+                          ],
+                        ),
+                        child: Icon(Icons.check_rounded, size: 14, color: palette[1]),
+                      ),
+                    ),
+                  // Badge de itens
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${recipe.items.length} ${recipe.items.length == 1 ? 'item' : 'itens'}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Corpo ──
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recipe.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: Text(
+                        recipe.description ?? 'Kit de distribuição',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          fontSize: 10,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    // ── Rodapé ──
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: palette[1].withValues(alpha: isDark ? 0.15 : 0.08),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.layers_outlined, size: 10, color: palette[1]),
+                          const SizedBox(width: 3),
+                          Text(
+                            '${recipe.items.length} produto${recipe.items.length != 1 ? 's' : ''}',
+                            style: TextStyle(
+                              color: palette[1],
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
