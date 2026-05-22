@@ -340,10 +340,10 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                         AppSpacing.xs, AppSpacing.md, AppSpacing.xxxl),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
+                      crossAxisCount: 2,
                       mainAxisSpacing: AppSpacing.sm,
                       crossAxisSpacing: AppSpacing.sm,
-                      childAspectRatio: 0.70,
+                      childAspectRatio: 0.82,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
@@ -370,10 +370,10 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                   padding: const EdgeInsets.all(AppSpacing.md),
                   gridDelegate:
                       const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
+                    crossAxisCount: 2,
                     mainAxisSpacing: AppSpacing.xs,
                     crossAxisSpacing: AppSpacing.xs,
-                    childAspectRatio: 0.70,
+                    childAspectRatio: 0.82,
                   ),
                   itemCount: 8,
                   itemBuilder: (_, __) => const CasaCardSkeleton(),
@@ -1139,7 +1139,7 @@ class _SortChip extends StatelessWidget {
   }
 }
 
-// ─── Card do grid (4 por linha) ───────────────────────────────────────────
+// ─── Card do grid (2 por linha) ───────────────────────────────────────────
 
 class _ProductGridCard extends ConsumerWidget {
   final Product product;
@@ -1154,28 +1154,37 @@ class _ProductGridCard extends ConsumerWidget {
     required this.onTap,
   });
 
-  // Paletas de alerta: vermelho (crítico/vencido), amarelo (atenção), verde (ok), azul (sem validade)
   static const _paletteRed    = [Color(0xFFDC2626), Color(0xFFB91C1C)];
   static const _paletteYellow = [Color(0xFFD97706), Color(0xFFB45309)];
   static const _paletteGreen  = [Color(0xFF059669), Color(0xFF047857)];
   static const _paletteBlue   = [Color(0xFF2563EB), Color(0xFF1D4ED8)];
+
+  IconData _categoryIcon(ProductCategory cat) => switch (cat) {
+    ProductCategory.alimento      => Icons.restaurant_rounded,
+    ProductCategory.bebida        => Icons.local_drink_rounded,
+    ProductCategory.limpeza       => Icons.cleaning_services_rounded,
+    ProductCategory.higienePessoal => Icons.soap_rounded,
+    ProductCategory.escolar       => Icons.auto_stories_rounded,
+    ProductCategory.roupas        => Icons.checkroom_rounded,
+    ProductCategory.outro         => Icons.category_rounded,
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dateFmt = DateFormat('dd/MM');
 
-    final batchData = ref
+    final batches = ref
         .watch(batchesByProductProvider(product.id))
-        .whenOrNull(data: (batches) {
-      final sorted = batches
-          .where((b) => !b.noExpiry)
-          .toList()
-        ..sort((a, b) => a.daysToExpiry.compareTo(b.daysToExpiry));
-      return sorted.firstOrNull;
-    });
+        .whenOrNull(data: (b) => b) ?? const [];
 
-    // Status de validade — define palette e cores
+    final totalQty = batches.fold<int>(0, (s, b) => s + b.quantity);
+
+    final nearestBatch = batches.where((b) => !b.noExpiry).toList()
+      ..sort((a, b) => a.daysToExpiry.compareTo(b.daysToExpiry));
+    final batchData = nearestBatch.firstOrNull;
+
+    // Status de validade
     Color expiryColor;
     IconData expiryIcon;
     String? expiryLabel;
@@ -1183,7 +1192,7 @@ class _ProductGridCard extends ConsumerWidget {
 
     if (!product.isPerishable || batchData == null) {
       expiryColor = const Color(0xFF60A5FA);
-      expiryIcon = Icons.inventory_2_rounded;
+      expiryIcon = Icons.all_inclusive_rounded;
       expiryLabel = null;
       palette = _paletteBlue;
     } else if (batchData.isExpired) {
@@ -1195,180 +1204,335 @@ class _ProductGridCard extends ConsumerWidget {
       expiryColor = const Color(0xFFFCA5A5);
       expiryIcon = Icons.warning_amber_rounded;
       expiryLabel = batchData.expiryDate != null
-          ? '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)'
+          ? '${dateFmt.format(batchData.expiryDate!)} · ${batchData.daysToExpiry}d'
           : 'Crítico';
       palette = _paletteRed;
     } else if (batchData.daysToExpiry <= 30) {
       expiryColor = const Color(0xFFFDE68A);
       expiryIcon = Icons.schedule_rounded;
       expiryLabel = batchData.expiryDate != null
-          ? '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)'
+          ? '${dateFmt.format(batchData.expiryDate!)} · ${batchData.daysToExpiry}d'
           : 'Atenção';
       palette = _paletteYellow;
     } else {
       expiryColor = const Color(0xFF6EE7B7);
       expiryIcon = Icons.check_circle_rounded;
       expiryLabel = batchData.expiryDate != null
-          ? '${dateFmt.format(batchData.expiryDate!)} (${batchData.daysToExpiry}d)'
+          ? '${dateFmt.format(batchData.expiryDate!)} · ${batchData.daysToExpiry}d'
           : null;
       palette = _paletteGreen;
     }
 
-    final accent = palette[0];
-    final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
-    final borderColor = accent.withValues(alpha: isDark ? 0.45 : 0.35);
+    final accent     = palette[0];
+    final accentDark = palette[1];
+    final cardBg     = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final borderColor = accent.withValues(alpha: isDark ? 0.38 : 0.22);
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 160 + index * 12),
+      duration: Duration(milliseconds: 200 + index * 10),
       curve: Curves.easeOutCubic,
-      builder: (_, v, child) =>
-          Opacity(opacity: v, child: Transform.scale(scale: 0.9 + 0.1 * v, child: child)),
+      builder: (_, v, child) => Opacity(
+        opacity: v,
+        child: Transform.translate(
+          offset: Offset(0, 12 * (1 - v)),
+          child: child,
+        ),
+      ),
       child: GestureDetector(
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
             color: cardBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: borderColor, width: 1.5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor, width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: isDark ? 0.20 : 0.15),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                color: accent.withValues(alpha: isDark ? 0.22 : 0.14),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ─── Header gradiente com ícone
-              Container(
-                height: 50,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: palette,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              // ─── Header gradiente com ícone e badge ──────────────────
+              Stack(
+                children: [
+                  Container(
+                    height: 82,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          accent,
+                          accentDark,
+                          accentDark.withValues(alpha: 0.85),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(15)),
+                    ),
+                    child: Stack(
+                      children: [
+                        // Círculos decorativos
+                        Positioned(
+                          right: -14, top: -14,
+                          child: Container(
+                            width: 60, height: 60,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.07),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: -8, bottom: -10,
+                          child: Container(
+                            width: 40, height: 40,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withValues(alpha: 0.05),
+                            ),
+                          ),
+                        ),
+                        // Ícone ou imagem do produto
+                        Center(
+                          child: product.imageUrl != null &&
+                                  product.imageUrl!.isNotEmpty
+                              ? ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(15)),
+                                  child: Image.network(
+                                    product.imageUrl!,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: 82,
+                                  ),
+                                )
+                              : Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.28),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    _categoryIcon(product.category),
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(11)),
-                ),
-                child: Stack(
-                  children: [
-                    // Círculo decorativo sutil
+
+                  // Badge de validade (top-right)
+                  if (product.isPerishable && expiryLabel != null)
                     Positioned(
-                      right: -6,
-                      top: -6,
+                      top: 7, right: 7,
                       child: Container(
-                        width: 32,
-                        height: 32,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.08),
+                          color: Colors.black.withValues(alpha: 0.50),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: expiryColor.withValues(alpha: 0.65),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(expiryIcon, size: 9, color: expiryColor),
+                            const SizedBox(width: 3),
+                            Text(
+                              expiryLabel.split(' ').first,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: expiryColor,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    Center(
-                      child: product.imageUrl != null &&
-                              product.imageUrl!.isNotEmpty
-                          ? ClipRRect(
-                              borderRadius:
-                                  const BorderRadius.vertical(top: Radius.circular(11)),
-                              child: Image.network(product.imageUrl!,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  height: 50),
-                            )
-                          : Container(
-                              width: 30,
-                              height: 30,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.25),
-                                    width: 1),
-                              ),
-                              child: const Icon(Icons.inventory_2_rounded,
-                                  color: Colors.white, size: 16),
-                            ),
-                    ),
-                  ],
-                ),
-              ),
 
-              // ─── Faixa de status (validade) ─────────────────────────────
-              if (product.isPerishable && expiryLabel != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: expiryColor.withValues(alpha: isDark ? 0.15 : 0.08),
-                    border: Border(
-                      bottom: BorderSide(
-                          color: expiryColor.withValues(alpha: isDark ? 0.2 : 0.15)),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(expiryIcon, size: 8, color: expiryColor),
-                      const SizedBox(width: 2),
-                      Expanded(
-                        child: Text(
-                          expiryLabel,
+                  // Badge sem validade
+                  if (!product.isPerishable)
+                    Positioned(
+                      top: 7, right: 7,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.38),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.20),
+                            width: 1,
+                          ),
+                        ),
+                        child: const Text(
+                          '∞',
                           style: TextStyle(
-                            fontSize: 8,
-                            color: expiryColor,
+                            fontSize: 11,
+                            color: Colors.white70,
                             fontWeight: FontWeight.w700,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                ],
+              ),
 
-              // ─── Corpo: nome + categoria ─────────────────────────────────
+              // ─── Corpo ───────────────────────────────────────────────
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 5, 6, 5),
+                  padding: const EdgeInsets.fromLTRB(10, 9, 10, 9),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Nome
                       Text(
                         product.name,
                         style: TextStyle(
                           color: isDark
-                              ? const Color(0xFFE5E7EB)
-                              : const Color(0xFF111827),
+                              ? const Color(0xFFF1F5F9)
+                              : const Color(0xFF0F172A),
                           fontWeight: FontWeight.w700,
-                          fontSize: 10,
+                          fontSize: 12,
                           height: 1.25,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const Spacer(),
-                      // Categoria chip mínimo
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: isDark ? 0.14 : 0.08),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          catLabel,
+
+                      // Marca (se houver)
+                      if (product.brand != null &&
+                          product.brand!.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          product.brand!,
                           style: TextStyle(
-                            fontSize: 8,
-                            color: accent,
-                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? const Color(0xFF94A3B8)
+                                : const Color(0xFF64748B),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                      ],
+
+                      const Spacer(),
+
+                      // Linha de validade (data · dias)
+                      if (product.isPerishable && expiryLabel != null) ...[
+                        Row(
+                          children: [
+                            Icon(expiryIcon, size: 11, color: expiryColor),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                expiryLabel,
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  color: expiryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+
+                      // Quantidade + Categoria
+                      Row(
+                        children: [
+                          // Quantidade
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: accent.withValues(
+                                  alpha: isDark ? 0.20 : 0.10),
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.layers_rounded,
+                                    size: 11, color: accent),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '$totalQty',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: accent,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  product.unit,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: accent.withValues(alpha: 0.80),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Spacer(),
+                          // Categoria
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: accent.withValues(
+                                    alpha: isDark ? 0.12 : 0.07),
+                                borderRadius: BorderRadius.circular(7),
+                                border: Border.all(
+                                  color: accent.withValues(
+                                      alpha: isDark ? 0.22 : 0.15),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                catLabel,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: accent,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
