@@ -127,6 +127,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ─── consumption_forecasts ──────────────────────────────────────────────
+    // Gravado pelo Colab via Admin SDK (ignora regras). Leitura para todos
+    // os usuários ativos do app. Escrita bloqueada no cliente.
+    match /consumption_forecasts/{forecastId} {
+      allow read: if isActiveUser();
+      allow write: if false; // apenas Admin SDK (Colab) pode gravar
+    }
+
     // ─── recipes ────────────────────────────────────────────────────────────
     match /recipes/{recipeId} {
       allow read: if isActiveUser();
@@ -136,6 +144,13 @@ service cloud.firestore {
 
     // ─── recipe_runs ────────────────────────────────────────────────────────
     match /recipe_runs/{runId} {
+      allow read: if isActiveUser();
+      allow create: if canWrite();
+      allow update, delete: if false;
+    }
+
+    // ─── outputs ────────────────────────────────────────────────────────────
+    match /outputs/{outputId} {
       allow read: if isActiveUser();
       allow create: if canWrite();
       allow update, delete: if false;
