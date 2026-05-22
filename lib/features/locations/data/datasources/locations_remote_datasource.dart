@@ -25,20 +25,14 @@ class LocationsRemoteDatasource {
 
   Future<String> createLocation({
     String? locationName,
-    required String section,
     required String shelf,
-    String? level,
-    String? room,
-    int? shelvesCount,
-    int? levelsCount,
+    required String level,
     int? productsPerLevel,
   }) async {
     final normalized = _normalizedKey(
       locationName: locationName,
-      section: section,
       shelf: shelf,
       level: level,
-      room: room,
     );
 
     final existing = await _col
@@ -47,18 +41,16 @@ class LocationsRemoteDatasource {
         .get();
 
     if (existing.docs.isNotEmpty) {
-      throw Exception('Esta localizacao ja esta cadastrada.');
+      throw Exception('Esta localização já está cadastrada.');
     }
 
     final location = StorageLocation(
       id: '',
       locationName: _clean(locationName),
-      section: section.trim(),
+      section: '',
       shelf: shelf.trim(),
-      level: _clean(level),
-      room: _clean(room),
-      shelvesCount: shelvesCount,
-      levelsCount: levelsCount,
+      level: level,
+      room: null,
       productsPerLevel: productsPerLevel,
       isActive: true,
       createdAt: DateTime.now(),
@@ -75,14 +67,12 @@ class LocationsRemoteDatasource {
 
   String _normalizedKey({
     String? locationName,
-    required String section,
     required String shelf,
-    String? level,
-    String? room,
+    required String level,
   }) {
     String n(String? value) =>
         (value ?? '').trim().toLowerCase().replaceAll(' ', '');
-    return '${n(locationName)}|${n(section)}|${n(shelf)}|${n(level)}|${n(room)}';
+    return '${n(locationName)}|${n(shelf)}|${n(level)}';
   }
 
   String? _clean(String? value) {
