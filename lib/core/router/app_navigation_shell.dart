@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../design_system/components/casa_tutorial.dart';
 import 'app_router.dart';
 
-class AppNavigationShell extends StatelessWidget {
+class AppNavigationShell extends StatefulWidget {
   final Widget child;
   final String location;
 
@@ -13,6 +14,11 @@ class AppNavigationShell extends StatelessWidget {
     required this.location,
   });
 
+  @override
+  State<AppNavigationShell> createState() => _AppNavigationShellState();
+}
+
+class _AppNavigationShellState extends State<AppNavigationShell> {
   static const _tabRoutes = [
     AppRoutes.dashboard,
     AppRoutes.productList,
@@ -20,6 +26,25 @@ class AppNavigationShell extends StatelessWidget {
     AppRoutes.history,
     AppRoutes.reports,
   ];
+
+  bool _tutorialActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tutorialActive = tutorialActiveNotifier.value;
+    tutorialActiveNotifier.addListener(_onTutorialChanged);
+  }
+
+  @override
+  void dispose() {
+    tutorialActiveNotifier.removeListener(_onTutorialChanged);
+    super.dispose();
+  }
+
+  void _onTutorialChanged() {
+    if (mounted) setState(() => _tutorialActive = tutorialActiveNotifier.value);
+  }
 
   int _selectedIndex(String currentLocation) {
     if (currentLocation.startsWith(AppRoutes.movement)) return 2;
@@ -31,13 +56,15 @@ class AppNavigationShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final idx = _selectedIndex(location);
+    final idx = _selectedIndex(widget.location);
     return Scaffold(
-      body: child,
-      bottomNavigationBar: _AnimatedTabBar(
-        selectedIndex: idx,
-        onTap: (i) => context.go(_tabRoutes[i]),
-      ),
+      body: widget.child,
+      bottomNavigationBar: _tutorialActive
+          ? null
+          : _AnimatedTabBar(
+              selectedIndex: idx,
+              onTap: (i) => context.go(_tabRoutes[i]),
+            ),
     );
   }
 }
