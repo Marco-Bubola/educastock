@@ -27,6 +27,7 @@ import '../../features/ml/presentation/pages/ml_insights_page.dart';
 import '../../features/ml/presentation/pages/forecast_page.dart';
 import '../../features/recipes/presentation/pages/recipes_page.dart';
 import '../../features/recipes/presentation/pages/recipe_create_page.dart';
+import '../../features/recipes/domain/entities/stock_recipe.dart';
 import '../../features/stock/presentation/pages/history_page.dart';
 
 abstract class AppRoutes {
@@ -151,7 +152,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.batchForm,
         builder: (_, state) {
           final productId = state.uri.queryParameters['productId'] ?? '';
-          return BatchFormPage(productId: productId);
+          final batchId = state.uri.queryParameters['id'] ?? '';
+          return BatchFormPage(productId: productId, batchId: batchId);
         },
       ),
       ShellRoute(
@@ -238,7 +240,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: AppRoutes.recipeCreate,
-            builder: (_, __) => const RecipeCreatePage(),
+            builder: (context, state) {
+              final recipe = state.extra as StockRecipe?;
+              return RecipeCreatePage(editRecipe: recipe);
+            },
           ),
           GoRoute(
             path: AppRoutes.history,
