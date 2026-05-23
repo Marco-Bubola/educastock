@@ -1,13 +1,8 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
-
-const _kHeaderGradient = LinearGradient(
-  colors: [Color(0xFF0D1F3C), Color(0xFF163C6E), Color(0xFF1A5BAD)],
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-);
 
 // ─── Helpers de localização ───────────────────────────────────────────────────
 
@@ -34,38 +29,43 @@ Map<String, String?> _parseLocation(String? raw) {
 Color _sectionColor(String? section) {
   if (section == null || section.isEmpty) return const Color(0xFF64748B);
   const palette = [
-    Color(0xFF2563EB),
-    Color(0xFF059669),
-    Color(0xFFD97706),
-    Color(0xFF7C3AED),
-    Color(0xFFDB2777),
-    Color(0xFF0891B2),
-    Color(0xFFDC2626),
+    Color(0xFF2563EB), Color(0xFF059669), Color(0xFFD97706),
+    Color(0xFF7C3AED), Color(0xFFDB2777), Color(0xFF0891B2), Color(0xFFDC2626),
   ];
   return palette[section.codeUnitAt(0) % palette.length];
 }
 
-String _locationKey(Map<String, String?> loc) {
-  final parts = [
-    if (loc['section'] != null) 'S${loc['section']}',
-    if (loc['shelf'] != null) 'P${loc['shelf']}',
-    if (loc['level'] != null) 'N${loc['level']}',
-    if (loc['room'] != null) 'R${loc['room']}',
-    if (loc['name'] != null) loc['name']!,
-  ];
-  return parts.isEmpty ? 'sem_local' : parts.join('-');
-}
+const _reasonLabels = <String, String>{
+  'uso': 'Uso / Distribuição',
+  'receita': 'Receita',
+  'validade': 'Vencimento',
+  'avaria': 'Avaria / Perda',
+  'doacao': 'Doação',
+  'outro': 'Outro',
+};
 
 // ─── Tema helpers ─────────────────────────────────────────────────────────────
 
-extension _ThemeX on BuildContext {
+extension _Ctx on BuildContext {
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
-  Color get pageBg => isDark ? const Color(0xFF0B1120) : const Color(0xFFF1F5F9);
-  Color get cardBg => isDark ? const Color(0xFF111827) : Colors.white;
-  Color get textPrimary => isDark ? const Color(0xFFF9FAFB) : const Color(0xFF0F172A);
-  Color get textSub => isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
-  Color get borderCol => isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
+  Color get pageBg => isDark ? const Color(0xFF09111F) : const Color(0xFFF0F4FA);
+  Color get cardBg => isDark ? const Color(0xFF111C2D) : Colors.white;
+  Color get onCard => isDark ? const Color(0xFFF1F5FB) : const Color(0xFF0F172A);
+  Color get sub => isDark ? const Color(0xFF8FA3BF) : const Color(0xFF64748B);
+  Color get border => isDark ? const Color(0xFF1E2D42) : const Color(0xFFE2E8F0);
 }
+
+const _kNavy = LinearGradient(
+  colors: [Color(0xFF0A1929), Color(0xFF0D2545), Color(0xFF123270)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
+
+const _kBlue = LinearGradient(
+  colors: [Color(0xFF1648A0), Color(0xFF2563EB)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
@@ -77,89 +77,247 @@ class OutputViewPage extends StatefulWidget {
   State<OutputViewPage> createState() => _OutputViewPageState();
 }
 
-class _OutputViewPageState extends State<OutputViewPage> with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+class _OutputViewPageState extends State<OutputViewPage> with TickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  // GlobalKeys para o tutorial
+  final _keyStats = GlobalKey();
+  final _keyFefo = GlobalKey();
+  final _keyItems = GlobalKey();
+
+  List<Map<String, dynamic>> get _movements =>
+      (widget.output['movements'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    final dur = 800 + _movements.length * 110;
+    _ctrl = AnimationController(vsync: this, duration: Duration(milliseconds: dur));
+    _ctrl.forward();
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _ctrl.dispose();
     super.dispose();
+  }
+
+  Animation<double> _anim(double start, double end, {Curve curve = Curves.easeOutCubic}) =>
+      CurvedAnimation(parent: _ctrl, curve: Interval(start.clamp(0, 1), end.clamp(0, 1), curve: curve));
+
+  void _showTutorial() {
+    showCasaTutorial(
+      context: context,
+      steps: [
+        TutorialStep(
+          key: _keyStats,
+          title: 'Resumo da Saída',
+          description: 'Aqui você vê quantos produtos, lotes e unidades foram distribuídos nesta operação.',
+          icon: Icons.summarize_rounded,
+          align: ContentAlign.bottom,
+          hints: const [
+            'Produtos: número de itens distintos',
+            'Lotes: quantos lotes foram consumidos',
+            'Unidades: total de itens distribuídos',
+          ],
+        ),
+        TutorialStep(
+          key: _keyFefo,
+          title: 'Critério FEFO',
+          description: 'Os lotes são selecionados automaticamente pelo critério FEFO: o que vence primeiro sai primeiro.',
+          icon: Icons.swap_vert_rounded,
+          align: ContentAlign.bottom,
+          hints: const [
+            'FEFO = First Expired, First Out',
+            'Reduz desperdício de produtos',
+            'A ordem de retirada está nos cards abaixo',
+          ],
+        ),
+        TutorialStep(
+          key: _keyItems,
+          title: 'Itens para Retirar',
+          description: 'Cada card mostra um produto com lote, validade, localização e quantidade a retirar. Siga a ordem numerada.',
+          icon: Icons.inventory_2_outlined,
+          align: ContentAlign.top,
+          hints: const [
+            'Retire os itens na ordem dos números',
+            'A localização mostra exatamente onde está',
+            'A barra mostra o estoque restante no lote',
+          ],
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final movements = (widget.output['movements'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
+    final movements = _movements;
+    final isDark = context.isDark;
+
     final createdAtRaw = widget.output['createdAt'] as String?;
     final createdAt = createdAtRaw != null ? DateTime.tryParse(createdAtRaw) : null;
     final totalConsumed = movements.fold<int>(0, (s, m) => s + ((m['consumed'] as num?)?.toInt() ?? 0));
+    final distinctProducts = <String>{};
+    for (final m in movements) {
+      if (m['productId'] != null) distinctProducts.add(m['productId'] as String);
+    }
+
+    final reasonCode = widget.output['reasonCode'] as String? ?? 'outro';
+    final reasonLabel = _reasonLabels[reasonCode] ?? (widget.output['reason'] as String? ?? 'Distribuição');
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: context.pageBg,
-        bottomNavigationBar: _BottomBar(isDark: context.isDark),
-        body: NestedScrollView(
-          headerSliverBuilder: (context, _) => [
-            _OutputSliverAppBar(
-              tabController: _tabController,
-              createdAt: createdAt,
-              totalItems: movements.length,
-              totalConsumed: totalConsumed,
+        appBar: ModernProfileAppBar(
+          title: 'Relatório de Saída',
+          subtitle: 'Detalhes da distribuição',
+          showBackButton: true,
+          actions: [
+            buildHelpButton(
+              context: context,
+              onPressed: _showTutorial,
             ),
           ],
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              _ResumoTab(output: widget.output, movements: movements),
-              _LotesTab(movements: movements),
-              _LocalizacoesTab(movements: movements),
-            ],
-          ),
+        ),
+        bottomNavigationBar: _buildBottomBar(context, isDark),
+        body: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // ── Hero header ──
+            SliverToBoxAdapter(
+              child: _HeroHeader(
+                outputId: widget.output['outputId'] as String? ?? '-',
+                performedByName: widget.output['performedByName'] as String? ?? '-',
+                reasonLabel: reasonLabel,
+                createdAt: createdAt,
+                checkAnim: _anim(0.0, 0.35, curve: Curves.elasticOut),
+                fadeAnim: _anim(0.10, 0.42),
+              ),
+            ),
+
+            // ── Stats row ──
+            SliverToBoxAdapter(
+              child: FadeTransition(
+                opacity: _anim(0.25, 0.55),
+                child: SlideTransition(
+                  position: Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero)
+                      .animate(_anim(0.25, 0.55)),
+                  child: _StatsRow(
+                    key: _keyStats,
+                    products: distinctProducts.length,
+                    batches: movements.length,
+                    units: totalConsumed,
+                    isDark: isDark,
+                  ),
+                ),
+              ),
+            ),
+
+            // ── FEFO notice ──
+            SliverToBoxAdapter(
+              child: FadeTransition(
+                opacity: _anim(0.35, 0.62),
+                child: _FefoNotice(key: _keyFefo, isDark: isDark),
+              ),
+            ),
+
+            // ── Section title ──
+            SliverToBoxAdapter(
+              child: FadeTransition(
+                opacity: _anim(0.42, 0.66),
+                child: Padding(
+                  key: _keyItems,
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 3,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF2563EB), Color(0xFF1648A0)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '${movements.length} item${movements.length != 1 ? 'ns' : ''} nesta saída',
+                        style: AppTypography.labelLarge.copyWith(
+                          color: context.onCard,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Item cards ──
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (ctx, i) {
+                  final m = movements[i];
+                  final total = movements.length;
+                  final startFrac = 0.45 + i * (0.45 / max(total, 1));
+                  final endFrac = (startFrac + 0.35).clamp(0.0, 1.0);
+                  final itemAnim = _anim(startFrac, endFrac);
+
+                  return FadeTransition(
+                    opacity: itemAnim,
+                    child: SlideTransition(
+                      position: Tween<Offset>(begin: const Offset(0, 0.25), end: Offset.zero)
+                          .animate(itemAnim),
+                      child: _ItemCard(
+                        movement: m,
+                        index: i + 1,
+                        isDark: isDark,
+                        cardBg: ctx.cardBg,
+                        onCard: ctx.onCard,
+                        sub: ctx.sub,
+                        borderCol: ctx.border,
+                      ),
+                    ),
+                  );
+                },
+                childCount: movements.length,
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          ],
         ),
       ),
     );
   }
-}
 
-// ─── Bottom bar ───────────────────────────────────────────────────────────────
-
-class _BottomBar extends StatelessWidget {
-  final bool isDark;
-  const _BottomBar({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    final borderColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
-    final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
+  Widget _buildBottomBar(BuildContext context, bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: cardBg,
-        border: Border(top: BorderSide(color: borderColor)),
+        color: context.cardBg,
+        border: Border(top: BorderSide(color: context.border)),
         boxShadow: isDark
             ? []
-            : [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, -3))],
+            : [BoxShadow(color: Colors.black.withValues(alpha: 0.07), blurRadius: 14, offset: const Offset(0, -4))],
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           child: SizedBox(
-            height: 48,
+            height: 50,
             child: ElevatedButton.icon(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.check_circle_outline_rounded, size: 20),
-              label: const Text('Concluir e fechar', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              icon: const Icon(Icons.check_circle_rounded, size: 20),
+              label: const Text('Concluir e fechar',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.success600,
+                backgroundColor: const Color(0xFF16A34A),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 elevation: 0,
               ),
             ),
@@ -170,818 +328,264 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
-// ─── Sliver AppBar ────────────────────────────────────────────────────────────
+// ─── Hero header ─────────────────────────────────────────────────────────────
 
-class _OutputSliverAppBar extends StatelessWidget {
-  final TabController tabController;
+class _HeroHeader extends StatelessWidget {
+  final String outputId;
+  final String performedByName;
+  final String reasonLabel;
   final DateTime? createdAt;
-  final int totalItems;
-  final int totalConsumed;
+  final Animation<double> checkAnim;
+  final Animation<double> fadeAnim;
 
-  const _OutputSliverAppBar({
-    required this.tabController,
+  const _HeroHeader({
+    required this.outputId,
+    required this.performedByName,
+    required this.reasonLabel,
     required this.createdAt,
-    required this.totalItems,
-    required this.totalConsumed,
+    required this.checkAnim,
+    required this.fadeAnim,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fmt = DateFormat('dd/MM/yyyy • HH:mm');
-    return SliverAppBar(
-      pinned: true,
-      expandedHeight: 148,
-      backgroundColor: const Color(0xFF0D1F3C),
-      foregroundColor: Colors.white,
-      elevation: 0,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: const BoxDecoration(gradient: _kHeaderGradient),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 50, 16, 0),
+    final fmt = DateFormat('dd/MM/yyyy  •  HH:mm');
+    final shortId = outputId.length > 16 ? '${outputId.substring(0, 16)}…' : outputId;
+
+    return Container(
+      decoration: const BoxDecoration(gradient: _kNavy),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Checkmark animado
+          ScaleTransition(
+            scale: checkAnim,
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: const Color(0xFF16A34A).withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: const Color(0xFF4ADE80).withValues(alpha: 0.45), width: 1.5),
+              ),
+              child: const Icon(Icons.check_rounded, color: Color(0xFF4ADE80), size: 30),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Título + motivo
+          FadeTransition(
+            opacity: fadeAnim,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Saída registrada',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 24,
+                    letterSpacing: -0.5,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+                  ),
+                  child: Text(
+                    reasonLabel,
+                    style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.90),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          // Info card
+          FadeTransition(
+            opacity: fadeAnim,
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      // Badge de sucesso
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 7,
-                              height: 7,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF4ADE80),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 7),
-                            Text(
-                              'Saída registrada',
-                              style: AppTypography.labelSmall.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Spacer(),
-                      if (createdAt != null)
-                        Text(
-                          fmt.format(createdAt!),
-                          style: AppTypography.bodySmall.copyWith(
-                            color: Colors.white.withValues(alpha: 0.65),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _StatPill(label: '$totalItems lote${totalItems != 1 ? 's' : ''}', icon: Icons.layers_outlined),
-                      const SizedBox(width: 8),
-                      _StatPill(label: '$totalConsumed un. distribuída${totalConsumed != 1 ? 's' : ''}', icon: Icons.output_rounded),
-                    ],
-                  ),
+                  _HRow(icon: Icons.tag_rounded, label: 'ID', value: shortId, mono: true),
+                  const SizedBox(height: 8),
+                  _HRow(icon: Icons.person_outline_rounded, label: 'Responsável', value: performedByName),
+                  if (createdAt != null) ...[
+                    const SizedBox(height: 8),
+                    _HRow(icon: Icons.schedule_rounded, label: 'Data / hora', value: fmt.format(createdAt!)),
+                  ],
                 ],
               ),
             ),
           ),
-        ),
-        collapseMode: CollapseMode.pin,
-      ),
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(48),
-        child: Container(
-          color: const Color(0xFF0D1F3C),
-          child: TabBar(
-            controller: tabController,
-            indicatorColor: const Color(0xFF60A5FA),
-            indicatorWeight: 3,
-            indicatorSize: TabBarIndicatorSize.label,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white.withValues(alpha: 0.50),
-            labelStyle: AppTypography.labelSmall.copyWith(fontWeight: FontWeight.w700),
-            unselectedLabelStyle: AppTypography.labelSmall,
-            tabs: const [
-              Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Resumo'),
-              Tab(icon: Icon(Icons.inventory_outlined, size: 18), text: 'Lotes'),
-              Tab(icon: Icon(Icons.place_outlined, size: 18), text: 'Localizações'),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatPill extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  const _StatPill({required this.label, required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white.withValues(alpha: 0.80), size: 13),
-          const SizedBox(width: 5),
-          Text(label, style: AppTypography.labelSmall.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 }
 
-// ─── Tab 1: Resumo ────────────────────────────────────────────────────────────
-
-class _ResumoTab extends StatelessWidget {
-  final Map<String, dynamic> output;
-  final List<Map<String, dynamic>> movements;
-
-  const _ResumoTab({required this.output, required this.movements});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.isDark;
-    final cardBg = context.cardBg;
-    final textPrimary = context.textPrimary;
-    final textSub = context.textSub;
-    final borderColor = context.borderCol;
-
-    final createdAtRaw = output['createdAt'] as String?;
-    final createdAt = createdAtRaw != null ? DateTime.tryParse(createdAtRaw) : null;
-    final fmt = DateFormat('dd/MM/yyyy HH:mm');
-    final totalConsumed = movements.fold<int>(0, (s, m) => s + ((m['consumed'] as num?)?.toInt() ?? 0));
-
-    final distinctProducts = <String>{};
-    for (final m in movements) {
-      final pid = m['productId'] as String?;
-      if (pid != null) distinctProducts.add(pid);
-    }
-
-    final reasonCode = output['reasonCode'] as String? ?? 'outro';
-    final reasonLabel = _reasonLabels[reasonCode] ?? (output['reason'] as String? ?? 'Distribuição');
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      children: [
-        // ── Header card ──
-        Container(
-          decoration: BoxDecoration(
-            gradient: _kHeaderGradient,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF1A5BAD).withValues(alpha: isDark ? 0.3 : 0.20),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
-                    ),
-                    child: const Icon(Icons.output_rounded, color: Colors.white, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Saída FEFO',
-                            style: AppTypography.labelLarge.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
-                        Text(reasonLabel,
-                            style: AppTypography.bodySmall.copyWith(color: Colors.white.withValues(alpha: 0.75))),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Container(height: 1, color: Colors.white.withValues(alpha: 0.15)),
-              const SizedBox(height: 16),
-              _InfoRow(label: 'ID da saída', value: output['outputId'] ?? '-',
-                  valueColor: Colors.white, labelColor: Colors.white60, selectable: true),
-              const SizedBox(height: 6),
-              _InfoRow(label: 'Responsável', value: output['performedByName'] ?? '-',
-                  valueColor: Colors.white, labelColor: Colors.white60),
-              const SizedBox(height: 6),
-              if (createdAt != null)
-                _InfoRow(label: 'Data/hora', value: fmt.format(createdAt),
-                    valueColor: Colors.white, labelColor: Colors.white60),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // ── Stats row ──
-        Row(
-          children: [
-            Expanded(
-              child: _StatCard(
-                icon: Icons.inventory_2_outlined,
-                label: 'Produtos',
-                value: '${distinctProducts.length}',
-                color: AppColors.brandPrimary600,
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _StatCard(
-                icon: Icons.layers_outlined,
-                label: 'Lotes',
-                value: '${movements.length}',
-                color: AppColors.info600,
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _StatCard(
-                icon: Icons.output_rounded,
-                label: 'Unidades',
-                value: '$totalConsumed',
-                color: AppColors.success600,
-                isDark: isDark,
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        // ── FEFO info ──
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.warning600.withValues(alpha: isDark ? 0.12 : 0.07),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.warning600.withValues(alpha: 0.30)),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AppColors.warning600.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.info_outline_rounded, color: AppColors.warning600, size: 16),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Critério FEFO aplicado',
-                        style: AppTypography.labelSmall.copyWith(color: AppColors.warning600, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Os lotes foram selecionados automaticamente por ordem de vencimento. Retire os itens na ordem indicada na aba Lotes.',
-                      style: AppTypography.bodySmall.copyWith(color: AppColors.warning600),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        Row(
-          children: [
-            Container(
-              width: 3,
-              height: 16,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1A5BAD), Color(0xFF163C6E)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text('Itens desta saída',
-                style: AppTypography.labelMedium.copyWith(fontWeight: FontWeight.w800, color: textPrimary)),
-          ],
-        ),
-        const SizedBox(height: 10),
-        ...movements.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final m = entry.value;
-          final expiry = m['expiryDate'] as String?;
-          final expiryDt = expiry != null ? DateTime.tryParse(expiry) : null;
-          final daysLeft = expiryDt?.difference(DateTime.now()).inDays;
-          return _QuickItemRow(
-            index: idx + 1,
-            productName: m['productName'] as String? ?? '-',
-            batchId: m['batchId'] as String? ?? '-',
-            consumed: (m['consumed'] as num?)?.toInt() ?? 0,
-            expiryDt: expiryDt,
-            daysLeft: daysLeft,
-            isDark: isDark,
-            cardBg: cardBg,
-            textPrimary: textPrimary,
-            textSub: textSub,
-            borderColor: borderColor,
-          );
-        }),
-      ],
-    );
-  }
-}
-
-const _reasonLabels = <String, String>{
-  'uso': 'Uso / Distribuição',
-  'receita': 'Receita',
-  'validade': 'Vencimento',
-  'avaria': 'Avaria',
-  'doacao': 'Doação',
-  'outro': 'Outro',
-};
-
-class _InfoRow extends StatelessWidget {
+class _HRow extends StatelessWidget {
+  final IconData icon;
   final String label;
   final String value;
-  final Color? labelColor;
-  final Color? valueColor;
-  final bool selectable;
-  const _InfoRow({required this.label, required this.value, this.labelColor, this.valueColor, this.selectable = false});
+  final bool mono;
+  const _HRow({required this.icon, required this.label, required this.value, this.mono = false});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, size: 13, color: Colors.white54),
+          const SizedBox(width: 7),
+          Text('$label:', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: mono ? 'monospace' : null),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+}
+
+// ─── Stats row ───────────────────────────────────────────────────────────────
+
+class _StatsRow extends StatelessWidget {
+  final int products;
+  final int batches;
+  final int units;
+  final bool isDark;
+
+  const _StatsRow({
+    super.key,
+    required this.products,
+    required this.batches,
+    required this.units,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final vStyle = AppTypography.labelSmall.copyWith(fontWeight: FontWeight.w700, color: valueColor);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 100,
-          child: Text(label, style: AppTypography.bodySmall.copyWith(color: labelColor ?? context.textSub)),
-        ),
-        Expanded(
-          child: selectable
-              ? SelectableText(value, style: vStyle)
-              : Text(value, style: vStyle),
-        ),
-      ],
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, -16, 20, 16),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 14),
+      decoration: BoxDecoration(
+        color: context.cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: context.border),
+        boxShadow: isDark
+            ? []
+            : [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 6))],
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _Stat(icon: Icons.inventory_2_outlined, label: 'Produtos', value: '$products', color: const Color(0xFF2563EB))),
+          _SDivider(isDark: isDark),
+          Expanded(child: _Stat(icon: Icons.layers_outlined, label: 'Lotes', value: '$batches', color: const Color(0xFF7C3AED))),
+          _SDivider(isDark: isDark),
+          Expanded(child: _Stat(icon: Icons.output_rounded, label: 'Unidades', value: '$units', color: const Color(0xFF16A34A))),
+        ],
+      ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
+class _SDivider extends StatelessWidget {
+  final bool isDark;
+  const _SDivider({required this.isDark});
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 1,
+        height: 36,
+        color: isDark ? const Color(0xFF1E2D42) : const Color(0xFFE2E8F0),
+      );
+}
+
+class _Stat extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final Color color;
-  final bool isDark;
-  const _StatCard({required this.icon, required this.label, required this.value, required this.color, required this.isDark});
+  const _Stat({required this.icon, required this.label, required this.value, required this.color});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withValues(alpha: isDark ? 0.18 : 0.10), color.withValues(alpha: isDark ? 0.08 : 0.05)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.22)),
-        boxShadow: isDark
-            ? []
-            : [BoxShadow(color: color.withValues(alpha: 0.10), blurRadius: 8, offset: const Offset(0, 3))],
-      ),
-      child: Column(
+  Widget build(BuildContext context) => Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 18),
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 16),
           ),
-          const SizedBox(height: 8),
-          Text(value, style: AppTypography.headingSmall.copyWith(color: color, fontWeight: FontWeight.w800)),
-          Text(label, style: AppTypography.labelSmall.copyWith(color: color.withValues(alpha: 0.85))),
+          const SizedBox(height: 5),
+          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 18, height: 1)),
+          const SizedBox(height: 2),
+          Text(label, style: AppTypography.labelSmall.copyWith(color: context.sub, fontSize: 10)),
         ],
-      ),
-    );
-  }
+      );
 }
 
-class _QuickItemRow extends StatelessWidget {
-  final int index;
-  final String productName;
-  final String batchId;
-  final int consumed;
-  final DateTime? expiryDt;
-  final int? daysLeft;
-  final bool isDark;
-  final Color cardBg;
-  final Color textPrimary;
-  final Color textSub;
-  final Color borderColor;
+// ─── FEFO notice ─────────────────────────────────────────────────────────────
 
-  const _QuickItemRow({
-    required this.index,
-    required this.productName,
-    required this.batchId,
-    required this.consumed,
-    required this.expiryDt,
-    required this.daysLeft,
-    required this.isDark,
-    required this.cardBg,
-    required this.textPrimary,
-    required this.textSub,
-    required this.borderColor,
-  });
+class _FefoNotice extends StatelessWidget {
+  final bool isDark;
+  const _FefoNotice({super.key, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final urgentColor = daysLeft != null && daysLeft! <= 7 ? AppColors.danger600 : AppColors.neutral500;
+    const amber = Color(0xFFB45309);
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: cardBg,
+        color: amber.withValues(alpha: isDark ? 0.12 : 0.07),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-        boxShadow: isDark
-            ? []
-            : [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1A5BAD), Color(0xFF163C6E)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Center(
-              child: Text(
-                '$index',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(productName,
-                    style: AppTypography.labelSmall.copyWith(fontWeight: FontWeight.w700, color: textPrimary),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Text('Lote: $batchId',
-                    style: AppTypography.bodySmall.copyWith(color: textSub),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.success600.withValues(alpha: isDark ? 0.18 : 0.10),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '$consumed un.',
-                  style: AppTypography.labelSmall.copyWith(color: AppColors.success600, fontWeight: FontWeight.w700),
-                ),
-              ),
-              if (expiryDt != null) ...[
-                const SizedBox(height: 3),
-                Text(
-                  DateFormat('dd/MM/yy').format(expiryDt!),
-                  style: AppTypography.bodySmall.copyWith(
-                    color: urgentColor,
-                    fontWeight: daysLeft != null && daysLeft! <= 7 ? FontWeight.w700 : FontWeight.normal,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Tab 2: Lotes ─────────────────────────────────────────────────────────────
-
-class _LotesTab extends StatelessWidget {
-  final List<Map<String, dynamic>> movements;
-  const _LotesTab({required this.movements});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.isDark;
-    final cardBg = context.cardBg;
-    final textPrimary = context.textPrimary;
-    final textSub = context.textSub;
-
-    if (movements.isEmpty) {
-      return const CasaEmptyState(icon: Icons.inventory_2_outlined, title: 'Sem lotes', description: 'Nenhum lote registrado nesta saída.');
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      itemCount: movements.length,
-      itemBuilder: (_, i) {
-        final m = movements[i];
-        final expiry = m['expiryDate'] as String?;
-        final expiryDt = expiry != null ? DateTime.tryParse(expiry) : null;
-        final daysLeft = expiryDt?.difference(DateTime.now()).inDays;
-        final after = (m['after'] as num?)?.toInt() ?? 0;
-        final consumed = (m['consumed'] as num?)?.toInt() ?? 0;
-        final before = (m['before'] as num?)?.toInt() ?? 0;
-        final locationRaw = m['shelfLocation'] as String?;
-        final loc = _parseLocation(locationRaw);
-
-        Color urgency = AppColors.success600;
-        String urgencyLabel = 'OK';
-        IconData urgencyIcon = Icons.check_circle_outline_rounded;
-        if (daysLeft != null) {
-          if (daysLeft <= 0) {
-            urgency = AppColors.neutral500;
-            urgencyLabel = 'Vencido';
-            urgencyIcon = Icons.block_rounded;
-          } else if (daysLeft <= 7) {
-            urgency = AppColors.danger600;
-            urgencyLabel = '$daysLeft dias';
-            urgencyIcon = Icons.warning_rounded;
-          } else if (daysLeft <= 30) {
-            urgency = AppColors.warning600;
-            urgencyLabel = '$daysLeft dias';
-            urgencyIcon = Icons.schedule_rounded;
-          } else {
-            urgencyLabel = '$daysLeft dias';
-          }
-        }
-
-        final sectionColor = _sectionColor(loc['section']);
-        final hasLocation = loc.isNotEmpty && loc.values.any((v) => v != null);
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 14),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: urgency.withValues(alpha: 0.28), width: 1.5),
-            boxShadow: isDark
-                ? []
-                : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 3))],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Header ──
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                decoration: BoxDecoration(
-                  color: urgency.withValues(alpha: isDark ? 0.12 : 0.07),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: urgency.withValues(alpha: isDark ? 0.22 : 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Text('${i + 1}',
-                            style: AppTypography.labelSmall.copyWith(color: urgency, fontWeight: FontWeight.w800)),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        m['productName'] as String? ?? '-',
-                        style: AppTypography.labelMedium.copyWith(fontWeight: FontWeight.w800, color: textPrimary),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: urgency.withValues(alpha: isDark ? 0.18 : 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(urgencyIcon, color: urgency, size: 12),
-                          const SizedBox(width: 4),
-                          Text(urgencyLabel,
-                              style: AppTypography.labelSmall.copyWith(color: urgency, fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Corpo ──
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _FieldTile(
-                            icon: Icons.qr_code_2_rounded,
-                            label: 'Lote',
-                            value: m['batchId'] as String? ?? '-',
-                            monospace: true,
-                            textPrimary: textPrimary,
-                            textSub: textSub,
-                          ),
-                        ),
-                        Expanded(
-                          child: _FieldTile(
-                            icon: Icons.calendar_today_outlined,
-                            label: 'Validade',
-                            value: expiryDt != null ? DateFormat('dd/MM/yyyy').format(expiryDt) : 'Sem validade',
-                            valueColor: daysLeft != null && daysLeft <= 7 ? AppColors.danger600 : null,
-                            textPrimary: textPrimary,
-                            textSub: textSub,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-
-                    if (hasLocation) ...[
-                      _LocationAddressRow(loc: loc, sectionColor: sectionColor, isDark: isDark),
-                      const SizedBox(height: 10),
-                    ] else ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _FieldTile(
-                              icon: Icons.place_outlined,
-                              label: 'Localização',
-                              value: 'Não informada',
-                              valueColor: textSub,
-                              textPrimary: textPrimary,
-                              textSub: textSub,
-                            ),
-                          ),
-                          const Expanded(child: SizedBox()),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-
-                    // Quantidade a retirar
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1A5BAD), Color(0xFF2563EB)],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: isDark
-                            ? []
-                            : [BoxShadow(color: const Color(0xFF1A5BAD).withValues(alpha: 0.25), blurRadius: 8, offset: const Offset(0, 2))],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.output_rounded, color: Colors.white, size: 18),
-                          const SizedBox(width: 10),
-                          Text('Retirar desta localização:',
-                              style: AppTypography.bodySmall.copyWith(color: Colors.white70)),
-                          const Spacer(),
-                          Text(
-                            '$consumed unidade${consumed != 1 ? 's' : ''}',
-                            style: AppTypography.labelMedium.copyWith(color: Colors.white, fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    _StockProgressBar(before: before, after: after, consumed: consumed, isDark: isDark, textSub: textSub),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ─── Widget de endereço de localização ───────────────────────────────────────
-
-class _LocationAddressRow extends StatelessWidget {
-  final Map<String, String?> loc;
-  final Color sectionColor;
-  final bool isDark;
-  const _LocationAddressRow({required this.loc, required this.sectionColor, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: sectionColor.withValues(alpha: isDark ? 0.10 : 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: sectionColor.withValues(alpha: 0.22)),
+        border: Border.all(color: amber.withValues(alpha: 0.28)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: sectionColor.withValues(alpha: isDark ? 0.20 : 0.12),
-              borderRadius: BorderRadius.circular(8),
+              color: amber.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
             ),
-            child: Icon(Icons.place_rounded, color: sectionColor, size: 16),
+            child: const Icon(Icons.swap_vert_rounded, color: amber, size: 15),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (loc['name'] != null)
-                  Text(loc['name']!,
-                      style: AppTypography.labelSmall.copyWith(
-                          color: context.textPrimary, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    if (loc['section'] != null)
-                      _AddrChip(label: 'Seção ${loc['section']}', color: sectionColor),
-                    if (loc['shelf'] != null)
-                      _AddrChip(label: 'Prateleira ${loc['shelf']}', color: const Color(0xFF0891B2)),
-                    if (loc['level'] != null)
-                      _AddrChip(label: 'Nível ${loc['level']}', color: const Color(0xFF7C3AED)),
-                    if (loc['room'] != null)
-                      _AddrChip(label: 'Sala ${loc['room']}', color: const Color(0xFF059669)),
-                  ],
+                const Text('Critério FEFO aplicado',
+                    style: TextStyle(color: amber, fontWeight: FontWeight.w700, fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(
+                  'Lotes selecionados por ordem de vencimento — retire na sequência indicada.',
+                  style: TextStyle(color: amber.withValues(alpha: 0.85), fontSize: 11),
                 ),
               ],
             ),
@@ -992,97 +596,704 @@ class _LocationAddressRow extends StatelessWidget {
   }
 }
 
-class _AddrChip extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _AddrChip({required this.label, required this.color});
+// ─── Item card ───────────────────────────────────────────────────────────────
+
+class _ItemCard extends StatelessWidget {
+  final Map<String, dynamic> movement;
+  final int index;
+  final bool isDark;
+  final Color cardBg;
+  final Color onCard;
+  final Color sub;
+  final Color borderCol;
+
+  const _ItemCard({
+    required this.movement,
+    required this.index,
+    required this.isDark,
+    required this.cardBg,
+    required this.onCard,
+    required this.sub,
+    required this.borderCol,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final m = movement;
+    final productName = m['productName'] as String? ?? '-';
+    final batchId = m['batchId'] as String? ?? '-';
+    final consumed = (m['consumed'] as num?)?.toInt() ?? 0;
+    final before = (m['before'] as num?)?.toInt() ?? 0;
+    final after = (m['after'] as num?)?.toInt() ?? 0;
+
+    final expiryStr = m['expiryDate'] as String?;
+    final expiryDt = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
+    final daysLeft = expiryDt?.difference(DateTime.now()).inDays;
+
+    final locationRaw = m['shelfLocation'] as String?;
+    final loc = _parseLocation(locationRaw);
+    final hasLoc = loc.isNotEmpty && loc.values.any((v) => v != null);
+
+    final expiryColor = daysLeft == null
+        ? sub
+        : daysLeft <= 0
+            ? const Color(0xFFDC2626)
+            : daysLeft <= 7
+                ? const Color(0xFFDC2626)
+                : daysLeft <= 30
+                    ? const Color(0xFFD97706)
+                    : const Color(0xFF16A34A);
+
+    final expiryLabel = daysLeft == null
+        ? 'Sem validade'
+        : daysLeft <= 0
+            ? 'Vencido'
+            : daysLeft == 1
+                ? '1 dia'
+                : '$daysLeft dias';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderCol),
+        boxShadow: isDark
+            ? []
+            : [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 14, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Cabeçalho ──
+          _CardHeader(index: index, productName: productName, consumed: consumed, isDark: isDark),
+
+          // ── Lote e validade ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _InfoChip(
+                    icon: Icons.qr_code_2_rounded,
+                    label: 'Lote',
+                    value: batchId,
+                    isDark: isDark,
+                    mono: true,
+                    valueColor: onCard,
+                    borderCol: borderCol,
+                    sub: sub,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _InfoChip(
+                    icon: Icons.event_rounded,
+                    label: 'Validade',
+                    value: expiryDt != null
+                        ? DateFormat('dd/MM/yyyy').format(expiryDt)
+                        : 'Sem validade',
+                    isDark: isDark,
+                    valueColor: expiryColor,
+                    borderCol: expiryColor.withValues(alpha: 0.25),
+                    sub: sub,
+                    bg: expiryColor.withValues(alpha: isDark ? 0.11 : 0.06),
+                    badge: expiryDt != null ? expiryLabel : null,
+                    badgeColor: expiryColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // ── Localização ──
+          if (hasLoc) ...[
+            _LocationSection(loc: loc, isDark: isDark, sub: sub, onCard: onCard),
+            const SizedBox(height: 14),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: sub.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: borderCol),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_off_rounded, size: 14, color: sub),
+                    const SizedBox(width: 8),
+                    Text('Localização não informada',
+                        style: TextStyle(color: sub, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          // ── Barra de retirada ──
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              gradient: _kBlue,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: isDark
+                  ? []
+                  : [BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.28), blurRadius: 8, offset: const Offset(0, 3))],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.move_to_inbox_rounded, color: Colors.white, size: 15),
+                ),
+                const SizedBox(width: 10),
+                Text('Retirar desta localização:',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.80), fontSize: 12)),
+                const Spacer(),
+                Text('$consumed un.',
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // ── Barra de estoque ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: _StockBar(
+                before: before, after: after, consumed: consumed, isDark: isDark, sub: sub),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Cabeçalho do card ───────────────────────────────────────────────────────
+
+class _CardHeader extends StatelessWidget {
+  final int index;
+  final String productName;
+  final int consumed;
+  final bool isDark;
+
+  const _CardHeader(
+      {required this.index,
+      required this.productName,
+      required this.consumed,
+      required this.isDark});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.30)),
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF142140), const Color(0xFF111C2D)]
+              : [const Color(0xFFEFF6FF), const Color(0xFFF8FAFC)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
       ),
-      child: Text(label,
-          style: AppTypography.labelSmall.copyWith(color: color, fontWeight: FontWeight.w700, fontSize: 10)),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1648A0), Color(0xFF2563EB)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text('$index',
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              productName,
+              style: TextStyle(
+                color: isDark ? const Color(0xFFF1F5FB) : const Color(0xFF0F172A),
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                letterSpacing: -0.2,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.20 : 0.10),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.30)),
+            ),
+            child: Text('$consumed un.',
+                style: const TextStyle(
+                    color: Color(0xFF16A34A), fontWeight: FontWeight.w800, fontSize: 12)),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _FieldTile extends StatelessWidget {
+// ─── Info chip ────────────────────────────────────────────────────────────────
+
+class _InfoChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  final Color? valueColor;
-  final bool monospace;
-  final Color textPrimary;
-  final Color textSub;
+  final bool isDark;
+  final bool mono;
+  final Color valueColor;
+  final Color borderCol;
+  final Color sub;
+  final Color? bg;
+  final String? badge;
+  final Color? badgeColor;
 
-  const _FieldTile({
+  const _InfoChip({
     required this.icon,
     required this.label,
     required this.value,
-    this.valueColor,
-    this.monospace = false,
-    required this.textPrimary,
-    required this.textSub,
+    required this.isDark,
+    this.mono = false,
+    required this.valueColor,
+    required this.borderCol,
+    required this.sub,
+    this.bg,
+    this.badge,
+    this.badgeColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 16, color: textSub),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final bgColor = bg ?? (isDark ? const Color(0xFF1A2A3F) : const Color(0xFFF8FAFC));
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderCol),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Text(label, style: AppTypography.bodySmall.copyWith(color: textSub)),
-              Text(
-                value,
-                style: AppTypography.labelSmall.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: valueColor ?? textPrimary,
-                  fontFamily: monospace ? 'monospace' : null,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+              Icon(icon, size: 11, color: sub),
+              const SizedBox(width: 4),
+              Text(label,
+                  style: TextStyle(color: sub, fontSize: 10, fontWeight: FontWeight.w600)),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              fontFamily: mono ? 'monospace' : null,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (badge != null) ...[
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: (badgeColor ?? sub).withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(badge!,
+                  style: TextStyle(
+                      color: badgeColor ?? sub, fontSize: 9, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
 
-class _StockProgressBar extends StatelessWidget {
+// ─── Seção de localização ────────────────────────────────────────────────────
+
+class _LocationSection extends StatelessWidget {
+  final Map<String, String?> loc;
+  final bool isDark;
+  final Color sub;
+  final Color onCard;
+
+  const _LocationSection(
+      {required this.loc, required this.isDark, required this.sub, required this.onCard});
+
+  @override
+  Widget build(BuildContext context) {
+    final section = loc['section'];
+    final shelf = loc['shelf'];
+    final level = loc['level'];
+    final room = loc['room'];
+    final name = loc['name'];
+    final sectionColor = _sectionColor(section);
+    final levelNum = level != null ? int.tryParse(level) : null;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: sectionColor.withValues(alpha: 0.25)),
+          color: sectionColor.withValues(alpha: isDark ? 0.07 : 0.04),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header colorido da localização ──
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: sectionColor.withValues(alpha: isDark ? 0.20 : 0.11),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: sectionColor.withValues(alpha: isDark ? 0.35 : 0.18),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.place_rounded, color: sectionColor, size: 13),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'LOCALIZAÇÃO',
+                    style: TextStyle(
+                      color: sectionColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: sectionColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('Retire aqui',
+                        style: TextStyle(
+                            color: sectionColor, fontSize: 10, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Corpo ──
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Esquerda: nome + chips + caminho
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (name != null) ...[
+                          Text(name,
+                              style: TextStyle(
+                                  color: onCard, fontWeight: FontWeight.w700, fontSize: 13)),
+                          const SizedBox(height: 8),
+                        ],
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            if (section != null)
+                              _LocChip(
+                                  label: section,
+                                  prefix: 'Seção',
+                                  color: sectionColor,
+                                  icon: Icons.grid_view_rounded),
+                            if (shelf != null)
+                              _LocChip(
+                                  label: shelf,
+                                  prefix: 'Prateleira',
+                                  color: const Color(0xFF0891B2),
+                                  icon: Icons.view_week_outlined),
+                            if (level != null)
+                              _LocChip(
+                                  label: level,
+                                  prefix: 'Nível',
+                                  color: const Color(0xFF7C3AED),
+                                  icon: Icons.layers_rounded),
+                            if (room != null)
+                              _LocChip(
+                                  label: room,
+                                  prefix: 'Sala',
+                                  color: const Color(0xFF059669),
+                                  icon: Icons.meeting_room_outlined),
+                          ],
+                        ),
+                        if (shelf != null || level != null) ...[
+                          const SizedBox(height: 10),
+                          _AddressPath(
+                            section: section,
+                            shelf: shelf,
+                            level: level,
+                            sectionColor: sectionColor,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  // Direita: diagrama de nível
+                  if (levelNum != null && levelNum >= 1 && levelNum <= 6) ...[
+                    const SizedBox(width: 12),
+                    _LevelDiagram(
+                        targetLevel: levelNum,
+                        totalLevels: 4,
+                        color: const Color(0xFF7C3AED),
+                        isDark: isDark),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Chip de localização ─────────────────────────────────────────────────────
+
+class _LocChip extends StatelessWidget {
+  final String label;
+  final String prefix;
+  final Color color;
+  final IconData icon;
+  const _LocChip(
+      {required this.label, required this.prefix, required this.color, required this.icon});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.30)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 11, color: color),
+            const SizedBox(width: 4),
+            Text('$prefix $label',
+                style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 11)),
+          ],
+        ),
+      );
+}
+
+// ─── Caminho visual (Seção → Prateleira → Nível) ──────────────────────────────
+
+class _AddressPath extends StatelessWidget {
+  final String? section;
+  final String? shelf;
+  final String? level;
+  final Color sectionColor;
+
+  const _AddressPath(
+      {required this.section,
+      required this.shelf,
+      required this.level,
+      required this.sectionColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <Widget>[];
+    if (section != null) {
+      parts.add(_PathStep(color: sectionColor, icon: Icons.grid_view_rounded, label: section!));
+    }
+    if (shelf != null) {
+      if (parts.isNotEmpty) parts.add(_arrow());
+      parts.add(_PathStep(color: const Color(0xFF0891B2), icon: Icons.view_week_outlined, label: 'P$shelf'));
+    }
+    if (level != null) {
+      if (parts.isNotEmpty) parts.add(_arrow());
+      parts.add(_PathStep(
+          color: const Color(0xFF7C3AED),
+          icon: Icons.layers_rounded,
+          label: 'N$level',
+          highlight: true));
+    }
+    return Row(mainAxisSize: MainAxisSize.min, children: parts);
+  }
+
+  Widget _arrow() => const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4),
+        child: Icon(Icons.east_rounded, size: 11, color: Color(0xFF94A3B8)),
+      );
+}
+
+class _PathStep extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+  final String label;
+  final bool highlight;
+  const _PathStep(
+      {required this.color, required this.icon, required this.label, this.highlight = false});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: highlight ? color : color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: highlight ? 1.0 : 0.28)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 10, color: highlight ? Colors.white : color),
+            const SizedBox(width: 3),
+            Text(label,
+                style: TextStyle(
+                    color: highlight ? Colors.white : color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800)),
+          ],
+        ),
+      );
+}
+
+// ─── Diagrama de nível ────────────────────────────────────────────────────────
+
+class _LevelDiagram extends StatelessWidget {
+  final int targetLevel;
+  final int totalLevels;
+  final Color color;
+  final bool isDark;
+
+  const _LevelDiagram(
+      {required this.targetLevel,
+      required this.totalLevels,
+      required this.color,
+      required this.isDark});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Nível',
+              style: TextStyle(
+                  color: context.sub, fontSize: 9, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          for (int lvl = totalLevels; lvl >= 1; lvl--)
+            Container(
+              margin: const EdgeInsets.only(bottom: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: lvl == targetLevel
+                    ? color
+                    : color.withValues(alpha: isDark ? 0.08 : 0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: lvl == targetLevel ? color : color.withValues(alpha: 0.20),
+                  width: lvl == targetLevel ? 1.5 : 1,
+                ),
+                boxShadow: lvl == targetLevel
+                    ? [BoxShadow(
+                        color: color.withValues(alpha: 0.35),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2))]
+                    : [],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (lvl == targetLevel)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 3),
+                      child: Icon(Icons.arrow_right_rounded, size: 12, color: Colors.white),
+                    ),
+                  Text('N$lvl',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: lvl == targetLevel
+                              ? Colors.white
+                              : color.withValues(alpha: 0.35))),
+                ],
+              ),
+            ),
+        ],
+      );
+}
+
+// ─── Barra de estoque ─────────────────────────────────────────────────────────
+
+class _StockBar extends StatelessWidget {
   final int before;
   final int after;
   final int consumed;
   final bool isDark;
-  final Color textSub;
+  final Color sub;
 
-  const _StockProgressBar({
-    required this.before,
-    required this.after,
-    required this.consumed,
-    required this.isDark,
-    required this.textSub,
-  });
+  const _StockBar(
+      {required this.before,
+      required this.after,
+      required this.consumed,
+      required this.isDark,
+      required this.sub});
 
   @override
   Widget build(BuildContext context) {
     final pct = before > 0 ? (after / before).clamp(0.0, 1.0) : 0.0;
-    final barColor = after <= 0
-        ? AppColors.neutral500
-        : (pct < 0.2 ? AppColors.danger600 : AppColors.brandPrimary500);
-    final trackBg = isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB);
+    final isEmpty = after <= 0;
+    final isLow = pct < 0.20 && !isEmpty;
+    final barColor = isEmpty
+        ? const Color(0xFF6B7280)
+        : isLow
+            ? const Color(0xFFDC2626)
+            : const Color(0xFF2563EB);
+    final trackBg = isDark ? const Color(0xFF1E2D42) : const Color(0xFFE2E8F0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1090,543 +1301,37 @@ class _StockProgressBar extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Estoque restante no lote', style: AppTypography.bodySmall.copyWith(color: textSub)),
-            Text(
-              after <= 0 ? 'Esgotado' : '$after restam',
-              style: AppTypography.labelSmall.copyWith(color: barColor, fontWeight: FontWeight.w700),
+            Text('Estoque restante no lote', style: TextStyle(color: sub, fontSize: 11)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: barColor.withValues(alpha: isDark ? 0.18 : 0.10),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(isEmpty ? 'Esgotado' : '$after restam',
+                  style: TextStyle(
+                      color: barColor, fontWeight: FontWeight.w700, fontSize: 11)),
             ),
           ],
         ),
         const SizedBox(height: 6),
         ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: pct,
-            minHeight: 7,
-            backgroundColor: trackBg,
-            valueColor: AlwaysStoppedAnimation<Color>(barColor),
+          borderRadius: BorderRadius.circular(8),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: pct),
+            duration: const Duration(milliseconds: 900),
+            curve: Curves.easeOutCubic,
+            builder: (_, value, __) => LinearProgressIndicator(
+              value: value,
+              minHeight: 8,
+              backgroundColor: trackBg,
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            ),
           ),
         ),
         const SizedBox(height: 5),
-        Text(
-          'Antes: $before  ·  Retirado: $consumed  ·  Após: $after',
-          style: AppTypography.bodySmall.copyWith(color: textSub, fontSize: 10),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Tab 3: Localizações ─────────────────────────────────────────────────────
-
-class _LocalizacoesTab extends StatelessWidget {
-  final List<Map<String, dynamic>> movements;
-  const _LocalizacoesTab({required this.movements});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.isDark;
-    final cardBg = context.cardBg;
-    final textPrimary = context.textPrimary;
-    final textSub = context.textSub;
-    final borderColor = context.borderCol;
-
-    final Map<String, _LocationGroup> groups = {};
-    for (final m in movements) {
-      final raw = m['shelfLocation'] as String?;
-      final loc = _parseLocation(raw);
-      final key = loc.isEmpty ? 'sem_local' : _locationKey(loc);
-      groups.putIfAbsent(key, () => _LocationGroup(raw: raw, loc: loc, items: [])).items.add(m);
-    }
-
-    if (groups.isEmpty) {
-      return const CasaEmptyState(
-          icon: Icons.place_outlined,
-          title: 'Sem localizações',
-          description: 'Nenhuma localização registrada.');
-    }
-
-    final hasAnyLocation = groups.values.any((g) => g.loc.isNotEmpty);
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      children: [
-        if (hasAnyLocation)
-          Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF163C6E), Color(0xFF1A5BAD)],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: isDark
-                  ? []
-                  : [BoxShadow(color: const Color(0xFF1A5BAD).withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 3))],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.route_rounded, color: Colors.white, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Siga a ordem abaixo para retirar os itens. Os lotes estão organizados por vencimento (FEFO).',
-                    style: AppTypography.bodySmall.copyWith(color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-        ...groups.entries.toList().asMap().entries.map((mapEntry) {
-          final stepIndex = mapEntry.key;
-          final group = mapEntry.value.value;
-          return _LocationGroupCard(
-            stepIndex: stepIndex + 1,
-            group: group,
-            isDark: isDark,
-            cardBg: cardBg,
-            textPrimary: textPrimary,
-            textSub: textSub,
-            borderColor: borderColor,
-          );
-        }),
-      ],
-    );
-  }
-}
-
-class _LocationGroup {
-  final String? raw;
-  final Map<String, String?> loc;
-  final List<Map<String, dynamic>> items;
-  _LocationGroup({required this.raw, required this.loc, required this.items});
-}
-
-class _LocationGroupCard extends StatelessWidget {
-  final int stepIndex;
-  final _LocationGroup group;
-  final bool isDark;
-  final Color cardBg;
-  final Color textPrimary;
-  final Color textSub;
-  final Color borderColor;
-
-  const _LocationGroupCard({
-    required this.stepIndex,
-    required this.group,
-    required this.isDark,
-    required this.cardBg,
-    required this.textPrimary,
-    required this.textSub,
-    required this.borderColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final loc = group.loc;
-    final isNoLocation = loc.isEmpty;
-    final sectionColor = isNoLocation ? AppColors.neutral500 : _sectionColor(loc['section']);
-    final section = loc['section'];
-    final shelf = loc['shelf'];
-    final level = loc['level'];
-    final room = loc['room'];
-    final name = loc['name'];
-    final totalConsumed = group.items.fold<int>(0, (s, m) => s + ((m['consumed'] as num?)?.toInt() ?? 0));
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isNoLocation ? borderColor : sectionColor.withValues(alpha: 0.30),
-          width: 1.5,
-        ),
-        boxShadow: isDark
-            ? []
-            : [BoxShadow(color: sectionColor.withValues(alpha: 0.07), blurRadius: 14, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header da localização ──
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: isNoLocation
-                  ? (isDark ? const Color(0xFF1F2937) : const Color(0xFFF8FAFC))
-                  : sectionColor.withValues(alpha: isDark ? 0.12 : 0.07),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    gradient: isNoLocation
-                        ? null
-                        : LinearGradient(
-                            colors: [sectionColor, sectionColor.withValues(alpha: 0.75)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                    color: isNoLocation ? AppColors.neutral500 : null,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: isNoLocation
-                        ? []
-                        : [BoxShadow(color: sectionColor.withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(0, 2))],
-                  ),
-                  child: Center(
-                    child: Text('$stepIndex',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (isNoLocation)
-                        Text('Sem localização definida',
-                            style: AppTypography.labelMedium.copyWith(
-                                fontWeight: FontWeight.w700, color: textPrimary))
-                      else ...[
-                        if (name != null)
-                          Text(name,
-                              style: AppTypography.labelMedium.copyWith(
-                                  fontWeight: FontWeight.w800, color: textPrimary)),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            if (section != null)
-                              _AddrChip(label: 'Seção $section', color: sectionColor),
-                            if (shelf != null)
-                              _AddrChip(label: 'Prateleira $shelf', color: const Color(0xFF0891B2)),
-                            if (level != null)
-                              _AddrChip(label: 'Nível $level', color: const Color(0xFF7C3AED)),
-                            if (room != null)
-                              _AddrChip(label: 'Sala $room', color: const Color(0xFF059669)),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: sectionColor.withValues(alpha: isDark ? 0.18 : 0.10),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${group.items.length} lote${group.items.length != 1 ? 's' : ''}',
-                        style: AppTypography.labelSmall.copyWith(color: sectionColor, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$totalConsumed un.',
-                      style: AppTypography.labelSmall.copyWith(color: textSub, fontWeight: FontWeight.w600, fontSize: 10),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // ── Diagrama visual ──
-          if (!isNoLocation && (shelf != null || level != null))
-            _ShelfDiagram(section: section, shelf: shelf, level: level, sectionColor: sectionColor, isDark: isDark),
-
-          // ── Itens nesta localização ──
-          ...group.items.asMap().entries.map((ie) {
-            final isLast = ie.key == group.items.length - 1;
-            final m = ie.value;
-            final expiry = m['expiryDate'] as String?;
-            final expiryDt = expiry != null ? DateTime.tryParse(expiry) : null;
-            final daysLeft = expiryDt?.difference(DateTime.now()).inDays;
-            final consumed = (m['consumed'] as num?)?.toInt() ?? 0;
-
-            Color urgency = AppColors.success600;
-            if (daysLeft != null) {
-              if (daysLeft <= 0) {
-                urgency = AppColors.neutral500;
-              } else if (daysLeft <= 7) {
-                urgency = AppColors.danger600;
-              } else if (daysLeft <= 30) {
-                urgency = AppColors.warning600;
-              }
-            }
-
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: urgency.withValues(alpha: isDark ? 0.15 : 0.08),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: urgency.withValues(alpha: 0.22)),
-                        ),
-                        child: Center(child: Icon(Icons.inventory_2_outlined, size: 18, color: urgency)),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              m['productName'] as String? ?? '-',
-                              style: AppTypography.labelSmall.copyWith(fontWeight: FontWeight.w700, color: textPrimary),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                Icon(Icons.qr_code_2_rounded, size: 11, color: textSub),
-                                const SizedBox(width: 3),
-                                Expanded(
-                                  child: Text(
-                                    m['batchId'] as String? ?? '-',
-                                    style: AppTypography.bodySmall.copyWith(
-                                        color: textSub, fontFamily: 'monospace', fontSize: 10),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (expiryDt != null)
-                              Row(
-                                children: [
-                                  Icon(Icons.calendar_today_outlined, size: 11, color: urgency),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    'Val: ${DateFormat('dd/MM/yyyy').format(expiryDt)}',
-                                    style: AppTypography.bodySmall.copyWith(
-                                      color: urgency,
-                                      fontWeight: daysLeft != null && daysLeft <= 7 ? FontWeight.w700 : FontWeight.normal,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF1A5BAD), Color(0xFF2563EB)],
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: isDark
-                              ? []
-                              : [BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.25), blurRadius: 6, offset: const Offset(0, 2))],
-                        ),
-                        child: Text(
-                          '$consumed un.',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (!isLast)
-                  Divider(height: 1, indent: 14, endIndent: 14, color: borderColor),
-              ],
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Diagrama visual de prateleira / nível ────────────────────────────────────
-
-class _ShelfDiagram extends StatelessWidget {
-  final String? section;
-  final String? shelf;
-  final String? level;
-  final Color sectionColor;
-  final bool isDark;
-
-  const _ShelfDiagram({
-    required this.section,
-    required this.shelf,
-    required this.level,
-    required this.sectionColor,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final levelNum = level != null ? int.tryParse(level!) : null;
-    const maxLevels = 4;
-    final targetLevel = (levelNum != null && levelNum >= 1 && levelNum <= maxLevels) ? levelNum : null;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 14),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: sectionColor.withValues(alpha: isDark ? 0.07 : 0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: sectionColor.withValues(alpha: 0.15)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          if (section != null) ...[
-            Column(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: sectionColor,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: Text(section!,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text('Seção', style: AppTypography.bodySmall.copyWith(color: context.textSub, fontSize: 9)),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Icon(Icons.chevron_right_rounded, color: sectionColor.withValues(alpha: 0.50), size: 18),
-            ),
-          ],
-          if (shelf != null) ...[
-            Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0891B2).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF0891B2).withValues(alpha: 0.30)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.view_week_outlined, size: 14, color: Color(0xFF0891B2)),
-                      const SizedBox(width: 4),
-                      Text(shelf!, style: const TextStyle(color: Color(0xFF0891B2), fontWeight: FontWeight.w800, fontSize: 14)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text('Prateleira', style: AppTypography.bodySmall.copyWith(color: context.textSub, fontSize: 9)),
-              ],
-            ),
-          ],
-          if (level != null) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Icon(Icons.chevron_right_rounded, color: const Color(0xFF7C3AED).withValues(alpha: 0.50), size: 18),
-            ),
-            Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.30)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.layers_outlined, size: 14, color: Color(0xFF7C3AED)),
-                      const SizedBox(width: 4),
-                      Text(level!, style: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w800, fontSize: 14)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text('Nível', style: AppTypography.bodySmall.copyWith(color: context.textSub, fontSize: 9)),
-              ],
-            ),
-          ],
-          const Spacer(),
-          if (targetLevel != null)
-            _MiniLevelStack(targetLevel: targetLevel, totalLevels: maxLevels, color: const Color(0xFF7C3AED)),
-        ],
-      ),
-    );
-  }
-}
-
-class _MiniLevelStack extends StatelessWidget {
-  final int targetLevel;
-  final int totalLevels;
-  final Color color;
-  const _MiniLevelStack({required this.targetLevel, required this.totalLevels, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (int lvl = totalLevels; lvl >= 1; lvl--)
-          Container(
-            margin: const EdgeInsets.only(bottom: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: lvl == targetLevel ? color : color.withValues(alpha: 0.07),
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(
-                color: lvl == targetLevel ? color : color.withValues(alpha: 0.20),
-                width: lvl == targetLevel ? 1.5 : 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (lvl == targetLevel)
-                  const Icon(Icons.arrow_left_rounded, size: 12, color: Colors.white),
-                Text(
-                  'N$lvl',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: lvl == targetLevel ? Colors.white : color.withValues(alpha: 0.40),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        Text('Antes: $before  ·  Retirado: $consumed  ·  Após: $after',
+            style: TextStyle(color: sub, fontSize: 10)),
       ],
     );
   }
