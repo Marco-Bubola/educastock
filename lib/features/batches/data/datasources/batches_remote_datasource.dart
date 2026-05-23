@@ -1,15 +1,14 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../domain/entities/batch.dart';
 
 class BatchesRemoteDatasource {
   final FirebaseFirestore _db;
-  final FirebaseStorage _storage;
 
-  BatchesRemoteDatasource({FirebaseFirestore? db, FirebaseStorage? storage})
-      : _db = db ?? FirebaseFirestore.instance,
-        _storage = storage ?? FirebaseStorage.instance;
+  BatchesRemoteDatasource({FirebaseFirestore? db})
+      : _db = db ?? FirebaseFirestore.instance;
 
   CollectionReference get _col => _db.collection('batches');
 
@@ -24,7 +23,6 @@ class BatchesRemoteDatasource {
             .toList());
   }
 
-  /// Retorna todos os lotes disponíveis ordenados por validade (FEFO)
   Stream<List<Batch>> watchAllAvailableBatches() {
     return _col
         .where('status', isEqualTo: BatchStatus.disponivel.name)
@@ -34,7 +32,6 @@ class BatchesRemoteDatasource {
       final batches = snap.docs
           .map((d) => Batch.fromMap(d.data() as Map<String, dynamic>, d.id))
           .toList();
-      // FEFO: ordenar por expiryDate (null/noExpiry vai para o fim)
       batches.sort((a, b) {
         if (a.noExpiry && b.noExpiry) return 0;
         if (a.noExpiry) return 1;
@@ -48,7 +45,6 @@ class BatchesRemoteDatasource {
     });
   }
 
-  /// Retorna lotes com vencimento nos próximos [days] dias
   Future<List<Batch>> getBatchesExpiringInDays(int days) async {
     final limit = DateTime.now().add(Duration(days: days));
     final snap = await _col
@@ -63,44 +59,32 @@ class BatchesRemoteDatasource {
         .toList();
   }
 
+  Future<Batch?> getBatchById(String id) async {
+    if (id.isEmpty) return null;
+    final doc = await _col.doc(id).get();
+    if (!doc.exists) return null;
+    return Batch.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+  }
+
   Future<String> saveBatch(Batch batch, {File? imageFile}) async {
-    String? imageUrl = batch.imageUrl;
-
-    // Faz upload da imagem se fornecida
-    if (imageFile != null) {
-      final ext = imageFile.path.split('.').last;
-      final batchRef = batch.id.isNotEmpty ? batch.id : 'tmp_${DateTime.now().millisecondsSinceEpoch}';
-      final ref = _storage.ref('batches/$batchRef/foto.$ext');
-      final task = await ref.putFile(imageFile);
-      imageUrl = await task.ref.getDownloadURL();
-    }
-
-    final batchWithImage = imageUrl != null ? batch.copyWith(imageUrl: imageUrl) : batch;
+    String? imagePath = batch.imageUrl;
 
     if (batch.id.isEmpty) {
-      final ref = await _col.add(batchWithImage.toMap());
-      // Se tinha imagem temporária, atualiza o path no Storage com o ID real
-      if (imageFile != null && imageUrl != null && imageUrl.contains('tmp_')) {
-        final ext = imageFile.path.split('.').last;
-        final newRef = _storage.ref('batches/${ref.id}/foto.$ext');
-        await newRef.putFile(imageFile);
-        final newUrl = await newRef.getDownloadURL();
-        await ref.update({'imageUrl': newUrl});
+      // Novo lote: cria primeiro, depois salva imagem com ID real
+      final ref = await _col.add(batch.toMap());
+      if (imageFile != null && !kIsWeb) {
+        imagePath = await _saveImageLocally(imageFile, ref.id);
+        await ref.update({'imageUrl': imagePath});
       }
       return ref.id;
     }
 
-    // Edição: se havia imagem temporária, agora atualiza com ID correto
-    if (imageFile != null && imageUrl != null) {
-      final ext = imageFile.path.split('.').last;
-      final ref = _storage.ref('batches/${batch.id}/foto.$ext');
-      final task = await ref.putFile(imageFile);
-      final finalUrl = await task.ref.getDownloadURL();
-      await _col.doc(batch.id).set(batchWithImage.copyWith(imageUrl: finalUrl).toMap());
-      return batch.id;
+    // Edição
+    if (imageFile != null && !kIsWeb) {
+      imagePath = await _saveImageLocally(imageFile, batch.id);
     }
-
-    await _col.doc(batch.id).set(batchWithImage.toMap());
+    final updated = imagePath != null ? batch.copyWith(imageUrl: imagePath) : batch;
+    await _col.doc(batch.id).set(updated.toMap());
     return batch.id;
   }
 
@@ -114,5 +98,19 @@ class BatchesRemoteDatasource {
 
   Future<void> deleteBatch(String batchId) async {
     await _col.doc(batchId).delete();
+  }
+
+  // Salva a imagem na pasta local do app e retorna o caminho absoluto.
+  Future<String> _saveImageLocally(File imageFile, String batchId) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final imagesDir = Directory('${dir.path}/batch_images');
+    if (!imagesDir.existsSync()) {
+      imagesDir.createSync(recursive: true);
+    }
+    final ext = imageFile.path.split('.').last.toLowerCase();
+    final fileName = '${batchId}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final target = File('${imagesDir.path}/$fileName');
+    await imageFile.copy(target.path);
+    return target.path;
   }
 }
