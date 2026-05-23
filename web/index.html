@@ -243,18 +243,20 @@
     };
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 3. DECODIFICAÇÃO MULTI-ESTRATÉGIA (live scan — 12 tentativas)
+    // 3. DECODIFICAÇÃO MULTI-ESTRATÉGIA (live scan — 16 tentativas)
     // ─────────────────────────────────────────────────────────────────────────
     // Frame >1280px é reduzido automaticamente (velocidade).
     // Estratégias em ordem de custo crescente: mais rápidas primeiro.
     //   1-2.  Original Hybrid + GH
     //   3-4.  Crop 65% Hybrid + GH
-    //   5-6.  Rotate 90° Hybrid + GH  (barcode lateral — ketchup, latas)
-    //   7-8.  Rotate 270° Hybrid + GH
-    //   9.    Contraste boosted + Hybrid  (embalagem fosca, luz lateral)
-    //   10.   Sharp + Hybrid             (leve motion blur / mão tremendo)
-    //   11.   Invertido + GH             (embalagem escura / metalizada)
-    //   12.   Rotate 180° + Hybrid       (produto de cabeça para baixo)
+    //   5-7.  Rotate 90° Hybrid + GH + Crop65  (barcode na lateral — ketchup)
+    //   8-10. Rotate 270° Hybrid + GH + Crop65 (barcode de lado, outro sentido)
+    //   11.   Contraste boosted + Hybrid        (embalagem fosca, luz lateral)
+    //   12.   Rotate 90°  + Boost              (de lado + baixo contraste)
+    //   13.   Rotate 270° + Boost
+    //   14.   Sharp crop + Hybrid              (leve motion blur)
+    //   15.   Invertido + GH                  (embalagem escura / metalizada)
+    //   16.   Rotate 180° + Hybrid             (produto de cabeça para baixo)
     window._zxingDecodeLive = function(canvas) {
       // Downscale se necessário (>1280px → mais lento sem ganho no live scan)
       var c = window._downscale(canvas, 1280);
@@ -286,29 +288,45 @@
       r = window._decodeGH(rot90);
       if (r) return r;
 
-      // 7. Rotate 270° — Hybrid
+      // 7. Rotate 90° + Crop 65% — Hybrid (barcode de lado + centralizado no frame)
+      r = window._decodeHybrid(window._cropCenter(rot90, 0.65, 0.65));
+      if (r) return r;
+
+      // 8. Rotate 270° — Hybrid
       var rot270 = window._rotateCanvas90(window._rotateCanvas90(rot90));
       r = window._decodeHybrid(rot270);
       if (r) return r;
 
-      // 8. Rotate 270° — GH
+      // 9. Rotate 270° — GH
       r = window._decodeGH(rot270);
       if (r) return r;
 
-      // 9. Contraste boosted — Hybrid (embalagem fosca / iluminação lateral)
+      // 10. Rotate 270° + Crop 65% — Hybrid (barcode de lado, sentido contrário)
+      r = window._decodeHybrid(window._cropCenter(rot270, 0.65, 0.65));
+      if (r) return r;
+
+      // 11. Contraste boosted — Hybrid (embalagem fosca / iluminação lateral)
       var boosted = window._makeContrastCanvas(c);
       r = window._decodeHybrid(boosted);
       if (r) return r;
 
-      // 10. Sharp crop — Hybrid (motion blur de mão levemente tremendo)
+      // 12. Rotate 90° + Boost — Hybrid (de lado + baixo contraste)
+      r = window._decodeHybrid(window._makeContrastCanvas(rot90));
+      if (r) return r;
+
+      // 13. Rotate 270° + Boost — Hybrid (de lado sentido contrário + baixo contraste)
+      r = window._decodeHybrid(window._makeContrastCanvas(rot270));
+      if (r) return r;
+
+      // 14. Sharp crop — Hybrid (motion blur de mão levemente tremendo)
       r = window._decodeHybrid(window._makeSharpCanvas(crop));
       if (r) return r;
 
-      // 11. Invertido boosted — GH (embalagem escura / metalizada / branca)
+      // 15. Invertido boosted — GH (embalagem escura / metalizada / branca)
       r = window._decodeGH(window._makeInvertCanvas(boosted));
       if (r) return r;
 
-      // 12. Rotate 180° — Hybrid (produto de cabeça para baixo)
+      // 16. Rotate 180° — Hybrid (produto de cabeça para baixo)
       r = window._decodeHybrid(window._rotateCanvas90(rot90));
       if (r) return r;
 
@@ -450,22 +468,33 @@
     };
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 6. DIAGNÓSTICO DE CÂMERA (sem applyConstraints)
-    // Aplicar applyConstraints em um stream ativo faz o browser renegociar
-    // os parâmetros do track (resolução, codec) — isso causa o "troca de formato"
-    // visível como flickering na preview.  Após o page refresh o browser já
-    // inicia o stream na resolução usada anteriormente, então nenhuma constraint
-    // precisa ser aplicada e o flickering desaparece.  Solução: log-only.
+    // 6. INICIALIZAÇÃO DE CÂMERA (resolução — disparo único, 5 s)
+    // O flickering anterior era causado pelo setInterval disparando a cada 2 s
+    // ANTES da Promise do applyConstraints anterior resolver — múltiplas
+    // renegociações sobrepostas do track → "troca de formato" na preview.
+    // Solução: disparo único, 5 s de espera, apenas se resolução < 1080 p.
     // ─────────────────────────────────────────────────────────────────────────
     setTimeout(function() {
       try {
         var video = document.querySelector('video');
         if (!video || !video.srcObject) return;
         var tracks = video.srcObject.getVideoTracks();
-        if (!tracks || !tracks.length) return;
-        var s = tracks[0].getSettings();
-        console.log('[EducaStock] Câmera ativa: ' + (s.width||'?') + 'x' + (s.height||'?')
+        if (!tracks || !tracks.length || tracks[0].readyState !== 'live') return;
+        var track = tracks[0];
+        var s = track.getSettings();
+        console.log('[EducaStock] Câmera: ' + (s.width||'?') + 'x' + (s.height||'?')
           + ' foco:' + (s.focusMode||'n/a') + ' facing:' + (s.facingMode||'n/a'));
+        if (s.width && s.width >= 1080) return; // já em boa resolução — sem renegociação
+        // Único disparo — sem retry, sem interval
+        track.applyConstraints({
+          advanced: [
+            { width: { ideal: 1280 }, height: { ideal: 720 } },
+            { width: { ideal: 960  }, height: { ideal: 540 } },
+          ]
+        }).then(function() {
+          var ns = track.getSettings();
+          console.log('[EducaStock] Câmera ajustada: ' + (ns.width||'?') + 'x' + (ns.height||'?'));
+        }).catch(function() {}); // falha silenciosa — câmera continua funcionando
       } catch(e) {}
     }, 5000);
 
