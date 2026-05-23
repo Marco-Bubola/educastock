@@ -1152,41 +1152,7 @@ class _ItemCard extends StatelessWidget {
             ),
           ],
 
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              gradient: _kBlue,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: isDark
-                  ? []
-                  : [BoxShadow(
-                      color: const Color(0xFF2563EB).withValues(alpha: 0.28),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3))],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.move_to_inbox_rounded,
-                      color: Colors.white, size: 15),
-                ),
-             ],
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: _StockBar(
-                before: before, after: after, consumed: consumed, isDark: isDark, sub: sub),
-          ),
+         
         ],
       ),
     );
