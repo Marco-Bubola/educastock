@@ -450,66 +450,24 @@
     };
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 6. AUMENTO DE RESOLUÇÃO DA CÂMERA
-    // Tenta aumentar a resolução do stream para melhorar a detecção.
-    // Chamado repetidamente até conseguir ou desistir após 10 tentativas.
+    // 6. DIAGNÓSTICO DE CÂMERA (sem applyConstraints)
+    // Aplicar applyConstraints em um stream ativo faz o browser renegociar
+    // os parâmetros do track (resolução, codec) — isso causa o "troca de formato"
+    // visível como flickering na preview.  Após o page refresh o browser já
+    // inicia o stream na resolução usada anteriormente, então nenhuma constraint
+    // precisa ser aplicada e o flickering desaparece.  Solução: log-only.
     // ─────────────────────────────────────────────────────────────────────────
-    window._resBoosted = false;
-    window._resBoostAttempts = 0;
-    window._boostCameraResolution = function() {
-      if (window._resBoosted || window._resBoostAttempts >= 10) return;
-      window._resBoostAttempts++;
+    setTimeout(function() {
       try {
         var video = document.querySelector('video');
         if (!video || !video.srcObject) return;
         var tracks = video.srcObject.getVideoTracks();
         if (!tracks || !tracks.length) return;
-        var track = tracks[0];
-        if (track.readyState !== 'live') return;
-        var current = track.getSettings();
-        // Só tenta se resolução for baixa
-        if (current.width && current.width >= 1080) {
-          window._resBoosted = true;
-          console.log('[EducaStock] Resolução já adequada:', current.width + 'x' + current.height);
-          return;
-        }
-        // Tenta autofoco contínuo + alta resolução
-        track.applyConstraints({
-          focusMode: 'continuous',
-          advanced: [
-            { width: { ideal: 1920 }, height: { ideal: 1080 }, focusMode: 'continuous' },
-            { width: { ideal: 1280 }, height: { ideal: 720  }, focusMode: 'continuous' },
-            { width: { ideal: 960  }, height: { ideal: 540  } },
-          ]
-        }).then(function() {
-          var s = track.getSettings();
-          console.log('[EducaStock] Câmera: ' + s.width + 'x' + s.height
-            + ' foco:' + (s.focusMode || 'n/a'));
-          window._resBoosted = true;
-        }).catch(function(e) {
-          // focusMode pode não ser suportado — tenta só a resolução
-          console.warn('[EducaStock] applyConstraints (com foco) falhou, tentando só resolução:', e.message || e);
-          track.applyConstraints({
-            advanced: [
-              { width: { ideal: 1280 }, height: { ideal: 720 } },
-              { width: { ideal: 960  }, height: { ideal: 540 } },
-            ]
-          }).then(function() {
-            window._resBoosted = true;
-          }).catch(function() {});
-        });
-      } catch(e) {
-        console.warn('[EducaStock] boostCameraResolution erro:', e);
-      }
-    };
-
-    // Polling: tenta aumentar resolução a cada 2 s por até 20 s
-    var _resInterval = setInterval(function() {
-      window._boostCameraResolution();
-      if (window._resBoosted || window._resBoostAttempts >= 10) {
-        clearInterval(_resInterval);
-      }
-    }, 2000);
+        var s = tracks[0].getSettings();
+        console.log('[EducaStock] Câmera ativa: ' + (s.width||'?') + 'x' + (s.height||'?')
+          + ' foco:' + (s.focusMode||'n/a') + ' facing:' + (s.facingMode||'n/a'));
+      } catch(e) {}
+    }, 5000);
 
     // ─────────────────────────────────────────────────────────────────────────
     // 7. SCAN DE FRAME (loop contínuo — usa estratégia rápida de 4 tentativas)
