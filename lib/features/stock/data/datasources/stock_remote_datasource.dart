@@ -398,4 +398,17 @@ class StockRemoteDatasource {
       'movements': movementsSummary,
     };
   }
+
+  Future<Map<String, dynamic>?> fetchOutputBySession(
+      String createdAt, String performedBy) async {
+    final snap = await _db
+        .collection('outputs')
+        .where('createdAt', isEqualTo: createdAt)
+        .where('performedBy', isEqualTo: performedBy)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    final doc = snap.docs.first;
+    return {'outputId': doc.id, ...doc.data()};
+  }
 }
