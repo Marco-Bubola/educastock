@@ -25,6 +25,11 @@ final expiringBatchesProvider =
       .getBatchesExpiringInDays(days);
 });
 
+final batchByIdProvider = FutureProvider.family<Batch?, String>((ref, id) {
+  if (id.isEmpty) return Future.value(null);
+  return ref.read(batchesDatasourceProvider).getBatchById(id);
+});
+
 class BatchFormNotifier extends Notifier<AsyncValue<String?>> {
   @override
   AsyncValue<String?> build() => const AsyncValue.data(null);
