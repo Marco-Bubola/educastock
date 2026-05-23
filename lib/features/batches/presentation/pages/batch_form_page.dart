@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
@@ -15,7 +17,8 @@ import '../controllers/batches_provider.dart';
 
 class BatchFormPage extends ConsumerStatefulWidget {
   final String productId;
-  const BatchFormPage({super.key, required this.productId});
+  final String batchId;
+  const BatchFormPage({super.key, required this.productId, this.batchId = ''});
 
   @override
   ConsumerState<BatchFormPage> createState() => _BatchFormPageState();
@@ -29,7 +32,6 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
   final _productNameController = TextEditingController();
   final _quantityController = TextEditingController();
   final _unitPriceController = TextEditingController();
-  final _locationController = TextEditingController();
   final _donorController = TextEditingController();
   final _notesController = TextEditingController();
   final _batchNumberController = TextEditingController();
@@ -38,11 +40,16 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
   final DateTime _entryDate = DateTime.now();
   bool _noExpiry = false;
   String _origin = 'doacao';
-  bool _manualLocation = false;
   String? _selectedLocationLabel;
   bool _prefilledProductName = false;
+  bool _prefilledBatch = false;
   int _quantity = 1;
 
+  // Imagem local
+  File? _pickedImageFile;
+  String? _existingImagePath;
+
+  bool get _isEdit => widget.batchId.isNotEmpty;
 
   @override
   void initState() {
@@ -63,26 +70,49 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     _productNameController.dispose();
     _quantityController.dispose();
     _unitPriceController.dispose();
-    _locationController.dispose();
     _donorController.dispose();
     _notesController.dispose();
     _batchNumberController.dispose();
     super.dispose();
   }
 
+  void _prefillFromBatch(Batch batch) {
+    if (!mounted) return;
+    setState(() {
+      _batchNumberController.text = batch.batchNumber ?? '';
+      _quantity = batch.quantity;
+      _quantityController.text = batch.quantity.toString();
+      _expiryDate = batch.expiryDate;
+      _noExpiry = batch.noExpiry;
+      _origin = batch.origin;
+      _donorController.text = batch.donor ?? batch.supplier ?? '';
+      _unitPriceController.text =
+          batch.unitPrice != null ? batch.unitPrice!.toStringAsFixed(2) : '';
+      _selectedLocationLabel = batch.shelfLocation;
+      _notesController.text = batch.notes ?? '';
+      _existingImagePath = batch.imageUrl;
+    });
+  }
+
   Future<void> _pickExpiryDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _expiryDate ?? DateTime.now().add(const Duration(days: 30)),
+      initialDate:
+          _expiryDate ?? DateTime.now().add(const Duration(days: 30)),
       firstDate: DateTime.now().subtract(const Duration(days: 1)),
       lastDate: DateTime.now().add(const Duration(days: 3650)),
       helpText: 'Data de Validade do Lote',
       confirmText: 'Confirmar',
       cancelText: 'Cancelar',
     );
-    if (picked != null) {
-      setState(() => _expiryDate = picked);
-    }
+    if (picked != null) setState(() => _expiryDate = picked);
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final xfile = await picker.pickImage(
+        source: source, imageQuality: 80, maxWidth: 1200);
+    if (xfile != null) setState(() => _pickedImageFile = File(xfile.path));
   }
 
   Future<void> _submit() async {
@@ -91,28 +121,24 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     final existingProductId = widget.productId.trim();
     Product? linkedProduct;
     if (existingProductId.isNotEmpty) {
-      linkedProduct = await ref.read(productsDatasourceProvider).getProductById(existingProductId);
+      linkedProduct = await ref
+          .read(productsDatasourceProvider)
+          .getProductById(existingProductId);
     }
     if (!mounted) return;
     final isPerishable = linkedProduct?.isPerishable ?? true;
 
-    // Se nao perecivel, define noExpiry automaticamente
     if (!isPerishable) {
       _noExpiry = true;
       _expiryDate = null;
     }
 
-    // Validacao critica: perecivel exige validade
     if (isPerishable && !_noExpiry && _expiryDate == null) {
-      showCasaSnackbar(
-        context,
-        message: 'Informe a data de validade do lote.',
-        isError: true,
-      );
+      showCasaSnackbar(context,
+          message: 'Informe a data de validade do lote.', isError: true);
       return;
     }
 
-    // Bloquear entrada de lote já vencido
     if (_expiryDate != null && _expiryDate!.isBefore(DateTime.now())) {
       final confirm = await CasaDialogConfirmacao.show(
         context: context,
@@ -130,64 +156,45 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
 
-    String? shelfLocation;
-    if (_manualLocation) {
-      shelfLocation = _locationController.text.trim().isEmpty
-          ? null
-          : _locationController.text.trim();
-    } else {
-      shelfLocation = _selectedLocationLabel;
-    }
-
-    if (shelfLocation == null || shelfLocation.isEmpty) {
-      showCasaSnackbar(
-        context,
-        message: 'Selecione uma localizacao ou preencha manualmente.',
-        isError: true,
-      );
+    if (_selectedLocationLabel == null || _selectedLocationLabel!.isEmpty) {
+      showCasaSnackbar(context,
+          message: 'Selecione uma localização.', isError: true);
       return;
     }
 
     final qty = int.tryParse(_quantityController.text) ?? _quantity;
     if (qty <= 0) {
-      showCasaSnackbar(
-        context,
-        message: 'Informe uma quantidade maior que zero.',
-        isError: true,
-      );
+      showCasaSnackbar(context,
+          message: 'Informe uma quantidade maior que zero.', isError: true);
       return;
     }
 
     final productName = _productNameController.text.trim();
     if (productName.isEmpty) {
-      showCasaSnackbar(
-        context,
-        message: 'Informe o nome do produto.',
-        isError: true,
-      );
+      showCasaSnackbar(context,
+          message: 'Informe o nome do produto.', isError: true);
       return;
     }
 
     final unitPrice = _origin == 'compra'
-        ? double.tryParse(_unitPriceController.text.replaceAll(',', '.'))
+        ? double.tryParse(
+            _unitPriceController.text.replaceAll(',', '.'))
         : null;
 
     if (_origin == 'compra' && (unitPrice == null || unitPrice < 0)) {
-      showCasaSnackbar(
-        context,
-        message: 'Informe um preço unitário válido para compras.',
-        isError: true,
-      );
+      showCasaSnackbar(context,
+          message: 'Informe um preço unitário válido para compras.',
+          isError: true);
       return;
     }
 
     var effectiveProductId = existingProductId;
     if (linkedProduct == null) {
       final activeCategories = ref.read(activeProductCategoriesProvider);
-      final fallbackCategory = activeCategories.contains(ProductCategory.outro)
-          ? ProductCategory.outro
-          : activeCategories.first;
-
+      final fallbackCategory =
+          activeCategories.contains(ProductCategory.outro)
+              ? ProductCategory.outro
+              : activeCategories.first;
       final created = Product(
         id: '',
         name: productName,
@@ -204,11 +211,12 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     }
 
     final batch = Batch(
-      id: '',
+      id: _isEdit ? widget.batchId : '',
       productId: effectiveProductId,
       productName: productName,
       quantity: qty,
-      initialQuantity: qty,
+      initialQuantity:
+          _isEdit ? (qty) : qty, // mantém initialQuantity ao editar
       expiryDate: _noExpiry ? null : _expiryDate,
       noExpiry: _noExpiry,
       entryDate: _entryDate,
@@ -219,9 +227,11 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       batchNumber: _batchNumberController.text.trim().isEmpty
           ? null
           : _batchNumberController.text.trim(),
-        supplier: _origin == 'compra' ? _donorController.text.trim() : null,
-        unitPrice: unitPrice,
-      shelfLocation: shelfLocation,
+      supplier:
+          _origin == 'compra' ? _donorController.text.trim() : null,
+      unitPrice: unitPrice,
+      shelfLocation: _selectedLocationLabel,
+      imageUrl: _existingImagePath,
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
@@ -229,19 +239,27 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       createdAt: DateTime.now(),
     );
 
-    await ref.read(batchFormProvider.notifier).saveBatch(batch);
+    await ref
+        .read(batchFormProvider.notifier)
+        .saveBatch(batch, imageFile: _pickedImageFile);
 
     final state = ref.read(batchFormProvider);
     if (!mounted) return;
     state.when(
       data: (id) {
         if (id != null) {
-          showCasaSnackbar(context, message: 'Produto adicionado ao estoque!', isSuccess: true);
+          showCasaSnackbar(
+            context,
+            message: _isEdit
+                ? 'Lote atualizado com sucesso!'
+                : 'Produto adicionado ao estoque!',
+            isSuccess: true,
+          );
           context.go('/products/$effectiveProductId');
         }
       },
       error: (e, _) => showCasaSnackbar(context,
-          message: 'Erro ao salvar cadastro.', isError: true),
+          message: 'Erro ao salvar lote.', isError: true),
       loading: () {},
     );
   }
@@ -255,6 +273,8 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     final isLoading = formState is AsyncLoading;
     final productAsync = ref.watch(productByIdProvider(widget.productId));
     final productName = productAsync.valueOrNull?.name;
+
+    // Pré-preenche nome do produto
     if (!_prefilledProductName && productName != null) {
       _prefilledProductName = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -262,10 +282,25 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       });
     }
 
+    // Pré-preenche campos do lote em modo edição
+    if (_isEdit && !_prefilledBatch) {
+      final batchAsync = ref.watch(batchByIdProvider(widget.batchId));
+      batchAsync.whenData((batch) {
+        if (batch != null && !_prefilledBatch) {
+          _prefilledBatch = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _prefillFromBatch(batch);
+          });
+        }
+      });
+    }
+
     return Scaffold(
       appBar: ModernProfileAppBar(
-        title: 'Cadastrar Lote',
-        subtitle: productName != null ? 'Produto: $productName' : 'Adicionar ao estoque',
+        title: _isEdit ? 'Editar Lote' : 'Cadastrar Lote',
+        subtitle: productName != null
+            ? 'Produto: $productName'
+            : 'Adicionar ao estoque',
         showBackButton: true,
         actions: [
           buildHelpButton(
@@ -276,37 +311,37 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                 TutorialStep(
                   key: _keyBatchQty,
                   title: 'Número do Lote e Quantidade',
-                  description: 'Informe o número de identificação do lote (código da embalagem) e a quantidade de unidades recebidas. O número do lote permite rastrear a origem de cada item.',
+                  description:
+                      'Informe o número de identificação do lote e a quantidade de unidades recebidas.',
                   icon: Icons.tag_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
                     'Use o código impresso na embalagem do fornecedor',
-                    'A quantidade deve ser em unidades (peças, latas, caixas)',
-                    'Um lote = uma entrada de estoque com mesma origem e validade',
+                    'Um lote = uma entrada com mesma origem e validade',
                   ],
                 ),
                 TutorialStep(
                   key: _keyBatchExpiry,
                   title: 'Data de Validade',
-                  description: 'Informe a data de validade impressa na embalagem. Use os atalhos (+30, +90, +180 dias) para datas aproximadas ou o escaner para ler QR codes com data.',
+                  description:
+                      'Informe a data de validade impressa na embalagem.',
                   icon: Icons.event_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
                     'Sempre registre a data exata da embalagem',
-                    'Lotes vencidos são automaticamente bloqueados para saída',
-                    'Produtos não perecíveis não precisam de data de validade',
+                    'Produtos não perecíveis não precisam de data',
                   ],
                 ),
                 TutorialStep(
                   key: _keyBatchLocation,
-                  title: 'Localização no Estoque',
-                  description: 'Selecione onde este lote está fisicamente armazenado na instituição. Localizações ajudam a encontrar produtos rapidamente e organizar o espaço físico.',
-                  icon: Icons.location_on_rounded,
+                  title: 'Localização no Depósito',
+                  description:
+                      'Selecione a prateleira e o nível onde este lote está guardado.',
+                  icon: Icons.shelves,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Ex: "Prateleira A-3", "Depósito 2", "Cozinha"',
-                    'Crie novas localizações em Configurações → Localizações',
-                    'A localização aparece na lista de lotes e relatórios',
+                    'Escolha a prateleira (A, B...) e o nível (1, 2...)',
+                    'Crie novas localizações em Configurações → Depósito',
                   ],
                 ),
               ],
@@ -314,8 +349,12 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
           ),
         ],
       ),
-      floatingActionButton: _BatchSaveFab(isLoading: isLoading, onSave: _submit),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: _BatchSaveFab(
+          isLoading: isLoading,
+          isEdit: _isEdit,
+          onSave: _submit),
+      floatingActionButtonLocation:
+          FloatingActionButtonLocation.centerFloat,
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -323,108 +362,51 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
             children: [
-
-              // â”€â”€â”€ SeÃ§Ã£o 1: NÃºmero do lote + Quantidade â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // ── 1. Número do lote + Quantidade ──────────────────────
               KeyedSubtree(
                 key: _keyBatchQty,
                 child: _BatchSection(
                   icon: Icons.tag_rounded,
                   iconColor: AppColors.brandPrimary600,
                   title: 'Informações do Lote',
-                cs: cs,
-                child: Column(
-                  children: [
-                    CasaTextField(
-                      label: 'NÃºmero do Lote (embalagem)',
-                      hint: 'Ex: LOT20251201, L4578',
-                      controller: _batchNumberController,
-                      keyboardType: TextInputType.text,
-                      textInputAction: TextInputAction.done,
-                      prefixIcon: const Icon(Icons.tag_rounded, size: 20),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainer,
-                        borderRadius: BorderRadius.circular(AppRadius.input),
-                        border: Border.all(
-                            color: cs.outlineVariant.withValues(alpha: 0.4)),
+                  cs: cs,
+                  child: Column(
+                    children: [
+                      CasaTextField(
+                        label: 'Número do Lote (embalagem)',
+                        hint: 'Ex: LOT20251201, L4578',
+                        controller: _batchNumberController,
+                        keyboardType: TextInputType.text,
+                        textInputAction: TextInputAction.done,
+                        prefixIcon:
+                            const Icon(Icons.tag_rounded, size: 20),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.inventory_rounded,
-                              size: 18, color: AppColors.brandPrimary600),
-                          const SizedBox(width: AppSpacing.sm),
-                          Text('Quantidade',
-                              style: AppTypography.labelMedium
-                                  .copyWith(color: cs.onSurface)),
-                          const Spacer(),
-                          for (final add in [5, 10, 20])
-                            GestureDetector(
-                              onTap: () => _setQuantity(_quantity + add),
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 6),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: AppColors.brandPrimary600
-                                      .withValues(alpha: 0.1),
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.pill),
-                                  border: Border.all(
-                                      color: AppColors.brandPrimary600
-                                          .withValues(alpha: 0.25)),
-                                ),
-                                child: Text('+$add',
-                                    style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.brandPrimary600,
-                                        fontWeight: FontWeight.w700)),
-                              ),
-                            ),
-                          const SizedBox(width: 4),
-                          Row(
-                            children: [
-                              _QtyBtn(
-                                icon: Icons.remove_rounded,
-                                enabled: _quantity > 1,
-                                onTap: () => _setQuantity(_quantity - 1),
-                              ),
-                              SizedBox(
-                                width: 44,
-                                child: Text(
-                                  '$_quantity',
-                                  textAlign: TextAlign.center,
-                                  style: AppTypography.headingSmall.copyWith(
-                                    color: cs.onSurface,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              _QtyBtn(
-                                icon: Icons.add_rounded,
-                                enabled: true,
-                                onTap: () => _setQuantity(_quantity + 1),
-                              ),
-                            ],
-                          ),
-                        ],
+                      const SizedBox(height: AppSpacing.md),
+                      _QuantityRow(
+                        quantity: _quantity,
+                        cs: cs,
+                        onAdd: (add) => _setQuantity(_quantity + add),
+                        onDecrement: () => _setQuantity(_quantity - 1),
+                        onIncrement: () => _setQuantity(_quantity + 1),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
 
-              // --- Secao 2: Validade ---
+              // ── 2. Validade ──────────────────────────────────────────
               Builder(builder: (_) {
-                final isPerishable = productAsync.valueOrNull?.isPerishable ?? true;
+                final isPerishable =
+                    productAsync.valueOrNull?.isPerishable ?? true;
                 if (!isPerishable) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!_noExpiry) setState(() { _noExpiry = true; _expiryDate = null; });
+                    if (!_noExpiry) {
+                      setState(() {
+                        _noExpiry = true;
+                        _expiryDate = null;
+                      });
+                    }
                   });
                   return KeyedSubtree(
                     key: _keyBatchExpiry,
@@ -434,20 +416,29 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                       title: 'Validade',
                       cs: cs,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
-                          color: AppColors.neutral500.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(AppRadius.card),
-                          border: Border.all(color: AppColors.neutral500.withValues(alpha: 0.3)),
+                          color: AppColors.neutral500
+                              .withValues(alpha: 0.08),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.card),
+                          border: Border.all(
+                              color: AppColors.neutral500
+                                  .withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.shield_outlined, size: 18, color: AppColors.neutral500),
+                            const Icon(Icons.shield_outlined,
+                                size: 18,
+                                color: AppColors.neutral500),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Produto nao perecivel - sem data de validade',
-                                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                                'Produto não perecível — sem data de validade',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: cs.onSurfaceVariant),
                               ),
                             ),
                           ],
@@ -460,7 +451,9 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                   key: _keyBatchExpiry,
                   child: _BatchSection(
                     icon: Icons.event_rounded,
-                    iconColor: _expiryDate != null ? AppColors.success600 : AppColors.warning600,
+                    iconColor: _expiryDate != null
+                        ? AppColors.success600
+                        : AppColors.warning600,
                     title: 'Validade',
                     cs: cs,
                     child: Column(
@@ -470,79 +463,89 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                           onTap: _pickExpiryDate,
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 250),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 14),
                             decoration: BoxDecoration(
                               gradient: _expiryDate != null
-                                  ? LinearGradient(
-                                      colors: [
-                                        AppColors.success600.withValues(alpha: 0.1),
-                                        AppColors.brandPrimary600.withValues(alpha: 0.04),
-                                      ],
-                                      begin: Alignment.centerLeft,
-                                      end: Alignment.centerRight,
-                                    )
+                                  ? LinearGradient(colors: [
+                                      AppColors.success600
+                                          .withValues(alpha: 0.1),
+                                      AppColors.brandPrimary600
+                                          .withValues(alpha: 0.04),
+                                    ])
                                   : null,
-                              color: _expiryDate == null ? cs.surfaceContainer : null,
-                              borderRadius: BorderRadius.circular(AppRadius.input),
+                              color: _expiryDate == null
+                                  ? cs.surfaceContainer
+                                  : null,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.input),
                               border: Border.all(
                                 color: _expiryDate != null
-                                    ? AppColors.success600.withValues(alpha: 0.55)
-                                    : cs.outlineVariant.withValues(alpha: 0.5),
+                                    ? AppColors.success600
+                                        .withValues(alpha: 0.55)
+                                    : cs.outlineVariant
+                                        .withValues(alpha: 0.5),
                                 width: _expiryDate != null ? 1.5 : 1.0,
                               ),
-                              boxShadow: _expiryDate != null
-                                  ? [BoxShadow(color: AppColors.success600.withValues(alpha: 0.12), blurRadius: 10, offset: const Offset(0, 3))]
-                                  : [],
                             ),
                             child: Row(
                               children: [
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 250),
+                                Container(
                                   width: 40,
                                   height: 40,
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: _expiryDate != null
-                                          ? [AppColors.success600, const Color(0xFF22C55E)]
-                                          : [AppColors.warning600, AppColors.brandPrimary600],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
+                                          ? [
+                                              AppColors.success600,
+                                              const Color(0xFF22C55E)
+                                            ]
+                                          : [
+                                              AppColors.warning600,
+                                              AppColors.brandPrimary600
+                                            ],
                                     ),
                                     borderRadius: BorderRadius.circular(11),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: (_expiryDate != null ? AppColors.success600 : AppColors.warning600).withValues(alpha: 0.35),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
                                   ),
-                                  child: const Icon(Icons.calendar_month_rounded, size: 20, color: Colors.white),
+                                  child: const Icon(
+                                      Icons.calendar_month_rounded,
+                                      size: 20,
+                                      color: Colors.white),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        _expiryDate != null ? 'Data de validade' : 'Toque para selecionar',
+                                        _expiryDate != null
+                                            ? 'Data de validade'
+                                            : 'Toque para selecionar',
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: _expiryDate != null
-                                              ? AppColors.success600.withValues(alpha: 0.85)
+                                              ? AppColors.success600
+                                                  .withValues(alpha: 0.85)
                                               : cs.onSurfaceVariant,
                                           fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.3,
                                         ),
                                       ),
                                       const SizedBox(height: 3),
                                       Text(
-                                        _expiryDate != null ? fmt.format(_expiryDate!) : 'dd/mm/aaaa',
+                                        _expiryDate != null
+                                            ? fmt.format(_expiryDate!)
+                                            : 'dd/mm/aaaa',
                                         style: TextStyle(
-                                          fontSize: _expiryDate != null ? 19 : 14,
-                                          fontWeight: _expiryDate != null ? FontWeight.w800 : FontWeight.w400,
-                                          color: _expiryDate != null ? cs.onSurface : cs.onSurfaceVariant.withValues(alpha: 0.5),
-                                          letterSpacing: _expiryDate != null ? 1.2 : 0.5,
+                                          fontSize:
+                                              _expiryDate != null ? 19 : 14,
+                                          fontWeight: _expiryDate != null
+                                              ? FontWeight.w800
+                                              : FontWeight.w400,
+                                          color: _expiryDate != null
+                                              ? cs.onSurface
+                                              : cs.onSurfaceVariant
+                                                  .withValues(alpha: 0.5),
                                         ),
                                       ),
                                     ],
@@ -550,24 +553,33 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                                 ),
                                 if (_expiryDate != null)
                                   GestureDetector(
-                                    onTap: () => setState(() => _expiryDate = null),
+                                    onTap: () => setState(
+                                        () => _expiryDate = null),
                                     child: Container(
                                       padding: const EdgeInsets.all(6),
                                       decoration: BoxDecoration(
-                                        color: cs.outlineVariant.withValues(alpha: 0.18),
+                                        color: cs.outlineVariant
+                                            .withValues(alpha: 0.18),
                                         shape: BoxShape.circle,
                                       ),
-                                      child: Icon(Icons.close_rounded, size: 15, color: cs.onSurfaceVariant),
+                                      child: Icon(Icons.close_rounded,
+                                          size: 15,
+                                          color: cs.onSurfaceVariant),
                                     ),
                                   )
                                 else
                                   Container(
                                     padding: const EdgeInsets.all(6),
                                     decoration: BoxDecoration(
-                                      color: AppColors.brandPrimary600.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: AppColors.brandPrimary600
+                                          .withValues(alpha: 0.1),
+                                      borderRadius:
+                                          BorderRadius.circular(8),
                                     ),
-                                    child: const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.brandPrimary600),
+                                    child: const Icon(
+                                        Icons.chevron_right_rounded,
+                                        size: 16,
+                                        color: AppColors.brandPrimary600),
                                   ),
                               ],
                             ),
@@ -576,11 +588,17 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                         const SizedBox(height: AppSpacing.sm),
                         Row(
                           children: [
-                            Icon(Icons.touch_app_rounded, size: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.45)),
+                            Icon(Icons.touch_app_rounded,
+                                size: 12,
+                                color: cs.onSurfaceVariant
+                                    .withValues(alpha: 0.45)),
                             const SizedBox(width: 4),
                             Text(
                               'Toque para abrir o calendário',
-                              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.55)),
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: cs.onSurfaceVariant
+                                      .withValues(alpha: 0.55)),
                             ),
                             const Spacer(),
                             ExpiryOcrButton(
@@ -588,7 +606,8 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                                 setState(() => _expiryDate = date);
                                 showCasaSnackbar(
                                   context,
-                                  message: 'Data lida: ${DateFormat('dd/MM/yyyy').format(date)} — confirme se está correta',
+                                  message:
+                                      'Data lida: ${DateFormat('dd/MM/yyyy').format(date)} — confirme se está correta',
                                   isSuccess: true,
                                 );
                               },
@@ -602,7 +621,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
               }),
               const SizedBox(height: AppSpacing.md),
 
-              // â”€â”€â”€ SeÃ§Ã£o 3: Origem â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // ── 3. Origem ────────────────────────────────────────────
               _BatchSection(
                 icon: Icons.source_outlined,
                 iconColor: AppColors.secondaryBlue600,
@@ -614,11 +633,12 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                       children: [
                         _OriginCard(
                           originKey: 'doacao',
-                          label: 'DoaÃ§Ã£o',
+                          label: 'Doação',
                           icon: Icons.volunteer_activism_rounded,
                           color: AppColors.success600,
                           selected: _origin == 'doacao',
-                          onTap: () => setState(() => _origin = 'doacao'),
+                          onTap: () =>
+                              setState(() => _origin = 'doacao'),
                           cs: cs,
                         ),
                         const SizedBox(width: AppSpacing.xs),
@@ -628,7 +648,8 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                           icon: Icons.shopping_cart_rounded,
                           color: AppColors.brandPrimary600,
                           selected: _origin == 'compra',
-                          onTap: () => setState(() => _origin = 'compra'),
+                          onTap: () =>
+                              setState(() => _origin = 'compra'),
                           cs: cs,
                         ),
                         const SizedBox(width: AppSpacing.xs),
@@ -668,12 +689,11 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                     if (_origin == 'compra') ...[
                       const SizedBox(height: AppSpacing.md),
                       CasaTextField(
-                        label: 'PreÃ§o unitÃ¡rio (R\$) *',
+                        label: 'Preço unitário (R\$) *',
                         hint: 'Ex: 12,50',
                         controller: _unitPriceController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(
-                                decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         prefixIcon: const Icon(Icons.attach_money_rounded,
                             size: 20),
                         onChanged: (_) => setState(() {}),
@@ -693,50 +713,47 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
               ),
               const SizedBox(height: AppSpacing.md),
 
-              // â”€â”€â”€ SeÃ§Ã£o 4: LocalizaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // ── 4. Localização ───────────────────────────────────────
               locationsState.when(
                 data: (locations) => KeyedSubtree(
                   key: _keyBatchLocation,
                   child: _LocationPicker(
-                  locations: locations,
-                  selectedLabel:
-                      _manualLocation ? null : _selectedLocationLabel,
-                  onChanged: (label) => setState(() {
-                    _selectedLocationLabel = label;
-                    _manualLocation = false;
-                  }),
-                  onManual: () => setState(() {
-                    _manualLocation = !_manualLocation;
-                    if (_manualLocation) _selectedLocationLabel = null;
-                  }),
-                  onManageLocations: () =>
-                      context.push(AppRoutes.locations),
-                ),
+                    locations: locations,
+                    selectedLabel: _selectedLocationLabel,
+                    onChanged: (label) =>
+                        setState(() => _selectedLocationLabel = label),
+                    onManageLocations: () =>
+                        context.push(AppRoutes.locations),
+                  ),
                 ),
                 loading: () => const CasaCardSkeleton(),
                 error: (_, __) => const SizedBox.shrink(),
               ),
-              if (_manualLocation) ...[
-                const SizedBox(height: AppSpacing.sm),
-                CasaTextField(
-                  label: 'LocalizaÃ§Ã£o manual (Sala/Prateleira/NÃ­vel)',
-                  controller: _locationController,
-                  prefixIcon:
-                      const Icon(Icons.location_on_outlined, size: 20),
-                  hint: 'Ex: Dep-A / P3 / N2',
-                ),
-              ],
               const SizedBox(height: AppSpacing.md),
 
-              // â”€â”€â”€ SeÃ§Ã£o 5: ObservaÃ§Ãµes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // ── 5. Foto do lote (local) ──────────────────────────────
+              _ImageSection(
+                existingPath: _existingImagePath,
+                pickedFile: _pickedImageFile,
+                cs: cs,
+                onPickCamera: () => _pickImage(ImageSource.camera),
+                onPickGallery: () => _pickImage(ImageSource.gallery),
+                onRemove: () => setState(() {
+                  _pickedImageFile = null;
+                  _existingImagePath = null;
+                }),
+              ),
+              const SizedBox(height: AppSpacing.md),
+
+              // ── 6. Observações ───────────────────────────────────────
               _BatchSection(
                 icon: Icons.notes_rounded,
                 iconColor: AppColors.neutral500,
-                title: 'ObservaÃ§Ãµes (opcional)',
+                title: 'Observações (opcional)',
                 cs: cs,
                 child: CasaTextField(
                   label: '',
-                  hint: 'InformaÃ§Ãµes adicionais sobre este lote...',
+                  hint: 'Informações adicionais sobre este lote...',
                   controller: _notesController,
                   maxLines: 3,
                 ),
@@ -749,13 +766,16 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
   }
 }
 
-// â”€â”€â”€ FAB de confirmaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// --- FAB compacto de cadastro ---
+// ─── FAB ──────────────────────────────────────────────────────────────────────
 
 class _BatchSaveFab extends StatelessWidget {
   final bool isLoading;
+  final bool isEdit;
   final VoidCallback onSave;
-  const _BatchSaveFab({required this.isLoading, required this.onSave});
+  const _BatchSaveFab(
+      {required this.isLoading,
+      required this.isEdit,
+      required this.onSave});
 
   @override
   Widget build(BuildContext context) {
@@ -788,19 +808,29 @@ class _BatchSaveFab extends StatelessWidget {
         ),
         icon: isLoading
             ? const SizedBox(
-                width: 16, height: 16,
-                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : const Icon(Icons.inventory_2_rounded, size: 18, color: Colors.white),
-        label: const Text(
-          'Cadastrar',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2))
+            : Icon(
+                isEdit
+                    ? Icons.save_rounded
+                    : Icons.inventory_2_rounded,
+                size: 18,
+                color: Colors.white),
+        label: Text(
+          isEdit ? 'Salvar Alterações' : 'Cadastrar',
+          style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 14),
         ),
       ),
     );
   }
 }
 
-// --- Cabecalho de secao (sem card) ---
+// ─── Section wrapper ──────────────────────────────────────────────────────────
 
 class _BatchSection extends StatelessWidget {
   final IconData icon;
@@ -856,7 +886,89 @@ class _BatchSection extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€ BotÃ£o de quantidade â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Quantity row ─────────────────────────────────────────────────────────────
+
+class _QuantityRow extends StatelessWidget {
+  final int quantity;
+  final ColorScheme cs;
+  final void Function(int) onAdd;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  const _QuantityRow({
+    required this.quantity,
+    required this.cs,
+    required this.onAdd,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainer,
+        borderRadius: BorderRadius.circular(AppRadius.input),
+        border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.inventory_rounded,
+              size: 18, color: AppColors.brandPrimary600),
+          const SizedBox(width: AppSpacing.sm),
+          Text('Quantidade',
+              style: AppTypography.labelMedium
+                  .copyWith(color: cs.onSurface)),
+          const Spacer(),
+          for (final add in [5, 10, 20])
+            GestureDetector(
+              onTap: () => onAdd(add),
+              child: Container(
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.brandPrimary600
+                      .withValues(alpha: 0.1),
+                  borderRadius:
+                      BorderRadius.circular(AppRadius.pill),
+                  border: Border.all(
+                      color: AppColors.brandPrimary600
+                          .withValues(alpha: 0.25)),
+                ),
+                child: Text('+$add',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.brandPrimary600,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ),
+          const SizedBox(width: 4),
+          _QtyBtn(
+              icon: Icons.remove_rounded,
+              enabled: quantity > 1,
+              onTap: onDecrement),
+          SizedBox(
+            width: 44,
+            child: Text(
+              '$quantity',
+              textAlign: TextAlign.center,
+              style: AppTypography.headingSmall.copyWith(
+                  color: cs.onSurface, fontWeight: FontWeight.w800),
+            ),
+          ),
+          _QtyBtn(
+              icon: Icons.add_rounded,
+              enabled: true,
+              onTap: onIncrement),
+        ],
+      ),
+    );
+  }
+}
 
 class _QtyBtn extends StatelessWidget {
   final IconData icon;
@@ -885,15 +997,15 @@ class _QtyBtn extends StatelessWidget {
         ),
         child: Icon(icon,
             size: 16,
-            color:
-                enabled ? AppColors.brandPrimary600 : cs.onSurfaceVariant),
+            color: enabled
+                ? AppColors.brandPrimary600
+                : cs.onSurfaceVariant),
       ),
     );
   }
 }
 
-
-// --- Card de origem ---
+// ─── Origin Card ──────────────────────────────────────────────────────────────
 
 class _OriginCard extends StatelessWidget {
   final String originKey;
@@ -903,7 +1015,14 @@ class _OriginCard extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   final ColorScheme cs;
-  const _OriginCard({required this.originKey, required this.label, required this.icon, required this.color, required this.selected, required this.onTap, required this.cs});
+  const _OriginCard(
+      {required this.originKey,
+      required this.label,
+      required this.icon,
+      required this.color,
+      required this.selected,
+      required this.onTap,
+      required this.cs});
 
   @override
   Widget build(BuildContext context) {
@@ -931,16 +1050,15 @@ class _OriginCard extends StatelessWidget {
                   size: 22,
                   color: selected ? color : cs.onSurfaceVariant),
               const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: selected ? color : cs.onSurfaceVariant,
-                  fontWeight:
-                      selected ? FontWeight.w700 : FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
-              ),
+              Text(label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: selected ? color : cs.onSurfaceVariant,
+                    fontWeight: selected
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center),
             ],
           ),
         ),
@@ -949,24 +1067,213 @@ class _OriginCard extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ─── Image Section ────────────────────────────────────────────────────────────
 
-// ---------------------------------------------------------------------------
-// Seletor de localização estruturado: Seção → Prateleira → Nível c/ capacidade
-// ---------------------------------------------------------------------------
+class _ImageSection extends StatelessWidget {
+  final String? existingPath;
+  final File? pickedFile;
+  final ColorScheme cs;
+  final VoidCallback onPickCamera;
+  final VoidCallback onPickGallery;
+  final VoidCallback onRemove;
+
+  const _ImageSection({
+    required this.existingPath,
+    required this.pickedFile,
+    required this.cs,
+    required this.onPickCamera,
+    required this.onPickGallery,
+    required this.onRemove,
+  });
+
+  bool get _hasImage => pickedFile != null || (existingPath?.isNotEmpty == true);
+
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xFF7C3AED);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [color, color.withValues(alpha: 0.7)],
+                ),
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: [
+                  BoxShadow(
+                      color: color.withValues(alpha: 0.28),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2)),
+                ],
+              ),
+              child:
+                  const Icon(Icons.photo_camera_rounded, size: 15, color: Colors.white),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text('Foto do Lote',
+                style: AppTypography.labelLarge.copyWith(
+                    color: cs.onSurface, fontWeight: FontWeight.w700)),
+            const SizedBox(width: 6),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainer,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+              child: Text('opcional',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w500)),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        if (_hasImage) ...[
+          // Preview da imagem
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: pickedFile != null
+                    ? Image.file(pickedFile!,
+                        height: 160,
+                        width: double.infinity,
+                        fit: BoxFit.cover)
+                    : (existingPath != null &&
+                            !existingPath!.startsWith('http'))
+                        ? Image.file(File(existingPath!),
+                            height: 160,
+                            width: double.infinity,
+                            fit: BoxFit.cover)
+                        : Image.network(existingPath!,
+                            height: 160,
+                            width: double.infinity,
+                            fit: BoxFit.cover),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: onRemove,
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close_rounded,
+                        color: Colors.white, size: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                  child: _ImgBtn(
+                      icon: Icons.camera_alt_rounded,
+                      label: 'Câmera',
+                      color: color,
+                      cs: cs,
+                      onTap: onPickCamera)),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                  child: _ImgBtn(
+                      icon: Icons.photo_library_rounded,
+                      label: 'Galeria',
+                      color: color,
+                      cs: cs,
+                      onTap: onPickGallery)),
+            ],
+          ),
+        ] else ...[
+          Row(
+            children: [
+              Expanded(
+                  child: _ImgBtn(
+                      icon: Icons.camera_alt_rounded,
+                      label: 'Câmera',
+                      color: color,
+                      cs: cs,
+                      onTap: onPickCamera)),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                  child: _ImgBtn(
+                      icon: Icons.photo_library_rounded,
+                      label: 'Galeria',
+                      color: color,
+                      cs: cs,
+                      onTap: onPickGallery)),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ImgBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final ColorScheme cs;
+  final VoidCallback onTap;
+  const _ImgBtn(
+      {required this.icon,
+      required this.label,
+      required this.color,
+      required this.cs,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 24, color: color),
+            const SizedBox(height: 4),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: color,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Location Picker ──────────────────────────────────────────────────────────
+// Seletor de 2 etapas: Prateleira → Nível
 
 class _LocationPicker extends ConsumerStatefulWidget {
   final List<StorageLocation> locations;
   final String? selectedLabel;
   final ValueChanged<String?> onChanged;
-  final VoidCallback onManual;
   final VoidCallback onManageLocations;
 
   const _LocationPicker({
     required this.locations,
     required this.selectedLabel,
     required this.onChanged,
-    required this.onManual,
     required this.onManageLocations,
   });
 
@@ -975,68 +1282,35 @@ class _LocationPicker extends ConsumerStatefulWidget {
 }
 
 class _LocationPickerState extends ConsumerState<_LocationPicker> {
-  String? _section;
-  String? _shelf;
-  String? _level;
+  String? _shelfGroup; // groupKey selecionado (ex: "A")
 
   @override
   void didUpdateWidget(covariant _LocationPicker old) {
     super.didUpdateWidget(old);
+    // Quando pai limpa a seleção, reseta o picker
     if (widget.selectedLabel == null && old.selectedLabel != null) {
-      setState(() {
-        _section = null;
-        _shelf = null;
-        _level = null;
-      });
+      setState(() => _shelfGroup = null);
     }
   }
 
-  List<String> get _sections {
-    final s = widget.locations.map((l) => l.section).toSet().toList();
+  List<String> get _shelfGroups {
+    final s = widget.locations.map((l) => l.groupKey).toSet().toList();
     s.sort();
     return s;
   }
 
-  List<StorageLocation> get _locInSection =>
-      widget.locations.where((l) => l.section == _section).toList();
+  List<StorageLocation> get _locsInGroup =>
+      widget.locations.where((l) => l.groupKey == _shelfGroup).toList()
+        ..sort((a, b) =>
+            (a.level ?? '').compareTo(b.level ?? ''));
 
-  List<String> get _shelves {
-    final s = _locInSection.map((l) => l.shelf).toSet().toList();
-    s.sort();
-    return s;
-  }
-
-  List<StorageLocation> get _locInShelf =>
-      _locInSection.where((l) => l.shelf == _shelf).toList();
-
-  StorageLocation? _findLoc(String? level) {
-    for (final l in _locInShelf) {
-      if (l.level == level) return l;
-    }
-    return null;
-  }
-
-  void _pickSection(String s) {
-    setState(() {
-      _section = s;
-      _shelf = null;
-      _level = null;
-    });
+  void _pickShelf(String group) {
+    setState(() => _shelfGroup = group);
     widget.onChanged(null);
   }
 
-  void _pickShelf(String s) {
-    setState(() {
-      _shelf = s;
-      _level = null;
-    });
-    widget.onChanged(null);
-  }
-
-  void _pickLevel(String? lv) {
-    setState(() => _level = lv);
-    final loc = _findLoc(lv);
-    widget.onChanged(loc?.label);
+  void _pickLocation(StorageLocation loc) {
+    widget.onChanged(loc.label);
   }
 
   @override
@@ -1045,44 +1319,8 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (widget.locations.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.warning600.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: AppColors.warning600.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline_rounded,
-                color: AppColors.warning600, size: 18),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Nenhuma localização cadastrada.',
-                    style: AppTypography.labelMedium
-                        .copyWith(color: AppColors.warning600),
-                  ),
-                  const SizedBox(height: 4),
-                  TextButton.icon(
-                    onPressed: widget.onManageLocations,
-                    icon: const Icon(Icons.add_location_alt_outlined, size: 15),
-                    label: const Text('Criar localização'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.brandPrimary600,
-                      padding: EdgeInsets.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
+      return _EmptyLocations(
+          onManageLocations: widget.onManageLocations, cs: cs);
     }
 
     return Column(
@@ -1095,7 +1333,10 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [AppColors.brandPrimary600, AppColors.secondaryBlue600],
+                  colors: [
+                    AppColors.brandPrimary600,
+                    AppColors.secondaryBlue600
+                  ],
                 ),
                 borderRadius: BorderRadius.circular(9),
                 boxShadow: [
@@ -1106,24 +1347,22 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
                   ),
                 ],
               ),
-              child: const Icon(Icons.layers_rounded,
-                  size: 15, color: Colors.white),
+              child:
+                  const Icon(Icons.shelves, size: 15, color: Colors.white),
             ),
             const SizedBox(width: AppSpacing.sm),
             Text(
-              'Localização no Estoque',
+              'Localização no Depósito',
               style: AppTypography.labelLarge.copyWith(
-                color: cs.onSurface,
-                fontWeight: FontWeight.w700,
-              ),
+                  color: cs.onSurface, fontWeight: FontWeight.w700),
             ),
             const Spacer(),
             TextButton(
               onPressed: widget.onManageLocations,
               style: TextButton.styleFrom(
                 foregroundColor: AppColors.brandPrimary600,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 textStyle: const TextStyle(fontSize: 11),
               ),
@@ -1131,119 +1370,104 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
             ),
           ],
         ),
+        const SizedBox(height: AppSpacing.md),
 
+        // Etapa 1: Prateleira
+        _StepLabel(
+            label: '1. Prateleira', done: _shelfGroup != null),
+        const SizedBox(height: AppSpacing.xs),
+        _ShelfChipRow(
+          groups: _shelfGroups,
+          selected: _shelfGroup,
+          locations: widget.locations,
+          onTap: _pickShelf,
+        ),
+
+        // Etapa 2: Nível
+        if (_shelfGroup != null) ...[
           const SizedBox(height: AppSpacing.md),
-
-          // Seção
-          _StepLabel(label: '1. Seção', done: _section != null),
+          _StepLabel(
+              label: '2. Nível',
+              done: widget.selectedLabel != null),
           const SizedBox(height: AppSpacing.xs),
-          _ChipRow(
-            items: _sections,
-            selected: _shelf != null ? _section : _section,
-            onTap: _pickSection,
-            activeColor: AppColors.brandPrimary600,
-          ),
+          _buildLevels(cs, isDark),
+        ],
 
-          // Prateleira
-          if (_section != null) ...[
-            const SizedBox(height: AppSpacing.md),
-            _StepLabel(label: '2. Prateleira', done: _shelf != null),
-            const SizedBox(height: AppSpacing.xs),
-            _ChipRow(
-              items: _shelves,
-              selected: _shelf,
-              onTap: _pickShelf,
-              activeColor: AppColors.secondaryBlue600,
+        // Confirmação
+        if (widget.selectedLabel != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.success600.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              border: Border.all(
+                  color: AppColors.success600.withValues(alpha: 0.3)),
             ),
-          ],
-
-          // Nível
-          if (_shelf != null) ...[
-            const SizedBox(height: AppSpacing.md),
-            _StepLabel(label: '3. Nível', done: _level != null),
-            const SizedBox(height: AppSpacing.xs),
-            _buildLevels(cs, isDark),
-          ],
-
-          // Confirmação
-          if (widget.selectedLabel != null) ...[
-            const SizedBox(height: AppSpacing.md),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.success600.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.small),
-                border: Border.all(
-                    color: AppColors.success600.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle_outline_rounded,
-                      color: AppColors.success600, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.selectedLabel!,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: AppColors.success600,
-                        fontWeight: FontWeight.w600,
-                      ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle_outline_rounded,
+                    color: AppColors.success600, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.selectedLabel!,
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.success600,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _section = null;
-                        _shelf = null;
-                        _level = null;
-                      });
-                      widget.onChanged(null);
-                    },
-                    child: const Icon(Icons.close_rounded,
-                        size: 16, color: AppColors.success600),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          const SizedBox(height: AppSpacing.xs),
-          TextButton.icon(
-            onPressed: widget.onManual,
-            icon: const Icon(Icons.edit_location_alt_outlined, size: 15),
-            label: const Text('Inserir manualmente'),
-            style: TextButton.styleFrom(
-              foregroundColor: cs.onSurfaceVariant,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: const TextStyle(fontSize: 11),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    setState(() => _shelfGroup = null);
+                    widget.onChanged(null);
+                  },
+                  child: const Icon(Icons.close_rounded,
+                      size: 16, color: AppColors.success600),
+                ),
+              ],
             ),
           ),
         ],
-      );
+      ],
+    );
   }
 
   Widget _buildLevels(ColorScheme cs, bool isDark) {
-    final allBatches = ref.watch(allAvailableBatchesProvider).valueOrNull ?? [];
+    final allBatches =
+        ref.watch(allAvailableBatchesProvider).valueOrNull ?? [];
+
+    if (_locsInGroup.isEmpty) {
+      return Text(
+        'Nenhum nível cadastrado para esta prateleira.',
+        style: TextStyle(
+            fontSize: 12, color: cs.onSurfaceVariant),
+      );
+    }
+
     return Wrap(
       spacing: AppSpacing.sm,
       runSpacing: AppSpacing.sm,
-      children: _locInShelf.map((loc) {
+      children: _locsInGroup.map((loc) {
         final lv = loc.level ?? '—';
-        final isSelected = _level == loc.level;
+        final isSelected = widget.selectedLabel == loc.label;
         final limit = loc.productsPerLevel;
         final count = limit != null
             ? allBatches
                 .where((b) => b.shelfLocation == loc.label)
                 .length
             : null;
-        final isFull = limit != null && count != null && count >= limit;
+        final isFull =
+            limit != null && count != null && count >= limit;
 
         return GestureDetector(
-          onTap: isFull ? null : () => _pickLevel(loc.level),
+          onTap: isFull ? null : () => _pickLocation(loc),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               gradient: isSelected
                   ? const LinearGradient(colors: [
@@ -1267,7 +1491,8 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: AppColors.brandPrimary600.withValues(alpha: 0.3),
+                        color: AppColors.brandPrimary600
+                            .withValues(alpha: 0.3),
                         blurRadius: 6,
                         offset: const Offset(0, 2),
                       )
@@ -1281,7 +1506,7 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'N$lv',
+                      'Nível $lv',
                       style: AppTypography.labelMedium.copyWith(
                         color: isSelected
                             ? Colors.white
@@ -1298,14 +1523,14 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
                     ],
                   ],
                 ),
-                if (limit != null) ...[
+                if (limit != null && count != null) ...[
                   const SizedBox(height: 4),
                   SizedBox(
-                    width: 42,
+                    width: 52,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(2),
                       child: LinearProgressIndicator(
-                        value: (count! / limit).clamp(0.0, 1.0),
+                        value: (count / limit).clamp(0.0, 1.0),
                         minHeight: 3,
                         backgroundColor: isSelected
                             ? Colors.white.withValues(alpha: 0.3)
@@ -1342,6 +1567,161 @@ class _LocationPickerState extends ConsumerState<_LocationPicker> {
   }
 }
 
+// ─── Shelf chip row ───────────────────────────────────────────────────────────
+
+class _ShelfChipRow extends StatelessWidget {
+  final List<String> groups;
+  final String? selected;
+  final List<StorageLocation> locations;
+  final ValueChanged<String> onTap;
+
+  const _ShelfChipRow({
+    required this.groups,
+    required this.selected,
+    required this.locations,
+    required this.onTap,
+  });
+
+  Color _colorFor(String g) {
+    const colors = [
+      AppColors.brandPrimary600,
+      AppColors.secondaryBlue600,
+      AppColors.success600,
+      Color(0xFF7C3AED),
+      Color(0xFF0891B2),
+      AppColors.warning600,
+      Color(0xFFDB2777),
+      Color(0xFF059669),
+    ];
+    if (g.isEmpty) return AppColors.brandPrimary600;
+    return colors[g.codeUnitAt(0) % colors.length];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: groups.map((g) {
+          final isSelected = g == selected;
+          final color = _colorFor(g);
+          final levelCount =
+              locations.where((l) => l.groupKey == g).length;
+          return GestureDetector(
+            onTap: () => onTap(g),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              margin: const EdgeInsets.only(right: AppSpacing.sm),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: isSelected
+                    ? LinearGradient(colors: [
+                        color,
+                        color.withValues(alpha: 0.75)
+                      ])
+                    : null,
+                color: isSelected ? null : cs.surfaceContainer,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                border: Border.all(
+                  color: isSelected
+                      ? Colors.transparent
+                      : color.withValues(alpha: 0.4),
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.35),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    : [],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Prat. $g',
+                    style: AppTypography.labelMedium.copyWith(
+                      color: isSelected ? Colors.white : color,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    '$levelCount nível${levelCount != 1 ? 'eis' : ''}',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: isSelected
+                          ? Colors.white.withValues(alpha: 0.8)
+                          : color.withValues(alpha: 0.7),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ─── Empty locations ──────────────────────────────────────────────────────────
+
+class _EmptyLocations extends StatelessWidget {
+  final VoidCallback onManageLocations;
+  final ColorScheme cs;
+  const _EmptyLocations(
+      {required this.onManageLocations, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.warning600.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+            color: AppColors.warning600.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded,
+              color: AppColors.warning600, size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Nenhuma localização cadastrada.',
+                    style: AppTypography.labelMedium
+                        .copyWith(color: AppColors.warning600)),
+                const SizedBox(height: 4),
+                TextButton.icon(
+                  onPressed: onManageLocations,
+                  icon: const Icon(Icons.add_location_alt_outlined,
+                      size: 15),
+                  label: const Text('Cadastrar prateleira'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.brandPrimary600,
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Step label ───────────────────────────────────────────────────────────────
+
 class _StepLabel extends StatelessWidget {
   final String label;
   final bool done;
@@ -1353,7 +1733,9 @@ class _StepLabel extends StatelessWidget {
     return Row(
       children: [
         Icon(
-          done ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+          done
+              ? Icons.check_circle_rounded
+              : Icons.radio_button_unchecked_rounded,
           size: 13,
           color: done ? AppColors.success600 : cs.onSurfaceVariant,
         ),
@@ -1366,75 +1748,6 @@ class _StepLabel extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ChipRow extends StatelessWidget {
-  final List<String> items;
-  final String? selected;
-  final ValueChanged<String> onTap;
-  final Color activeColor;
-
-  const _ChipRow({
-    required this.items,
-    required this.selected,
-    required this.onTap,
-    required this.activeColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: items.map((item) {
-          final isSelected = item == selected;
-          return GestureDetector(
-            onTap: () => onTap(item),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(right: AppSpacing.sm),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                gradient: isSelected
-                    ? LinearGradient(
-                        colors: [
-                          activeColor,
-                          activeColor.withValues(alpha: 0.75)
-                        ],
-                      )
-                    : null,
-                color: isSelected ? null : cs.surfaceContainer,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-                border: Border.all(
-                  color: isSelected
-                      ? Colors.transparent
-                      : activeColor.withValues(alpha: 0.4),
-                ),
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: activeColor.withValues(alpha: 0.3),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        )
-                      ]
-                    : [],
-              ),
-              child: Text(
-                item,
-                style: AppTypography.labelMedium.copyWith(
-                  color: isSelected ? Colors.white : activeColor,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
     );
   }
 }
