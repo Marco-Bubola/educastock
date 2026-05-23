@@ -1176,15 +1176,7 @@ class _ItemCard extends StatelessWidget {
                   child: const Icon(Icons.move_to_inbox_rounded,
                       color: Colors.white, size: 15),
                 ),
-                const SizedBox(width: 10),
-                Text('Retirar desta localização:',
-                    style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.80), fontSize: 12)),
-                const Spacer(),
-                Text('$consumed un.',
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
-              ],
+             ],
             ),
           ),
 
