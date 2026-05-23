@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/stock_movement.dart';
 import '../../data/datasources/stock_remote_datasource.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../batches/domain/entities/batch.dart';
 
 final stockDatasourceProvider = Provider<StockRemoteDatasource>((ref) {
   return StockRemoteDatasource();
@@ -28,7 +29,9 @@ class StockNotifier extends AsyncNotifier<void> {
     required int quantity,
     required int previousQuantity,
     String? reason,
+    String? reasonCode,
     String? activity,
+    String? nextStatusOverride,
   }) async {
     final user = ref.read(currentUserProvider);
     if (user == null) throw Exception('Usuario nao autenticado');
@@ -43,6 +46,7 @@ class StockNotifier extends AsyncNotifier<void> {
       batchId: batchId,
       type: type,
       quantity: quantity,
+      reasonCode: reasonCode,
       reason: reason,
       activity: activity,
       performedBy: user.id,
@@ -54,7 +58,47 @@ class StockNotifier extends AsyncNotifier<void> {
       batchId: batchId,
       previousQuantity: previousQuantity,
       newQuantity: newQuantity,
-      nextStatus: newQuantity == 0 ? 'distribuido' : null,
+      nextStatus:
+          nextStatusOverride ?? (newQuantity == 0 ? 'distribuido' : null),
+    );
+  }
+
+  /// Dá baixa total no lote como descarte por validade vencida.
+  /// Status final do lote = descartado. Registra movimento e auditoria.
+  Future<void> discardExpiredBatch(Batch batch, {String? note}) async {
+    if (batch.quantity <= 0) return;
+    await registerMovement(
+      productId: batch.productId,
+      productName: batch.productName,
+      batchId: batch.id,
+      type: MovementType.descarte,
+      quantity: batch.quantity,
+      previousQuantity: batch.quantity,
+      reasonCode: MovementReasonCode.validade.name,
+      reason: note ?? 'Descarte por validade vencida',
+      nextStatusOverride: 'descartado',
+    );
+  }
+
+  /// Dá baixa total registrando o destino (uso interno, doação, etc).
+  Future<void> writeOffExpiredBatch(
+    Batch batch, {
+    required MovementType type,
+    required MovementReasonCode reasonCode,
+    String? note,
+  }) async {
+    if (batch.quantity <= 0) return;
+    await registerMovement(
+      productId: batch.productId,
+      productName: batch.productName,
+      batchId: batch.id,
+      type: type,
+      quantity: batch.quantity,
+      previousQuantity: batch.quantity,
+      reasonCode: reasonCode.name,
+      reason: note,
+      nextStatusOverride:
+          type == MovementType.descarte ? 'descartado' : 'distribuido',
     );
   }
 }
