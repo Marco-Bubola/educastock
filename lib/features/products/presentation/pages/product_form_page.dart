@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../domain/entities/product.dart';
 import '../controllers/products_provider.dart';
+import '../../data/datasources/product_image_search_datasource.dart';
 
 class ProductFormPage extends ConsumerStatefulWidget {
   final String? productId;
@@ -62,6 +64,12 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
   String? _existingImageUrl;
   final _imagePicker = ImagePicker();
 
+  final _imageSearchDs = ProductImageSearchDatasource();
+  List<String> _internetImages = [];
+  bool _isSearchingImages = false;
+  bool _hasSearchedImages = false;
+  Timer? _searchDebounce;
+
   // Unidades que precisam de tamanho de embalagem
   static const _sizedUnits = {'kg', 'g', 'L', 'mL'};
   bool get _needsSize => _sizedUnits.contains(_unit);
@@ -95,6 +103,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
   @override
   void initState() {
     super.initState();
+    _nameController.addListener(_onNameChanged);
     if (widget.prefillName != null) {
       _nameController.text = widget.prefillName!;
     }
@@ -128,6 +137,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
           widget.prefillDescription!.isNotEmpty) {
         _descController.text = widget.prefillDescription!;
       }
+      // Auto-search images for new products
+      WidgetsBinding.instance.addPostFrameCallback((_) => _searchImages());
     }
     // Carregar produto existente para editar
     if (widget.productId != null) {
@@ -159,6 +170,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
             _originalCreatedBy = product.createdBy;
             _existingImageUrl = product.imageUrl;
           });
+          _searchImages();
         }
       });
     }
@@ -166,11 +178,32 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _nameController.dispose();
     _brandController.dispose();
     _descController.dispose();
     _unitSizeController.dispose();
     super.dispose();
+  }
+
+  void _onNameChanged() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 900), _searchImages);
+  }
+
+  Future<void> _searchImages() async {
+    final name = _nameController.text.trim();
+    final barcode = widget.barcode;
+    if (name.isEmpty && (barcode == null || barcode.isEmpty)) return;
+    if (mounted) setState(() => _isSearchingImages = true);
+    final results = await _imageSearchDs.search(name: name, barcode: barcode);
+    if (mounted) {
+      setState(() {
+        _internetImages = results;
+        _isSearchingImages = false;
+        _hasSearchedImages = true;
+      });
+    }
   }
 
   Future<void> _submit() async {
