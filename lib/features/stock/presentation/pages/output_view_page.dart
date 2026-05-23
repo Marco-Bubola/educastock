@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -67,33 +68,71 @@ const _kBlue = LinearGradient(
   end: Alignment.bottomRight,
 );
 
+// ─── Steps de progresso ───────────────────────────────────────────────────────
+
+const _kProgressSteps = [
+  (Icons.search_rounded,        'Verificando estoque disponível'),
+  (Icons.swap_vert_rounded,     'Aplicando critério FEFO'),
+  (Icons.layers_outlined,       'Selecionando lotes por vencimento'),
+  (Icons.edit_note_rounded,     'Registrando movimentações'),
+  (Icons.cloud_done_outlined,   'Salvando no histórico'),
+];
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 class OutputViewPage extends StatefulWidget {
-  final Map<String, dynamic> output;
-  const OutputViewPage({super.key, required this.output});
+  /// Usado ao abrir o relatório de uma saída já concluída (histórico).
+  final Map<String, dynamic>? output;
+
+  /// Usado logo após confirmar uma nova saída: a página navega imediatamente
+  /// e mostra a tela de progresso enquanto o Future resolve.
+  final Future<Map<String, dynamic>>? pending;
+
+  const OutputViewPage({super.key, this.output, this.pending})
+      : assert(output != null || pending != null,
+            'Forneça output ou pending.');
 
   @override
   State<OutputViewPage> createState() => _OutputViewPageState();
 }
 
-class _OutputViewPageState extends State<OutputViewPage> with TickerProviderStateMixin {
+class _OutputViewPageState extends State<OutputViewPage>
+    with TickerProviderStateMixin {
+  // Resultado da operação
+  Map<String, dynamic>? _result;
+  Object? _error;
+
+  // Animações do relatório (após concluir)
   late final AnimationController _ctrl;
 
-  // GlobalKeys para o tutorial
-  final _keyStats = GlobalKey();
-  final _keyFefo = GlobalKey();
-  final _keyItems = GlobalKey();
+  // Tutorial
+  final _keyStats  = GlobalKey();
+  final _keyFefo   = GlobalKey();
+  final _keyItems  = GlobalKey();
 
   List<Map<String, dynamic>> get _movements =>
-      (widget.output['movements'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+      (_result?['movements'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
+      [];
 
   @override
   void initState() {
     super.initState();
-    final dur = 800 + _movements.length * 110;
-    _ctrl = AnimationController(vsync: this, duration: Duration(milliseconds: dur));
-    _ctrl.forward();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+
+    if (widget.output != null) {
+      // Relatório direto (histórico) — pula loading
+      _result = widget.output;
+      _ctrl.forward();
+    } else {
+      // Saída nova: resolve o future e atualiza estado
+      widget.pending!.then((result) {
+        if (!mounted) return;
+        setState(() => _result = result);
+        _ctrl.forward();
+      }).catchError((e) {
+        if (mounted) setState(() => _error = e);
+      });
+    }
   }
 
   @override
@@ -102,8 +141,11 @@ class _OutputViewPageState extends State<OutputViewPage> with TickerProviderStat
     super.dispose();
   }
 
-  Animation<double> _anim(double start, double end, {Curve curve = Curves.easeOutCubic}) =>
-      CurvedAnimation(parent: _ctrl, curve: Interval(start.clamp(0, 1), end.clamp(0, 1), curve: curve));
+  Animation<double> _anim(double start, double end,
+          {Curve curve = Curves.easeOutCubic}) =>
+      CurvedAnimation(
+          parent: _ctrl,
+          curve: Interval(start.clamp(0, 1), end.clamp(0, 1), curve: curve));
 
   void _showTutorial() {
     showCasaTutorial(
@@ -151,19 +193,39 @@ class _OutputViewPageState extends State<OutputViewPage> with TickerProviderStat
 
   @override
   Widget build(BuildContext context) {
-    final movements = _movements;
     final isDark = context.isDark;
 
-    final createdAtRaw = widget.output['createdAt'] as String?;
+    // ── Estado de erro ──
+    if (_error != null) {
+      return _ErrorView(
+        error: _error!,
+        isDark: isDark,
+        onBack: () => Navigator.of(context).pop(),
+      );
+    }
+
+    // ── Tela de progresso (aguardando future) ──
+    if (_result == null) {
+      return _LoadingView(isDark: isDark);
+    }
+
+    // ── Relatório completo ──
+    return _buildReport(context, isDark);
+  }
+
+  Widget _buildReport(BuildContext context, bool isDark) {
+    final movements = _movements;
+    final createdAtRaw = _result!['createdAt'] as String?;
     final createdAt = createdAtRaw != null ? DateTime.tryParse(createdAtRaw) : null;
-    final totalConsumed = movements.fold<int>(0, (s, m) => s + ((m['consumed'] as num?)?.toInt() ?? 0));
+    final totalConsumed =
+        movements.fold<int>(0, (s, m) => s + ((m['consumed'] as num?)?.toInt() ?? 0));
     final distinctProducts = <String>{};
     for (final m in movements) {
       if (m['productId'] != null) distinctProducts.add(m['productId'] as String);
     }
-
-    final reasonCode = widget.output['reasonCode'] as String? ?? 'outro';
-    final reasonLabel = _reasonLabels[reasonCode] ?? (widget.output['reason'] as String? ?? 'Distribuição');
+    final reasonCode = _result!['reasonCode'] as String? ?? 'outro';
+    final reasonLabel =
+        _reasonLabels[reasonCode] ?? (_result!['reason'] as String? ?? 'Distribuição');
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -174,35 +236,29 @@ class _OutputViewPageState extends State<OutputViewPage> with TickerProviderStat
           subtitle: 'Detalhes da distribuição',
           showBackButton: true,
           actions: [
-            buildHelpButton(
-              context: context,
-              onPressed: _showTutorial,
-            ),
+            buildHelpButton(context: context, onPressed: _showTutorial),
           ],
         ),
-        bottomNavigationBar: _buildBottomBar(context, isDark),
+        bottomNavigationBar: _BottomBar(isDark: isDark),
         body: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            // ── Hero header ──
             SliverToBoxAdapter(
               child: _HeroHeader(
-                outputId: widget.output['outputId'] as String? ?? '-',
-                performedByName: widget.output['performedByName'] as String? ?? '-',
+                outputId: _result!['outputId'] as String? ?? '-',
+                performedByName: _result!['performedByName'] as String? ?? '-',
                 reasonLabel: reasonLabel,
                 createdAt: createdAt,
-                checkAnim: _anim(0.0, 0.35, curve: Curves.elasticOut),
-                fadeAnim: _anim(0.10, 0.42),
+                checkAnim: _anim(0.0, 0.30, curve: Curves.elasticOut),
+                fadeAnim: _anim(0.08, 0.40),
               ),
             ),
-
-            // ── Stats row ──
             SliverToBoxAdapter(
               child: FadeTransition(
-                opacity: _anim(0.25, 0.55),
+                opacity: _anim(0.22, 0.52),
                 child: SlideTransition(
                   position: Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero)
-                      .animate(_anim(0.25, 0.55)),
+                      .animate(_anim(0.22, 0.52)),
                   child: _StatsRow(
                     key: _keyStats,
                     products: distinctProducts.length,
@@ -213,19 +269,15 @@ class _OutputViewPageState extends State<OutputViewPage> with TickerProviderStat
                 ),
               ),
             ),
-
-            // ── FEFO notice ──
             SliverToBoxAdapter(
               child: FadeTransition(
-                opacity: _anim(0.35, 0.62),
+                opacity: _anim(0.32, 0.58),
                 child: _FefoNotice(key: _keyFefo, isDark: isDark),
               ),
             ),
-
-            // ── Section title ──
             SliverToBoxAdapter(
               child: FadeTransition(
-                opacity: _anim(0.42, 0.66),
+                opacity: _anim(0.40, 0.64),
                 child: Padding(
                   key: _keyItems,
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
@@ -256,17 +308,14 @@ class _OutputViewPageState extends State<OutputViewPage> with TickerProviderStat
                 ),
               ),
             ),
-
-            // ── Item cards ──
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (ctx, i) {
                   final m = movements[i];
                   final total = movements.length;
-                  final startFrac = 0.45 + i * (0.45 / max(total, 1));
-                  final endFrac = (startFrac + 0.35).clamp(0.0, 1.0);
+                  final startFrac = 0.44 + i * (0.46 / max(total, 1));
+                  final endFrac = (startFrac + 0.34).clamp(0.0, 1.0);
                   final itemAnim = _anim(startFrac, endFrac);
-
                   return FadeTransition(
                     opacity: itemAnim,
                     child: SlideTransition(
@@ -287,22 +336,376 @@ class _OutputViewPageState extends State<OutputViewPage> with TickerProviderStat
                 childCount: movements.length,
               ),
             ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildBottomBar(BuildContext context, bool isDark) {
+// ─── Tela de progresso ────────────────────────────────────────────────────────
+
+class _LoadingView extends StatefulWidget {
+  final bool isDark;
+  const _LoadingView({required this.isDark});
+
+  @override
+  State<_LoadingView> createState() => _LoadingViewState();
+}
+
+class _LoadingViewState extends State<_LoadingView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  int _visibleSteps = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
+    _ctrl.forward();
+    // Avança um step a cada 700ms
+    _timer = Timer.periodic(const Duration(milliseconds: 700), (t) {
+      if (!mounted) { t.cancel(); return; }
+      if (_visibleSteps < _kProgressSteps.length) {
+        setState(() => _visibleSteps++);
+      } else {
+        t.cancel();
+      }
+    });
+    // Mostra primeiro step imediatamente
+    Future.microtask(() { if (mounted) setState(() => _visibleSteps = 1); });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final cardBg = isDark ? const Color(0xFF111C2D) : Colors.white;
+    final sub = isDark ? const Color(0xFF8FA3BF) : const Color(0xFF64748B);
+    final borderCol = isDark ? const Color(0xFF1E2D42) : const Color(0xFFE2E8F0);
+
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF09111F) : const Color(0xFFF0F4FA),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0A1929),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white54, size: 18),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text(
+          'Registrando saída…',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+        ),
+      ),
+      body: Column(
+        children: [
+          // ── Gradiente superior com spinner ──
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(gradient: _kNavy),
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
+            child: Column(
+              children: [
+                // Spinner animado
+                SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 64,
+                        height: 64,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white.withValues(alpha: 0.25)),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 52,
+                        height: 52,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF60A5FA)),
+                        ),
+                      ),
+                      const Icon(Icons.output_rounded, color: Colors.white, size: 24),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Processando sua saída',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Aguarde enquanto o sistema registra\nao estoque com critério FEFO.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.65),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Steps ──
+          Expanded(
+            child: Container(
+              color: isDark ? const Color(0xFF09111F) : const Color(0xFFF0F4FA),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: borderCol),
+                    ),
+                    child: Column(
+                      children: List.generate(_kProgressSteps.length, (i) {
+                        final isVisible = i < _visibleSteps;
+                        final isLast = i == _kProgressSteps.length - 1;
+                        final isDone = isVisible;
+                        final (icon, label) = _kProgressSteps[i];
+
+                        return AnimatedOpacity(
+                          opacity: isVisible ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 350),
+                          curve: Curves.easeOut,
+                          child: AnimatedSlide(
+                            offset: isVisible ? Offset.zero : const Offset(0, 0.3),
+                            duration: const Duration(milliseconds: 350),
+                            curve: Curves.easeOut,
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                  child: Row(
+                                    children: [
+                                      // Ícone de status
+                                      Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: isDone
+                                              ? const Color(0xFF16A34A).withValues(alpha: isDark ? 0.20 : 0.10)
+                                              : sub.withValues(alpha: 0.08),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: isDone
+                                                ? const Color(0xFF16A34A).withValues(alpha: 0.35)
+                                                : sub.withValues(alpha: 0.15),
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          isDone ? Icons.check_rounded : icon,
+                                          color: isDone ? const Color(0xFF16A34A) : sub,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              label,
+                                              style: TextStyle(
+                                                color: isDone
+                                                    ? (isDark ? const Color(0xFFF1F5FB) : const Color(0xFF0F172A))
+                                                    : sub,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            if (isDone)
+                                              Text(
+                                                'Concluído',
+                                                style: TextStyle(
+                                                  color: const Color(0xFF16A34A).withValues(alpha: 0.80),
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Spinner no step atual (último visível)
+                                      if (isVisible && i == _visibleSteps - 1 &&
+                                          _visibleSteps < _kProgressSteps.length)
+                                        SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(
+                                                const Color(0xFF2563EB).withValues(alpha: 0.70)),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                if (!isLast)
+                                  Divider(height: 1, indent: 16, endIndent: 16, color: borderCol),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Dica informativa
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB).withValues(alpha: isDark ? 0.10 : 0.06),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.20)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.14),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.info_outline_rounded,
+                              color: Color(0xFF2563EB), size: 14),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'O sistema seleciona automaticamente os lotes com vencimento mais próximo (FEFO) para reduzir desperdício.',
+                            style: TextStyle(
+                              color: const Color(0xFF2563EB).withValues(alpha: isDark ? 0.85 : 0.80),
+                              fontSize: 11,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Tela de erro ─────────────────────────────────────────────────────────────
+
+class _ErrorView extends StatelessWidget {
+  final Object error;
+  final bool isDark;
+  final VoidCallback onBack;
+  const _ErrorView({required this.error, required this.isDark, required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF09111F) : const Color(0xFFF0F4FA),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDC2626).withValues(alpha: isDark ? 0.15 : 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.error_outline_rounded,
+                    color: Color(0xFFDC2626), size: 48),
+              ),
+              const SizedBox(height: 20),
+              Text('Erro ao registrar saída',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 20,
+                  )),
+              const SizedBox(height: 10),
+              Text(
+                error.toString().replaceFirst('Exception: ', ''),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF8FA3BF) : const Color(0xFF64748B),
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: onBack,
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  label: const Text('Voltar e tentar novamente',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Bottom bar ───────────────────────────────────────────────────────────────
+
+class _BottomBar extends StatelessWidget {
+  final bool isDark;
+  const _BottomBar({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         color: context.cardBg,
         border: Border(top: BorderSide(color: context.border)),
         boxShadow: isDark
             ? []
-            : [BoxShadow(color: Colors.black.withValues(alpha: 0.07), blurRadius: 14, offset: const Offset(0, -4))],
+            : [BoxShadow(
+                color: Colors.black.withValues(alpha: 0.07),
+                blurRadius: 14,
+                offset: const Offset(0, -4))],
       ),
       child: SafeArea(
         child: Padding(
@@ -317,7 +720,8 @@ class _OutputViewPageState extends State<OutputViewPage> with TickerProviderStat
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF16A34A),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
                 elevation: 0,
               ),
             ),
@@ -355,69 +759,75 @@ class _HeroHeader extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(gradient: _kNavy),
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Checkmark animado
-          ScaleTransition(
-            scale: checkAnim,
-            child: Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: const Color(0xFF16A34A).withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: const Color(0xFF4ADE80).withValues(alpha: 0.45), width: 1.5),
+      child: FadeTransition(
+        opacity: fadeAnim,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Título com ícone ao lado ──
+            ScaleTransition(
+              scale: checkAnim,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Ícone de sucesso
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16A34A).withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: const Color(0xFF4ADE80).withValues(alpha: 0.45),
+                          width: 1.5),
+                    ),
+                    child: const Icon(Icons.check_rounded,
+                        color: Color(0xFF4ADE80), size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  // Texto
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Saída registrada',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 22,
+                            letterSpacing: -0.4,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.13),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.18)),
+                          ),
+                          child: Text(
+                            reasonLabel,
+                            style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.90),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.check_rounded, color: Color(0xFF4ADE80), size: 30),
             ),
-          ),
 
-          const SizedBox(height: 16),
+            const SizedBox(height: 18),
 
-          // Título + motivo
-          FadeTransition(
-            opacity: fadeAnim,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Saída registrada',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 24,
-                    letterSpacing: -0.5,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.13),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
-                  ),
-                  child: Text(
-                    reasonLabel,
-                    style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.90),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 18),
-
-          // Info card
-          FadeTransition(
-            opacity: fadeAnim,
-            child: Container(
+            // ── Info card ──
+            Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.07),
@@ -436,8 +846,8 @@ class _HeroHeader extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -448,7 +858,8 @@ class _HRow extends StatelessWidget {
   final String label;
   final String value;
   final bool mono;
-  const _HRow({required this.icon, required this.label, required this.value, this.mono = false});
+  const _HRow(
+      {required this.icon, required this.label, required this.value, this.mono = false});
 
   @override
   Widget build(BuildContext context) => Row(
@@ -480,13 +891,12 @@ class _StatsRow extends StatelessWidget {
   final int units;
   final bool isDark;
 
-  const _StatsRow({
-    super.key,
-    required this.products,
-    required this.batches,
-    required this.units,
-    required this.isDark,
-  });
+  const _StatsRow(
+      {super.key,
+      required this.products,
+      required this.batches,
+      required this.units,
+      required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -499,7 +909,10 @@ class _StatsRow extends StatelessWidget {
         border: Border.all(color: context.border),
         boxShadow: isDark
             ? []
-            : [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 6))],
+            : [BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 20,
+                offset: const Offset(0, 6))],
       ),
       child: Row(
         children: [
@@ -530,20 +943,25 @@ class _Stat extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _Stat({required this.icon, required this.label, required this.value, required this.color});
+  const _Stat(
+      {required this.icon, required this.label, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) => Column(
         children: [
           Container(
             padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+            decoration:
+                BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
             child: Icon(icon, color: color, size: 16),
           ),
           const SizedBox(height: 5),
-          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 18, height: 1)),
+          Text(value,
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.w800, fontSize: 18, height: 1)),
           const SizedBox(height: 2),
-          Text(label, style: AppTypography.labelSmall.copyWith(color: context.sub, fontSize: 10)),
+          Text(label,
+              style: AppTypography.labelSmall.copyWith(color: context.sub, fontSize: 10)),
         ],
       );
 }
@@ -570,9 +988,7 @@ class _FefoNotice extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: amber.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
+                color: amber.withValues(alpha: 0.15), shape: BoxShape.circle),
             child: const Icon(Icons.swap_vert_rounded, color: amber, size: 15),
           ),
           const SizedBox(width: 10),
@@ -581,11 +997,13 @@ class _FefoNotice extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Critério FEFO aplicado',
-                    style: TextStyle(color: amber, fontWeight: FontWeight.w700, fontSize: 12)),
+                    style: TextStyle(
+                        color: amber, fontWeight: FontWeight.w700, fontSize: 12)),
                 const SizedBox(height: 2),
                 Text(
                   'Lotes selecionados por ordem de vencimento — retire na sequência indicada.',
-                  style: TextStyle(color: amber.withValues(alpha: 0.85), fontSize: 11),
+                  style: TextStyle(
+                      color: amber.withValues(alpha: 0.85), fontSize: 11),
                 ),
               ],
             ),
@@ -621,17 +1039,17 @@ class _ItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = movement;
     final productName = m['productName'] as String? ?? '-';
-    final batchId = m['batchId'] as String? ?? '-';
-    final consumed = (m['consumed'] as num?)?.toInt() ?? 0;
-    final before = (m['before'] as num?)?.toInt() ?? 0;
-    final after = (m['after'] as num?)?.toInt() ?? 0;
+    final batchId     = m['batchId']     as String? ?? '-';
+    final consumed    = (m['consumed']   as num?)?.toInt() ?? 0;
+    final before      = (m['before']     as num?)?.toInt() ?? 0;
+    final after       = (m['after']      as num?)?.toInt() ?? 0;
 
     final expiryStr = m['expiryDate'] as String?;
-    final expiryDt = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
-    final daysLeft = expiryDt?.difference(DateTime.now()).inDays;
+    final expiryDt  = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
+    final daysLeft  = expiryDt?.difference(DateTime.now()).inDays;
 
     final locationRaw = m['shelfLocation'] as String?;
-    final loc = _parseLocation(locationRaw);
+    final loc    = _parseLocation(locationRaw);
     final hasLoc = loc.isNotEmpty && loc.values.any((v) => v != null);
 
     final expiryColor = daysLeft == null
@@ -660,15 +1078,16 @@ class _ItemCard extends StatelessWidget {
         border: Border.all(color: borderCol),
         boxShadow: isDark
             ? []
-            : [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 14, offset: const Offset(0, 4))],
+            : [BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 14,
+                offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Cabeçalho ──
           _CardHeader(index: index, productName: productName, consumed: consumed, isDark: isDark),
 
-          // ── Lote e validade ──
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Row(
@@ -708,7 +1127,6 @@ class _ItemCard extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          // ── Localização ──
           if (hasLoc) ...[
             _LocationSection(loc: loc, isDark: isDark, sub: sub, onCard: onCard),
             const SizedBox(height: 14),
@@ -734,7 +1152,6 @@ class _ItemCard extends StatelessWidget {
             ),
           ],
 
-          // ── Barra de retirada ──
           Container(
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
@@ -743,7 +1160,10 @@ class _ItemCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               boxShadow: isDark
                   ? []
-                  : [BoxShadow(color: const Color(0xFF2563EB).withValues(alpha: 0.28), blurRadius: 8, offset: const Offset(0, 3))],
+                  : [BoxShadow(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.28),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3))],
             ),
             child: Row(
               children: [
@@ -753,11 +1173,13 @@ class _ItemCard extends StatelessWidget {
                     color: Colors.white.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.move_to_inbox_rounded, color: Colors.white, size: 15),
+                  child: const Icon(Icons.move_to_inbox_rounded,
+                      color: Colors.white, size: 15),
                 ),
                 const SizedBox(width: 10),
                 Text('Retirar desta localização:',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.80), fontSize: 12)),
+                    style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.80), fontSize: 12)),
                 const Spacer(),
                 Text('$consumed un.',
                     style: const TextStyle(
@@ -768,7 +1190,6 @@ class _ItemCard extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          // ── Barra de estoque ──
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: _StockBar(
@@ -780,14 +1201,11 @@ class _ItemCard extends StatelessWidget {
   }
 }
 
-// ─── Cabeçalho do card ───────────────────────────────────────────────────────
-
 class _CardHeader extends StatelessWidget {
   final int index;
   final String productName;
   final int consumed;
   final bool isDark;
-
   const _CardHeader(
       {required this.index,
       required this.productName,
@@ -795,78 +1213,79 @@ class _CardHeader extends StatelessWidget {
       required this.isDark});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF142140), const Color(0xFF111C2D)]
-              : [const Color(0xFFEFF6FF), const Color(0xFFF8FAFC)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isDark
+                ? [const Color(0xFF142140), const Color(0xFF111C2D)]
+                : [const Color(0xFFEFF6FF), const Color(0xFFF8FAFC)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
         ),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1648A0), Color(0xFF2563EB)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF2563EB).withValues(alpha: 0.35),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1648A0), Color(0xFF2563EB)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-              ],
-            ),
-            child: Center(
-              child: Text('$index',
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              productName,
-              style: TextStyle(
-                color: isDark ? const Color(0xFFF1F5FB) : const Color(0xFF0F172A),
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-                letterSpacing: -0.2,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2))
+                ],
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              child: Center(
+                child: Text('$index',
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.20 : 0.10),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.30)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                productName,
+                style: TextStyle(
+                  color: isDark
+                      ? const Color(0xFFF1F5FB)
+                      : const Color(0xFF0F172A),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  letterSpacing: -0.2,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            child: Text('$consumed un.',
-                style: const TextStyle(
-                    color: Color(0xFF16A34A), fontWeight: FontWeight.w800, fontSize: 12)),
-          ),
-        ],
-      ),
-    );
-  }
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF16A34A)
+                    .withValues(alpha: isDark ? 0.20 : 0.10),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: const Color(0xFF16A34A).withValues(alpha: 0.30)),
+              ),
+              child: Text('$consumed un.',
+                  style: const TextStyle(
+                      color: Color(0xFF16A34A),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12)),
+            ),
+          ],
+        ),
+      );
 }
-
-// ─── Info chip ────────────────────────────────────────────────────────────────
 
 class _InfoChip extends StatelessWidget {
   final IconData icon;
@@ -913,7 +1332,8 @@ class _InfoChip extends StatelessWidget {
               Icon(icon, size: 11, color: sub),
               const SizedBox(width: 4),
               Text(label,
-                  style: TextStyle(color: sub, fontSize: 10, fontWeight: FontWeight.w600)),
+                  style: TextStyle(
+                      color: sub, fontSize: 10, fontWeight: FontWeight.w600)),
             ],
           ),
           const SizedBox(height: 4),
@@ -938,7 +1358,9 @@ class _InfoChip extends StatelessWidget {
               ),
               child: Text(badge!,
                   style: TextStyle(
-                      color: badgeColor ?? sub, fontSize: 9, fontWeight: FontWeight.w700)),
+                      color: badgeColor ?? sub,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700)),
             ),
           ],
         ],
@@ -947,8 +1369,6 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
-// ─── Seção de localização ────────────────────────────────────────────────────
-
 class _LocationSection extends StatelessWidget {
   final Map<String, String?> loc;
   final bool isDark;
@@ -956,17 +1376,20 @@ class _LocationSection extends StatelessWidget {
   final Color onCard;
 
   const _LocationSection(
-      {required this.loc, required this.isDark, required this.sub, required this.onCard});
+      {required this.loc,
+      required this.isDark,
+      required this.sub,
+      required this.onCard});
 
   @override
   Widget build(BuildContext context) {
-    final section = loc['section'];
-    final shelf = loc['shelf'];
-    final level = loc['level'];
-    final room = loc['room'];
-    final name = loc['name'];
+    final section     = loc['section'];
+    final shelf       = loc['shelf'];
+    final level       = loc['level'];
+    final room        = loc['room'];
+    final name        = loc['name'];
     final sectionColor = _sectionColor(section);
-    final levelNum = level != null ? int.tryParse(level) : null;
+    final levelNum     = level != null ? int.tryParse(level) : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -979,7 +1402,6 @@ class _LocationSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Header colorido da localização ──
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
@@ -997,15 +1419,12 @@ class _LocationSection extends StatelessWidget {
                     child: Icon(Icons.place_rounded, color: sectionColor, size: 13),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    'LOCALIZAÇÃO',
-                    style: TextStyle(
-                      color: sectionColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
+                  Text('LOCALIZAÇÃO',
+                      style: TextStyle(
+                          color: sectionColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8)),
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1015,19 +1434,18 @@ class _LocationSection extends StatelessWidget {
                     ),
                     child: Text('Retire aqui',
                         style: TextStyle(
-                            color: sectionColor, fontSize: 10, fontWeight: FontWeight.w700)),
+                            color: sectionColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
             ),
-
-            // ── Corpo ──
             Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Esquerda: nome + chips + caminho
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1035,7 +1453,9 @@ class _LocationSection extends StatelessWidget {
                         if (name != null) ...[
                           Text(name,
                               style: TextStyle(
-                                  color: onCard, fontWeight: FontWeight.w700, fontSize: 13)),
+                                  color: onCard,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13)),
                           const SizedBox(height: 8),
                         ],
                         Wrap(
@@ -1043,45 +1463,23 @@ class _LocationSection extends StatelessWidget {
                           runSpacing: 6,
                           children: [
                             if (section != null)
-                              _LocChip(
-                                  label: section,
-                                  prefix: 'Seção',
-                                  color: sectionColor,
-                                  icon: Icons.grid_view_rounded),
+                              _LocChip(label: section, prefix: 'Seção', color: sectionColor, icon: Icons.grid_view_rounded),
                             if (shelf != null)
-                              _LocChip(
-                                  label: shelf,
-                                  prefix: 'Prateleira',
-                                  color: const Color(0xFF0891B2),
-                                  icon: Icons.view_week_outlined),
+                              _LocChip(label: shelf, prefix: 'Prateleira', color: const Color(0xFF0891B2), icon: Icons.view_week_outlined),
                             if (level != null)
-                              _LocChip(
-                                  label: level,
-                                  prefix: 'Nível',
-                                  color: const Color(0xFF7C3AED),
-                                  icon: Icons.layers_rounded),
+                              _LocChip(label: level, prefix: 'Nível', color: const Color(0xFF7C3AED), icon: Icons.layers_rounded),
                             if (room != null)
-                              _LocChip(
-                                  label: room,
-                                  prefix: 'Sala',
-                                  color: const Color(0xFF059669),
-                                  icon: Icons.meeting_room_outlined),
+                              _LocChip(label: room, prefix: 'Sala', color: const Color(0xFF059669), icon: Icons.meeting_room_outlined),
                           ],
                         ),
                         if (shelf != null || level != null) ...[
                           const SizedBox(height: 10),
                           _AddressPath(
-                            section: section,
-                            shelf: shelf,
-                            level: level,
-                            sectionColor: sectionColor,
-                          ),
+                              section: section, shelf: shelf, level: level, sectionColor: sectionColor),
                         ],
                       ],
                     ),
                   ),
-
-                  // Direita: diagrama de nível
                   if (levelNum != null && levelNum >= 1 && levelNum <= 6) ...[
                     const SizedBox(width: 12),
                     _LevelDiagram(
@@ -1100,15 +1498,12 @@ class _LocationSection extends StatelessWidget {
   }
 }
 
-// ─── Chip de localização ─────────────────────────────────────────────────────
-
 class _LocChip extends StatelessWidget {
   final String label;
   final String prefix;
   final Color color;
   final IconData icon;
-  const _LocChip(
-      {required this.label, required this.prefix, required this.color, required this.icon});
+  const _LocChip({required this.label, required this.prefix, required this.color, required this.icon});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1130,37 +1525,25 @@ class _LocChip extends StatelessWidget {
       );
 }
 
-// ─── Caminho visual (Seção → Prateleira → Nível) ──────────────────────────────
-
 class _AddressPath extends StatelessWidget {
   final String? section;
   final String? shelf;
   final String? level;
   final Color sectionColor;
-
   const _AddressPath(
-      {required this.section,
-      required this.shelf,
-      required this.level,
-      required this.sectionColor});
+      {required this.section, required this.shelf, required this.level, required this.sectionColor});
 
   @override
   Widget build(BuildContext context) {
     final parts = <Widget>[];
-    if (section != null) {
-      parts.add(_PathStep(color: sectionColor, icon: Icons.grid_view_rounded, label: section!));
-    }
+    if (section != null) parts.add(_PathStep(color: sectionColor, icon: Icons.grid_view_rounded, label: section!));
     if (shelf != null) {
       if (parts.isNotEmpty) parts.add(_arrow());
       parts.add(_PathStep(color: const Color(0xFF0891B2), icon: Icons.view_week_outlined, label: 'P$shelf'));
     }
     if (level != null) {
       if (parts.isNotEmpty) parts.add(_arrow());
-      parts.add(_PathStep(
-          color: const Color(0xFF7C3AED),
-          icon: Icons.layers_rounded,
-          label: 'N$level',
-          highlight: true));
+      parts.add(_PathStep(color: const Color(0xFF7C3AED), icon: Icons.layers_rounded, label: 'N$level', highlight: true));
     }
     return Row(mainAxisSize: MainAxisSize.min, children: parts);
   }
@@ -1176,8 +1559,7 @@ class _PathStep extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool highlight;
-  const _PathStep(
-      {required this.color, required this.icon, required this.label, this.highlight = false});
+  const _PathStep({required this.color, required this.icon, required this.label, this.highlight = false});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1202,19 +1584,13 @@ class _PathStep extends StatelessWidget {
       );
 }
 
-// ─── Diagrama de nível ────────────────────────────────────────────────────────
-
 class _LevelDiagram extends StatelessWidget {
   final int targetLevel;
   final int totalLevels;
   final Color color;
   final bool isDark;
-
   const _LevelDiagram(
-      {required this.targetLevel,
-      required this.totalLevels,
-      required this.color,
-      required this.isDark});
+      {required this.targetLevel, required this.totalLevels, required this.color, required this.isDark});
 
   @override
   Widget build(BuildContext context) => Column(
@@ -1222,8 +1598,7 @@ class _LevelDiagram extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('Nível',
-              style: TextStyle(
-                  color: context.sub, fontSize: 9, fontWeight: FontWeight.w600)),
+              style: TextStyle(color: context.sub, fontSize: 9, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           for (int lvl = totalLevels; lvl >= 1; lvl--)
             Container(
@@ -1235,14 +1610,10 @@ class _LevelDiagram extends StatelessWidget {
                     : color.withValues(alpha: isDark ? 0.08 : 0.06),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: lvl == targetLevel ? color : color.withValues(alpha: 0.20),
-                  width: lvl == targetLevel ? 1.5 : 1,
-                ),
+                    color: lvl == targetLevel ? color : color.withValues(alpha: 0.20),
+                    width: lvl == targetLevel ? 1.5 : 1),
                 boxShadow: lvl == targetLevel
-                    ? [BoxShadow(
-                        color: color.withValues(alpha: 0.35),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2))]
+                    ? [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(0, 2))]
                     : [],
               ),
               child: Row(
@@ -1257,9 +1628,7 @@ class _LevelDiagram extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: lvl == targetLevel
-                              ? Colors.white
-                              : color.withValues(alpha: 0.35))),
+                          color: lvl == targetLevel ? Colors.white : color.withValues(alpha: 0.35))),
                 ],
               ),
             ),
@@ -1267,33 +1636,22 @@ class _LevelDiagram extends StatelessWidget {
       );
 }
 
-// ─── Barra de estoque ─────────────────────────────────────────────────────────
-
 class _StockBar extends StatelessWidget {
   final int before;
   final int after;
   final int consumed;
   final bool isDark;
   final Color sub;
-
   const _StockBar(
-      {required this.before,
-      required this.after,
-      required this.consumed,
-      required this.isDark,
-      required this.sub});
+      {required this.before, required this.after, required this.consumed, required this.isDark, required this.sub});
 
   @override
   Widget build(BuildContext context) {
-    final pct = before > 0 ? (after / before).clamp(0.0, 1.0) : 0.0;
+    final pct     = before > 0 ? (after / before).clamp(0.0, 1.0) : 0.0;
     final isEmpty = after <= 0;
-    final isLow = pct < 0.20 && !isEmpty;
-    final barColor = isEmpty
-        ? const Color(0xFF6B7280)
-        : isLow
-            ? const Color(0xFFDC2626)
-            : const Color(0xFF2563EB);
-    final trackBg = isDark ? const Color(0xFF1E2D42) : const Color(0xFFE2E8F0);
+    final isLow   = pct < 0.20 && !isEmpty;
+    final barColor = isEmpty ? const Color(0xFF6B7280) : isLow ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
+    final trackBg  = isDark ? const Color(0xFF1E2D42) : const Color(0xFFE2E8F0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1309,8 +1667,7 @@ class _StockBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(isEmpty ? 'Esgotado' : '$after restam',
-                  style: TextStyle(
-                      color: barColor, fontWeight: FontWeight.w700, fontSize: 11)),
+                  style: TextStyle(color: barColor, fontWeight: FontWeight.w700, fontSize: 11)),
             ),
           ],
         ),
