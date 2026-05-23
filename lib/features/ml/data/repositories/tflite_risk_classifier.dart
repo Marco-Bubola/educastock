@@ -20,7 +20,7 @@ class TFLiteRiskClassifier implements RiskClassifierRepository {
   Future<void> init() async {
     try {
       final modelBytes = await rootBundle.load(_modelAsset);
-      _interpreter = await Interpreter.fromBuffer(
+      _interpreter = Interpreter.fromBuffer(
         modelBytes.buffer.asUint8List(),
         options: InterpreterOptions()..threads = 2,
       );
