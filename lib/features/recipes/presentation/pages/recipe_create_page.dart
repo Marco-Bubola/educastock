@@ -8,14 +8,20 @@ import '../../../settings/presentation/controllers/system_settings_provider.dart
 import '../../domain/entities/stock_recipe.dart';
 import '../controllers/recipes_provider.dart';
 
+const _kPurple = Color(0xFF7C3AED);
+const _kPurpleDark = Color(0xFF4C1D95);
+const _kPurpleLight = Color(0xFFEDE9FE);
+
 class RecipeCreatePage extends ConsumerStatefulWidget {
-  const RecipeCreatePage({super.key});
+  final StockRecipe? editRecipe;
+  const RecipeCreatePage({super.key, this.editRecipe});
 
   @override
   ConsumerState<RecipeCreatePage> createState() => _RecipeCreatePageState();
 }
 
-class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
+class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
+    with SingleTickerProviderStateMixin {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _searchCtrl = TextEditingController();
@@ -23,16 +29,38 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
   String _search = '';
   String? _categoryFilter;
   bool _saving = false;
-  final _keyNameField = GlobalKey();
-  final _keyIngredientsSection = GlobalKey();
+  late final AnimationController _fabAnim;
+
+  bool get _isEditing => widget.editRecipe != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _fabAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    if (_isEditing) {
+      final r = widget.editRecipe!;
+      _nameCtrl.text = r.name;
+      _descCtrl.text = r.description ?? '';
+      for (final item in r.items) {
+        _selectedQty[item.productId] = item.quantity;
+      }
+    }
+  }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _descCtrl.dispose();
     _searchCtrl.dispose();
+    _fabAnim.dispose();
     super.dispose();
   }
+
+  int get _selectedCount => _selectedQty.values.where((v) => v > 0).length;
+  int get _totalQty => _selectedQty.values.fold(0, (a, b) => a + b);
 
   Future<void> _save(List<Product> products) async {
     final name = _nameCtrl.text.trim();
@@ -40,16 +68,23 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
       showCasaSnackbar(context, message: 'Informe o nome da receita.', isError: true);
       return;
     }
-
     final items = <RecipeItem>[];
     for (final e in _selectedQty.entries) {
       if (e.value <= 0) continue;
-      final p = products.firstWhere((x) => x.id == e.key);
+      final p = products.firstWhere((x) => x.id == e.key,
+          orElse: () => Product(
+                id: e.key,
+                name: e.key,
+                category: ProductCategory.outro,
+                unit: 'un',
+                isPerishable: false,
+                createdAt: DateTime.now(),
+                createdBy: '',
+              ));
       items.add(RecipeItem(productId: p.id, productName: p.name, quantity: e.value));
     }
-
     if (items.isEmpty) {
-      showCasaSnackbar(context, message: 'Selecione produtos com quantidade.', isError: true);
+      showCasaSnackbar(context, message: 'Selecione ao menos um produto.', isError: true);
       return;
     }
 
@@ -57,20 +92,30 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
     if (user == null) return;
 
     setState(() => _saving = true);
-    await ref.read(recipesNotifierProvider.notifier).saveRecipe(
-          StockRecipe(
-            id: '',
-            name: name,
-            description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-            items: items,
-            createdAt: DateTime.now(),
-            createdBy: user.id,
-          ),
-        );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    showCasaSnackbar(context, message: 'Receita criada com sucesso!', isSuccess: true);
-    Navigator.pop(context);
+    try {
+      await ref.read(recipesNotifierProvider.notifier).saveRecipe(
+            StockRecipe(
+              id: widget.editRecipe?.id ?? '',
+              name: name,
+              description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+              items: items,
+              createdAt: widget.editRecipe?.createdAt ?? DateTime.now(),
+              createdBy: widget.editRecipe?.createdBy ?? user.id,
+            ),
+          );
+      if (!mounted) return;
+      showCasaSnackbar(
+        context,
+        message: _isEditing ? 'Receita atualizada!' : 'Receita criada com sucesso!',
+        isSuccess: true,
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      showCasaSnackbar(context, message: e.toString().replaceFirst('Exception: ', ''), isError: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -84,63 +129,20 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
     final textPrimary = isDark ? const Color(0xFFF9FAFB) : const Color(0xFF0F172A);
     final textSub = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
     final borderColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFE2E8F0);
-    final pillBg = isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9);
-
-    final selectedCount = _selectedQty.values.where((v) => v > 0).length;
-    final totalQty = _selectedQty.values.fold(0, (a, b) => a + b);
 
     return Scaffold(
       backgroundColor: bg,
-      appBar: ModernProfileAppBar(
-        title: 'Nova Receita',
-        subtitle: 'Monte um modelo de distribuição',
-        showBackButton: true,
-        actions: [
-          buildHelpButton(
-            context: context,
-            onPressed: () => showCasaTutorial(
-              context: context,
-              steps: [
-                TutorialStep(
-                  key: _keyNameField,
-                  title: 'Nome da Receita',
-                  description: 'Informe um nome descritivo para a receita, como "Almoço Infantil Padrão" ou "Kit Higiene Básico". O nome ajuda a identificar rapidamente qual modelo usar na distribuição.',
-                  icon: Icons.restaurant_menu_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Use nomes que a equipe reconhece facilmente',
-                    'Inclua a quantidade de porções no nome quando relevante',
-                    'Ex: "Lanche Escolar 30 crianças"',
-                  ],
-                ),
-                TutorialStep(
-                  key: _keyIngredientsSection,
-                  title: 'Ingredientes da Receita',
-                  description: 'Adicione cada produto e sua quantidade necessária para uma execução da receita. Ao executar a receita, todas as quantidades serão deduzidas automaticamente do estoque.',
-                  icon: Icons.list_alt_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Adicione todos os ingredientes antes de salvar',
-                    'A quantidade é por execução da receita',
-                    'O sistema verifica estoque disponível antes de cada execução',
-                    'Produtos sem estoque suficiente bloqueiam a execução',
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      appBar: _buildAppBar(isDark, textSub),
       body: productsAsync.when(
         data: (products) {
           final categories = products.map((p) => p.category.name).toSet().toList()..sort();
           final filtered = products.where((p) {
             final q = _search.trim().toLowerCase();
-            final searchOk = q.isEmpty ||
+            final ok = q.isEmpty ||
                 p.name.toLowerCase().contains(q) ||
                 (p.brand?.toLowerCase().contains(q) ?? false);
-            final categoryOk = _categoryFilter == null || p.category.name == _categoryFilter;
-            return searchOk && categoryOk;
+            final catOk = _categoryFilter == null || p.category.name == _categoryFilter;
+            return ok && catOk;
           }).toList();
 
           return Column(
@@ -148,174 +150,83 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
               Expanded(
                 child: CustomScrollView(
                   slivers: [
-                    // ─── Info card ────────────────────────────────────────
+                    // ── Hero preview card ──
+                    SliverToBoxAdapter(child: _buildHeroCard(isDark)),
+
+                    // ── Seção 1: informações ──
                     SliverToBoxAdapter(
-                      child: Container(
-                        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF7C3AED), Color(0xFF4F46E5)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                      child: _buildSection(
+                        step: 1,
+                        title: 'INFORMAÇÕES',
+                        isDark: isDark,
+                        child: Column(
+                          children: [
+                            _buildTextField(
+                              controller: _nameCtrl,
+                              hint: 'Nome da receita  (ex: Kit Lanche)',
+                              icon: Icons.label_rounded,
+                              cardBg: cardBg,
+                              textPrimary: textPrimary,
+                              textSub: textSub,
+                              borderColor: borderColor,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 10),
+                            _buildTextField(
+                              controller: _descCtrl,
+                              hint: 'Descrição  (opcional)',
+                              icon: Icons.notes_rounded,
+                              cardBg: cardBg,
+                              textPrimary: textPrimary,
+                              textSub: textSub,
+                              borderColor: borderColor,
+                              maxLines: 2,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // ── Seção 2: ingredientes selecionados ──
+                    if (_selectedCount > 0)
+                      SliverToBoxAdapter(
+                        child: _buildSection(
+                          step: 2,
+                          title: 'INGREDIENTES  •  $_selectedCount produto${_selectedCount != 1 ? 's' : ''}',
+                          isDark: isDark,
+                          child: _SelectedIngredientsList(
+                            selectedQty: Map.from(_selectedQty),
+                            products: products,
+                            isDark: isDark,
+                            cardBg: cardBg,
+                            borderColor: borderColor,
+                            textPrimary: textPrimary,
+                            textSub: textSub,
+                            onRemove: (pid) => setState(() => _selectedQty.remove(pid)),
+                            onDecrement: (pid) => setState(() {
+                              final next = (_selectedQty[pid] ?? 0) - 1;
+                              if (next <= 0) {
+                                _selectedQty.remove(pid);
+                              } else {
+                                _selectedQty[pid] = next;
+                              }
+                            }),
+                            onIncrement: (pid) => setState(() =>
+                                _selectedQty[pid] = (_selectedQty[pid] ?? 0) + 1),
                           ),
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF7C3AED)
-                                  .withValues(alpha: isDark ? 0.3 : 0.2),
-                              blurRadius: 20,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(13),
-                              ),
-                              child: const Icon(Icons.menu_book_rounded,
-                                  color: Colors.white, size: 24),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Monte sua receita',
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 16)),
-                                  Text(
-                                    'Defina nome e selecione produtos',
-                                    style: TextStyle(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.75),
-                                        fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (selectedCount > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.18),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Text('$selectedCount',
-                                        style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 18)),
-                                    Text('itens',
-                                        style: TextStyle(
-                                            color: Colors.white
-                                                .withValues(alpha: 0.75),
-                                            fontSize: 10)),
-                                  ],
-                                ),
-                              ),
-                          ],
                         ),
                       ),
-                    ),
 
-                    // ─── Nome + Descrição ─────────────────────────────────
+                    // ── Seção 3: buscar + adicionar produtos ──
                     SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: _buildSection(
+                        step: _selectedCount > 0 ? 3 : 2,
+                        title: 'ADICIONAR PRODUTOS',
+                        isDark: isDark,
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('INFORMAÇÕES DA RECEITA',
-                                style: TextStyle(
-                                    color: textSub,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.8)),
-                            const SizedBox(height: 10),
+                            // Busca
                             Container(
-                              key: _keyNameField,
-                              decoration: BoxDecoration(
-                                color: cardBg,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: borderColor),
-                              ),
-                              child: TextField(
-                                controller: _nameCtrl,
-                                style: TextStyle(
-                                    color: textPrimary,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600),
-                                decoration: InputDecoration(
-                                  hintText: 'Nome da receita (ex: Kit Lanche)',
-                                  hintStyle:
-                                      TextStyle(color: textSub, fontSize: 14),
-                                  prefixIcon: Icon(Icons.label_rounded,
-                                      color: const Color(0xFF7C3AED), size: 20),
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 14),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: cardBg,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: borderColor),
-                              ),
-                              child: TextField(
-                                controller: _descCtrl,
-                                maxLines: 2,
-                                style:
-                                    TextStyle(color: textPrimary, fontSize: 14),
-                                decoration: InputDecoration(
-                                  hintText: 'Descrição (opcional)',
-                                  hintStyle:
-                                      TextStyle(color: textSub, fontSize: 14),
-                                  prefixIcon: Padding(
-                                    padding: const EdgeInsets.only(bottom: 24),
-                                    child: Icon(Icons.notes_rounded,
-                                        color: textSub, size: 20),
-                                  ),
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 14),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // ─── Busca de produtos ────────────────────────────────
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('PRODUTOS',
-                                style: TextStyle(
-                                    color: textSub,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.8)),
-                            const SizedBox(height: 10),
-                            Container(
-                              key: _keyIngredientsSection,
                               decoration: BoxDecoration(
                                 color: cardBg,
                                 borderRadius: BorderRadius.circular(14),
@@ -323,20 +234,15 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
                               ),
                               child: TextField(
                                 controller: _searchCtrl,
-                                onChanged: (v) =>
-                                    setState(() => _search = v),
-                                style:
-                                    TextStyle(color: textPrimary, fontSize: 14),
+                                onChanged: (v) => setState(() => _search = v),
+                                style: TextStyle(color: textPrimary, fontSize: 14),
                                 decoration: InputDecoration(
                                   hintText: 'Buscar produto por nome ou marca…',
-                                  hintStyle:
-                                      TextStyle(color: textSub, fontSize: 14),
-                                  prefixIcon: Icon(Icons.search_rounded,
-                                      color: textSub, size: 20),
+                                  hintStyle: TextStyle(color: textSub, fontSize: 14),
+                                  prefixIcon: Icon(Icons.search_rounded, color: textSub, size: 20),
                                   suffixIcon: _search.isNotEmpty
                                       ? IconButton(
-                                          icon: Icon(Icons.close_rounded,
-                                              color: textSub, size: 18),
+                                          icon: Icon(Icons.close_rounded, color: textSub, size: 18),
                                           onPressed: () {
                                             _searchCtrl.clear();
                                             setState(() => _search = '');
@@ -344,38 +250,33 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
                                         )
                                       : null,
                                   border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 13),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                                 ),
                               ),
                             ),
                             const SizedBox(height: 10),
-                            // Category filter chips
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
+                            // Category chips
+                            SizedBox(
+                              height: 36,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
                                 children: [
                                   _CatChip(
                                     label: 'Todos',
                                     selected: _categoryFilter == null,
                                     isDark: isDark,
-                                    pillBg: pillBg,
                                     borderColor: borderColor,
-                                    onTap: () => setState(
-                                        () => _categoryFilter = null),
+                                    onTap: () => setState(() => _categoryFilter = null),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   ...categories.map((key) => Padding(
-                                        padding:
-                                            const EdgeInsets.only(right: 8),
+                                        padding: const EdgeInsets.only(right: 6),
                                         child: _CatChip(
                                           label: labelMap[key] ?? key,
                                           selected: _categoryFilter == key,
                                           isDark: isDark,
-                                          pillBg: pillBg,
                                           borderColor: borderColor,
-                                          onTap: () => setState(
-                                              () => _categoryFilter = key),
+                                          onTap: () => setState(() => _categoryFilter = key),
                                         ),
                                       )),
                                 ],
@@ -386,46 +287,39 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
                       ),
                     ),
 
-                    // ─── Grid de produtos ─────────────────────────────────
+                    // ── Grid de produtos ──
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                       sliver: filtered.isEmpty
                           ? SliverToBoxAdapter(
                               child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 40),
+                                padding: const EdgeInsets.symmetric(vertical: 40),
                                 child: Center(
                                   child: Column(
                                     children: [
-                                      Icon(Icons.search_off_rounded,
-                                          size: 48, color: textSub),
+                                      Icon(Icons.search_off_rounded, size: 48, color: textSub),
                                       const SizedBox(height: 10),
                                       Text('Nenhum produto encontrado',
-                                          style: TextStyle(
-                                              color: textSub, fontSize: 14)),
+                                          style: TextStyle(color: textSub, fontSize: 14)),
                                     ],
                                   ),
                                 ),
                               ),
                             )
                           : SliverGrid(
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 3,
                                 mainAxisSpacing: 10,
                                 crossAxisSpacing: 10,
-                                childAspectRatio: 0.72,
+                                childAspectRatio: 0.70,
                               ),
                               delegate: SliverChildBuilderDelegate(
                                 (context, i) {
                                   final p = filtered[i];
                                   final qty = _selectedQty[p.id] ?? 0;
-                                  final selected = qty > 0;
-
                                   return _ProductCard(
                                     product: p,
                                     qty: qty,
-                                    selected: selected,
                                     isDark: isDark,
                                     cardBg: cardBg,
                                     borderColor: borderColor,
@@ -441,8 +335,8 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
                                               }
                                             })
                                         : null,
-                                    onIncrement: () => setState(
-                                        () => _selectedQty[p.id] = qty + 1),
+                                    onIncrement: () =>
+                                        setState(() => _selectedQty[p.id] = qty + 1),
                                   );
                                 },
                                 childCount: filtered.length,
@@ -453,103 +347,530 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage> {
                 ),
               ),
 
-              // ─── Bottom save bar ──────────────────────────────────────
-              Container(
-                padding: EdgeInsets.fromLTRB(
-                    16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  border: Border(top: BorderSide(color: borderColor)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
-                      blurRadius: 20,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    if (selectedCount > 0) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: const Color(0xFF7C3AED)
-                                  .withValues(alpha: 0.3)),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('$totalQty',
-                                style: const TextStyle(
-                                    color: Color(0xFF7C3AED),
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 18)),
-                            Text('unid.',
-                                style: TextStyle(
-                                    color: const Color(0xFF7C3AED)
-                                        .withValues(alpha: 0.75),
-                                    fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
-                      child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              _saving ? null : () => _save(products),
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white))
-                              : const Icon(Icons.save_rounded, size: 18),
-                          label: Text(
-                            _saving ? 'Salvando…' : 'Salvar receita',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700, fontSize: 15),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF7C3AED),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
-                            elevation: 0,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              // ── Barra inferior de salvar ──
+              _buildBottomBar(context, isDark, cardBg, borderColor, textSub, products),
             ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-            child: Text('Erro: $e',
-                style: const TextStyle(color: Color(0xFFDC2626)))),
+          child: Text('Erro: $e', style: const TextStyle(color: Color(0xFFDC2626))),
+        ),
+      ),
+    );
+  }
+
+  // ─── AppBar ──────────────────────────────────────────────────────────────
+
+  PreferredSizeWidget _buildAppBar(bool isDark, Color textSub) {
+    return AppBar(
+      backgroundColor: isDark ? const Color(0xFF0B1120) : const Color(0xFFF1F5F9),
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      leading: IconButton(
+        icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : const Color(0xFF0F172A), size: 20),
+        onPressed: () => Navigator.pop(context),
+      ),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _isEditing ? 'Editar Receita' : 'Nova Receita',
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+              fontWeight: FontWeight.w800,
+              fontSize: 17,
+            ),
+          ),
+          Text(
+            _isEditing ? 'Altere os dados e salve' : 'Monte um modelo de distribuição',
+            style: TextStyle(color: textSub, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Hero preview card ───────────────────────────────────────────────────
+
+  Widget _buildHeroCard(bool isDark) {
+    final name = _nameCtrl.text.trim();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [_kPurpleDark, _kPurple],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: _kPurple.withValues(alpha: isDark ? 0.30 : 0.22),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+            ),
+            child: const Icon(Icons.restaurant_menu_rounded, color: Colors.white, size: 26),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name.isEmpty ? (_isEditing ? 'Editar receita' : 'Nova receita') : name,
+                  style: TextStyle(
+                    color: name.isEmpty ? Colors.white.withValues(alpha: 0.50) : Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    fontStyle: name.isEmpty ? FontStyle.italic : FontStyle.normal,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _selectedCount == 0
+                      ? 'Nenhum ingrediente adicionado'
+                      : '$_selectedCount produto${_selectedCount != 1 ? 's' : ''} · $_totalQty unidade${_totalQty != 1 ? 's' : ''} no total',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_selectedCount > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$_selectedCount',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 20),
+                  ),
+                  Text(
+                    'itens',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Seção com numeração e título ────────────────────────────────────────
+
+  Widget _buildSection({
+    required int step,
+    required String title,
+    required bool isDark,
+    required Widget child,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: const BoxDecoration(
+                  color: _kPurple,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    '$step',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 11),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+
+  // ─── Text field genérico ─────────────────────────────────────────────────
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    required Color cardBg,
+    required Color textPrimary,
+    required Color textSub,
+    required Color borderColor,
+    int maxLines = 1,
+    ValueChanged<String>? onChanged,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
+      ),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        onChanged: onChanged,
+        style: TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: textSub, fontSize: 13, fontWeight: FontWeight.w400),
+          prefixIcon: Padding(
+            padding: maxLines > 1 ? const EdgeInsets.only(bottom: 22) : EdgeInsets.zero,
+            child: Icon(icon, color: _kPurple, size: 20),
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        ),
+      ),
+    );
+  }
+
+  // ─── Barra inferior ──────────────────────────────────────────────────────
+
+  Widget _buildBottomBar(
+    BuildContext context,
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textSub,
+    List<Product> products,
+  ) {
+    final hasItems = _selectedCount > 0;
+    final hasName = _nameCtrl.text.trim().isNotEmpty;
+    final canSave = hasItems && hasName;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+      decoration: BoxDecoration(
+        color: cardBg,
+        border: Border(top: BorderSide(color: borderColor)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Resumo
+          if (hasItems) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: _kPurple.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _kPurple.withValues(alpha: 0.25)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$_totalQty',
+                    style: const TextStyle(color: _kPurple, fontWeight: FontWeight.w800, fontSize: 18),
+                  ),
+                  Text(
+                    'unid.',
+                    style: TextStyle(color: _kPurple.withValues(alpha: 0.75), fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          // Botão salvar
+          Expanded(
+            child: SizedBox(
+              height: 52,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: canSave && !_saving
+                      ? const LinearGradient(colors: [_kPurpleDark, _kPurple])
+                      : null,
+                  color: canSave && !_saving ? null : const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: canSave && !_saving
+                      ? [BoxShadow(color: _kPurple.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 4))]
+                      : [],
+                ),
+                child: ElevatedButton(
+                  onPressed: _saving || !canSave ? null : () => _save(products),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_saving)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      else
+                        Icon(
+                          _isEditing ? Icons.edit_rounded : Icons.save_rounded,
+                          size: 18,
+                          color: canSave ? Colors.white : const Color(0xFF94A3B8),
+                        ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _saving
+                            ? 'Salvando…'
+                            : !hasName
+                                ? 'Informe o nome'
+                                : !hasItems
+                                    ? 'Adicione produtos'
+                                    : _isEditing
+                                        ? 'Salvar alterações'
+                                        : 'Criar receita',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: canSave || _saving ? Colors.white : const Color(0xFF94A3B8),
+                        ),
+                      ),
+                      if (canSave && !_saving) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_forward_rounded, size: 16, color: Colors.white),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ─── Category filter chip ──────────────────────────────────────────────────
+// ─── Lista horizontal de ingredientes selecionados ────────────────────────
+
+class _SelectedIngredientsList extends StatelessWidget {
+  final Map<String, int> selectedQty;
+  final List<Product> products;
+  final bool isDark;
+  final Color cardBg;
+  final Color borderColor;
+  final Color textPrimary;
+  final Color textSub;
+  final ValueChanged<String> onRemove;
+  final ValueChanged<String> onDecrement;
+  final ValueChanged<String> onIncrement;
+
+  const _SelectedIngredientsList({
+    required this.selectedQty,
+    required this.products,
+    required this.isDark,
+    required this.cardBg,
+    required this.borderColor,
+    required this.textPrimary,
+    required this.textSub,
+    required this.onRemove,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = selectedQty.entries.where((e) => e.value > 0).toList();
+
+    return Column(
+      children: selected.map((entry) {
+        final p = products.where((x) => x.id == entry.key).firstOrNull;
+        final name = p?.name ?? entry.key;
+        final unit = p?.unit ?? 'un';
+        final qty = entry.value;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _kPurple.withValues(alpha: 0.25)),
+            boxShadow: [
+              BoxShadow(
+                color: _kPurple.withValues(alpha: isDark ? 0.08 : 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Ícone
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _kPurple.withValues(alpha: isDark ? 0.20 : 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.inventory_2_outlined, size: 18, color: _kPurple),
+              ),
+              const SizedBox(width: 12),
+              // Nome
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      '$qty $unit por execução',
+                      style: TextStyle(color: _kPurple.withValues(alpha: 0.80), fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Controles de quantidade
+              _QtyRow(
+                qty: qty,
+                isDark: isDark,
+                onDecrement: () => onDecrement(entry.key),
+                onIncrement: () => onIncrement(entry.key),
+              ),
+              const SizedBox(width: 6),
+              // Remover
+              GestureDetector(
+                onTap: () => onRemove(entry.key),
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2D1515) : const Color(0xFFFFF1F2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF5C2020) : const Color(0xFFFFCDD2),
+                    ),
+                  ),
+                  child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFDC2626)),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _QtyRow extends StatelessWidget {
+  final int qty;
+  final bool isDark;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+  const _QtyRow({required this.qty, required this.isDark, required this.onDecrement, required this.onIncrement});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 32,
+      decoration: BoxDecoration(
+        color: _kPurple.withValues(alpha: isDark ? 0.15 : 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _kPurple.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Btn(icon: Icons.remove_rounded, onTap: onDecrement, color: _kPurple),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              '$qty',
+              style: const TextStyle(color: _kPurple, fontWeight: FontWeight.w800, fontSize: 14),
+            ),
+          ),
+          _Btn(icon: Icons.add_rounded, onTap: onIncrement, color: _kPurple),
+        ],
+      ),
+    );
+  }
+}
+
+class _Btn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color color;
+  const _Btn({required this.icon, required this.onTap, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 30,
+        height: 32,
+        child: Icon(icon, size: 14, color: color),
+      ),
+    );
+  }
+}
+
+// ─── Category filter chip ─────────────────────────────────────────────────
 
 class _CatChip extends StatelessWidget {
   final String label;
   final bool selected;
   final bool isDark;
-  final Color pillBg;
   final Color borderColor;
   final VoidCallback onTap;
 
@@ -557,7 +878,6 @@ class _CatChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.isDark,
-    required this.pillBg,
     required this.borderColor,
     required this.onTap,
   });
@@ -568,24 +888,17 @@ class _CatChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF7C3AED) : pillBg,
+          color: selected ? _kPurple : (isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9)),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: selected ? const Color(0xFF7C3AED) : borderColor),
+          border: Border.all(color: selected ? _kPurple : borderColor),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected
-                ? Colors.white
-                : (isDark
-                    ? const Color(0xFFD1D5DB)
-                    : const Color(0xFF374151)),
-            fontWeight:
-                selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? Colors.white : (isDark ? const Color(0xFFD1D5DB) : const Color(0xFF374151)),
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             fontSize: 12,
           ),
         ),
@@ -594,12 +907,11 @@ class _CatChip extends StatelessWidget {
   }
 }
 
-// ─── Product card ──────────────────────────────────────────────────────────
+// ─── Product card ─────────────────────────────────────────────────────────
 
 class _ProductCard extends StatelessWidget {
   final Product product;
   final int qty;
-  final bool selected;
   final bool isDark;
   final Color cardBg;
   final Color borderColor;
@@ -611,7 +923,6 @@ class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
     required this.qty,
-    required this.selected,
     required this.isDark,
     required this.cardBg,
     required this.borderColor,
@@ -623,51 +934,58 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const accentColor = Color(0xFF7C3AED);
+    final selected = qty > 0;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
         color: selected
-            ? (isDark
-                ? const Color(0xFF1A1033)
-                : const Color(0xFFF5F3FF))
+            ? (isDark ? const Color(0xFF1A1033) : _kPurpleLight)
             : cardBg,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: selected ? accentColor : borderColor,
+          color: selected ? _kPurple : borderColor,
           width: selected ? 2 : 1,
         ),
         boxShadow: selected && !isDark
-            ? [
-                BoxShadow(
-                  color: accentColor.withValues(alpha: 0.15),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ]
+            ? [BoxShadow(color: _kPurple.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 4))]
             : [],
       ),
       child: Column(
         children: [
-          // Image / icon area
+          // Imagem / ícone
           Expanded(
-            child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(13)),
-              child: product.imageUrl != null &&
-                      product.imageUrl!.isNotEmpty
-                  ? Image.network(
-                      product.imageUrl!,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          _PlaceholderIcon(isDark: isDark),
-                    )
-                  : _PlaceholderIcon(isDark: isDark),
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                  child: product.imageUrl != null && product.imageUrl!.isNotEmpty
+                      ? Image.network(product.imageUrl!, width: double.infinity, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _PlaceholderIcon(isDark: isDark))
+                      : _PlaceholderIcon(isDark: isDark),
+                ),
+                // Badge de quantidade
+                if (selected)
+                  Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _kPurple,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4)],
+                      ),
+                      child: Text(
+                        '×$qty',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          // Info + controls
+          // Info + controles
           Padding(
             padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
             child: Column(
@@ -678,41 +996,36 @@ class _ProductCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: textPrimary,
+                    color: selected ? _kPurple : textPrimary,
                     fontWeight: FontWeight.w700,
-                    fontSize: 11,
+                    fontSize: 10,
                     height: 1.3,
                   ),
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  product.unit,
+                  style: TextStyle(color: textSub, fontSize: 9),
+                ),
                 const SizedBox(height: 6),
-                // Qty controls
+                // Stepper
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _QtyBtn(
-                      icon: Icons.remove_rounded,
-                      onTap: onDecrement,
-                      isDark: isDark,
-                      active: qty > 0,
-                    ),
+                    _QtyBtn(icon: Icons.remove_rounded, onTap: onDecrement, isDark: isDark, active: qty > 0),
                     Expanded(
                       child: Center(
                         child: Text(
                           '$qty',
                           style: TextStyle(
-                            color: selected ? accentColor : textSub,
+                            color: selected ? _kPurple : textSub,
                             fontWeight: FontWeight.w800,
                             fontSize: 14,
                           ),
                         ),
                       ),
                     ),
-                    _QtyBtn(
-                      icon: Icons.add_rounded,
-                      onTap: onIncrement,
-                      isDark: isDark,
-                      active: true,
-                    ),
+                    _QtyBtn(icon: Icons.add_rounded, onTap: onIncrement, isDark: isDark, active: true),
                   ],
                 ),
               ],
@@ -731,12 +1044,9 @@ class _PlaceholderIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: isDark
-          ? const Color(0xFF1F2937)
-          : const Color(0xFFEDE9FE),
+      color: isDark ? const Color(0xFF1F2937) : _kPurpleLight,
       child: const Center(
-        child: Icon(Icons.inventory_2_outlined,
-            size: 28, color: Color(0xFF7C3AED)),
+        child: Icon(Icons.inventory_2_outlined, size: 28, color: _kPurple),
       ),
     );
   }
@@ -748,12 +1058,7 @@ class _QtyBtn extends StatelessWidget {
   final bool isDark;
   final bool active;
 
-  const _QtyBtn({
-    required this.icon,
-    required this.onTap,
-    required this.isDark,
-    required this.active,
-  });
+  const _QtyBtn({required this.icon, required this.onTap, required this.isDark, required this.active});
 
   @override
   Widget build(BuildContext context) {
@@ -764,20 +1069,16 @@ class _QtyBtn extends StatelessWidget {
         height: 26,
         decoration: BoxDecoration(
           color: active && onTap != null
-              ? const Color(0xFF7C3AED).withValues(alpha: isDark ? 0.25 : 0.1)
-              : (isDark
-                  ? const Color(0xFF1F2937)
-                  : const Color(0xFFF1F5F9)),
+              ? _kPurple.withValues(alpha: isDark ? 0.25 : 0.10)
+              : (isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9)),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
           icon,
           size: 14,
           color: active && onTap != null
-              ? const Color(0xFF7C3AED)
-              : (isDark
-                  ? const Color(0xFF4B5563)
-                  : const Color(0xFFD1D5DB)),
+              ? _kPurple
+              : (isDark ? const Color(0xFF4B5563) : const Color(0xFFD1D5DB)),
         ),
       ),
     );
