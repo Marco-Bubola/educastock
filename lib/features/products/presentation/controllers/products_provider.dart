@@ -21,6 +21,14 @@ final productByBarcodeProvider =
 
 final productByIdProvider =
     FutureProvider.family<Product?, String>((ref, id) async {
+  // Reaproveita o cache do StreamProvider da lista — evita round-trip ao Firestore
+  // ao abrir a página de detalhe vindo do Estoque (produto já está em memória).
+  final cached = ref.watch(productsProvider).valueOrNull;
+  if (cached != null) {
+    for (final p in cached) {
+      if (p.id == id) return p;
+    }
+  }
   return ref.watch(productsDatasourceProvider).getProductById(id);
 });
 
