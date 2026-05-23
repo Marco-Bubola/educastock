@@ -1,4 +1,4 @@
-// REWRITTEN - product_detail_page.dart
+// product_detail_page.dart — modernizado, adaptativo (dark/light) e com ações para lotes vencidos
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,9 +7,10 @@ import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../stock/domain/entities/stock_movement.dart';
+import '../../../stock/presentation/controllers/stock_provider.dart';
 import '../../domain/entities/product.dart';
 import '../controllers/products_provider.dart';
-
 
 final _keyDetailInfo = GlobalKey();
 final _keyDetailBatches = GlobalKey();
@@ -23,131 +24,165 @@ class ProductDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final batchesAsync = ref.watch(batchesByProductProvider(productId));
     final productAsync = ref.watch(productByIdProvider(productId));
+    final batchesAsync = ref.watch(batchesByProductProvider(productId));
 
-    return productAsync.when(
-      loading: () => Scaffold(
-        backgroundColor: cs.surface,
-        body: const Center(child: CircularProgressIndicator()),
+    // A página de detalhe não bloqueia mais com fullscreen spinner: o
+    // productByIdProvider tenta servir o produto pelo cache do StreamProvider
+    // imediatamente, e a lista de lotes mostra apenas skeleton local.
+    return Scaffold(
+      backgroundColor: cs.surface,
+      floatingActionButton: FloatingActionButton.extended(
+        key: _keyDetailFAB,
+        onPressed: () =>
+            context.push('${AppRoutes.batchForm}?productId=$productId'),
+        backgroundColor: AppColors.brandPrimary600,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Novo Lote'),
+        elevation: 6,
       ),
-      error: (e, _) => Scaffold(
-        backgroundColor: cs.surface,
-        body: Center(child: Text('Erro: $e')),
-      ),
-      data: (p) {
-        if (p == null) {
-          return Scaffold(
-            backgroundColor: cs.surface,
-            appBar: AppBar(backgroundColor: cs.surface),
-            body: const Center(child: Text('Produto nao encontrado')),
+      body: productAsync.when(
+        loading: () => _LoadingScaffold(cs: cs, isDark: isDark),
+        error: (e, _) => _ErrorScaffold(message: e.toString(), cs: cs),
+        data: (p) {
+          if (p == null) {
+            return _ErrorScaffold(message: 'Produto não encontrado', cs: cs);
+          }
+          return _DetailBody(
+            product: p,
+            productId: productId,
+            batchesAsync: batchesAsync,
+            cs: cs,
+            isDark: isDark,
           );
-        }
+        },
+      ),
+    );
+  }
+}
 
-        return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF0B1120) : const Color(0xFFF1F5F9),
-          floatingActionButton: FloatingActionButton.extended(
-            key: _keyDetailFAB,
-            onPressed: () =>
-                context.push('${AppRoutes.batchForm}?productId=$productId'),
-            backgroundColor: AppColors.brandPrimary600,
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Novo Lote'),
-            elevation: 6,
+// ─── Body principal ────────────────────────────────────────────────────────
+
+class _DetailBody extends ConsumerWidget {
+  final Product product;
+  final String productId;
+  final AsyncValue<List<Batch>> batchesAsync;
+  final ColorScheme cs;
+  final bool isDark;
+  const _DetailBody({
+    required this.product,
+    required this.productId,
+    required this.batchesAsync,
+    required this.cs,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final batches = batchesAsync.valueOrNull ?? const [];
+    final loading = batchesAsync.isLoading && batches.isEmpty;
+    final totalQty = batches.fold<int>(0, (s, b) => s + b.quantity);
+    final totalValue = batches.fold<double>(
+        0, (s, b) => s + ((b.unitPrice ?? 0) * b.quantity));
+    final expired = batches.where((b) => b.isExpired).toList();
+    final critical = batches
+        .where((b) => !b.noExpiry && !b.isExpired && b.daysToExpiry <= 7)
+        .length;
+
+    return CustomScrollView(
+      slivers: [
+        _ProductSliverAppBar(product: product, productId: productId),
+
+        // Banner de lotes vencidos (sticky no topo do conteúdo)
+        if (expired.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+            sliver: SliverToBoxAdapter(
+              child: _ExpiredBanner(
+                product: product,
+                expired: expired,
+                isDark: isDark,
+                cs: cs,
+                onResolveAll: () => _openBulkResolveSheet(
+                    context, ref, product, expired, isDark, cs),
+              ),
+            ),
           ),
-          body: batchesAsync.when(
-            loading: () => CustomScrollView(
-              slivers: [
-                _buildAppBar(context, p, cs, isDark),
-                SliverPadding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (_, __) => const Padding(
-                        padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                        child: CasaCardSkeleton(),
-                      ),
-                      childCount: 4,
+
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              expired.isNotEmpty ? AppSpacing.md : AppSpacing.md,
+              AppSpacing.lg,
+              120),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              KeyedSubtree(
+                key: _keyDetailInfo,
+                child: _StatsRow(
+                  totalBatches: batches.length,
+                  totalQty: totalQty,
+                  totalValue: totalValue,
+                  critical: critical,
+                  expired: expired.length,
+                  isDark: isDark,
+                  cs: cs,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              KeyedSubtree(
+                key: _keyDetailBatches,
+                child: CasaSectionHeader(
+                  title: 'Lotes',
+                  count: batches.length,
+                  action: 'Novo Lote',
+                  onAction: () => context
+                      .push('${AppRoutes.batchForm}?productId=$productId'),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              if (loading)
+                ...List.generate(
+                  3,
+                  (_) => const Padding(
+                    padding: EdgeInsets.only(bottom: AppSpacing.md),
+                    child: CasaCardSkeleton(),
+                  ),
+                )
+              else if (batches.isEmpty)
+                CasaEmptyState(
+                  icon: Icons.inbox_outlined,
+                  title: 'Nenhum lote cadastrado',
+                  description:
+                      'Cadastre o primeiro lote para controlar a validade.',
+                  ctaLabel: 'Cadastrar Lote',
+                  onCta: () => context
+                      .push('${AppRoutes.batchForm}?productId=$productId'),
+                )
+              else
+                ...batches.map(
+                  (b) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: _BatchCard(
+                      batch: b,
+                      isDark: isDark,
+                      cs: cs,
+                      onEdit: () => context.push(
+                          '${AppRoutes.batchForm}?id=${b.id}&productId=$productId'),
+                      onDelete: () => _confirmDelete(context, ref, b),
+                      onResolveExpired: b.isExpired
+                          ? () => _openSingleResolveSheet(
+                              context, ref, product, b, isDark, cs)
+                          : null,
                     ),
                   ),
                 ),
-              ],
-            ),
-            error: (e, _) => Center(child: Text('Erro: $e')),
-            data: (batches) {
-              final totalQty =
-                  batches.fold<int>(0, (s, b) => s + b.quantity);
-              final totalValue = batches.fold<double>(
-                  0, (s, b) => s + ((b.unitPrice ?? 0) * b.quantity));
-              final critical = batches
-                  .where((b) =>
-                      !b.noExpiry && b.daysToExpiry <= 7 && !b.isExpired)
-                  .length;
-              final expired = batches.where((b) => b.isExpired).length;
-
-              return CustomScrollView(
-                slivers: [
-                  _buildAppBar(context, p, cs, isDark),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
-                        AppSpacing.md, AppSpacing.lg, 120),
-                    sliver: SliverList(
-                      delegate: SliverChildListDelegate([
-                        KeyedSubtree(
-                          key: _keyDetailInfo,
-                          child: _StatsRow(
-                          totalBatches: batches.length,
-                          totalQty: totalQty,
-                          totalValue: totalValue,
-                          critical: critical,
-                          expired: expired,
-                          isDark: isDark,
-                        ),
-                        ),
-                        const SizedBox(height: AppSpacing.lg),
-                        KeyedSubtree(
-                          key: _keyDetailBatches,
-                          child: CasaSectionHeader(
-                          title: 'Lotes',
-                          count: batches.length,
-                          action: 'Novo Lote',
-                          onAction: () => context.push(
-                              '${AppRoutes.batchForm}?productId=$productId'),
-                        ),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        if (batches.isEmpty)
-                          CasaEmptyState(
-                            icon: Icons.inbox_outlined,
-                            title: 'Nenhum lote cadastrado',
-                            description:
-                                'Cadastre o primeiro lote para controlar a validade.',
-                            ctaLabel: 'Cadastrar Lote',
-                            onCta: () => context.push(
-                                '${AppRoutes.batchForm}?productId=$productId'),
-                          )
-                        else
-                          ...batches.map((b) => Padding(
-                                padding: const EdgeInsets.only(
-                                    bottom: AppSpacing.md),
-                                child: _BatchCard(
-                                  batch: b,
-                                  isDark: isDark,
-                                  onEdit: () => context.push(
-                                      '${AppRoutes.batchForm}?id=${b.id}&productId=$productId'),
-                                  onDelete: () => _confirmDelete(context, ref, b),
-                                ),
-                              )),
-                      ]),
-                    ),
-                  ),
-                ],
-              );
-            },
+            ]),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 
@@ -162,10 +197,49 @@ class ProductDetailPage extends ConsumerWidget {
     }
   }
 
-  SliverAppBar _buildAppBar(
-      BuildContext context, Product p, ColorScheme cs, bool isDark) {
+  void _openSingleResolveSheet(BuildContext context, WidgetRef ref,
+      Product product, Batch batch, bool isDark, ColorScheme cs) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ResolveExpiredSheet(
+        product: product,
+        batches: [batch],
+        isDark: isDark,
+        cs: cs,
+      ),
+    );
+  }
+
+  void _openBulkResolveSheet(BuildContext context, WidgetRef ref,
+      Product product, List<Batch> expired, bool isDark, ColorScheme cs) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ResolveExpiredSheet(
+        product: product,
+        batches: expired,
+        isDark: isDark,
+        cs: cs,
+      ),
+    );
+  }
+}
+
+// ─── SliverAppBar moderno ──────────────────────────────────────────────────
+
+class _ProductSliverAppBar extends StatelessWidget {
+  final Product product;
+  final String productId;
+  const _ProductSliverAppBar(
+      {required this.product, required this.productId});
+
+  @override
+  Widget build(BuildContext context) {
     return SliverAppBar(
-      expandedHeight: 155,
+      expandedHeight: 165,
       pinned: true,
       backgroundColor: AppColors.brandPrimary600,
       foregroundColor: Colors.white,
@@ -182,38 +256,38 @@ class ProductDetailPage extends ConsumerWidget {
               TutorialStep(
                 key: _keyDetailInfo,
                 title: 'Informações do Produto',
-                description: 'Veja todos os dados cadastrais do produto: categoria, unidade, perecibilidade e quantidade total em estoque somando todos os lotes disponíveis.',
+                description:
+                    'Veja todos os dados cadastrais e estatísticas do produto: total de lotes, itens, valor em estoque e alertas de validade.',
                 icon: Icons.info_rounded,
                 align: ContentAlign.bottom,
                 hints: const [
                   'A quantidade total soma todos os lotes disponíveis',
-                  'Status "Perecível" indica se o produto tem controle de validade',
-                  'Toque no ícone de editar (lápis) para atualizar as informações',
+                  'Toque no lápis no topo para editar o produto',
                 ],
               ),
               TutorialStep(
                 key: _keyDetailBatches,
                 title: 'Lotes do Produto',
-                description: 'Lista completa de todos os lotes deste produto no estoque. Cada lote tem sua própria quantidade, data de validade, localização e origem.',
+                description:
+                    'Cada lote tem sua própria quantidade, validade e localização. Lotes vencidos exibem ações rápidas para descarte ou registro de uso.',
                 icon: Icons.inventory_rounded,
                 align: ContentAlign.bottom,
                 hints: const [
-                  '🔴 Borda vermelha = lote vencido ou crítico',
-                  '🟡 Borda amarela = lote com validade próxima',
-                  '🟢 Borda verde = lote com validade segura',
-                  'Toque em um lote para editar ou dar baixa específica',
+                  '🔴 Vencido — toque em "Resolver" para descartar ou registrar uso',
+                  '🟡 Borda amarela = vence em até 30 dias',
+                  '🟢 Borda verde = validade segura',
                 ],
               ),
               TutorialStep(
                 key: _keyDetailFAB,
                 title: 'Adicionar Novo Lote',
-                description: 'Toque no botão "+" para registrar um novo lote de estoque para este produto. Informe a quantidade, validade, origem e localização do lote.',
+                description:
+                    'Registre um novo lote para este produto. Informe quantidade, validade, origem e localização.',
                 icon: Icons.add_box_rounded,
                 align: ContentAlign.top,
                 hints: const [
-                  'Registre cada compra ou doação como um lote separado',
-                  'Informe a localização física (prateleira, sala) do lote',
-                  'Lotes com validade diferente devem ser cadastrados separadamente',
+                  'Cada compra/doação deve virar um lote separado',
+                  'Lotes com validades diferentes devem ser separados',
                 ],
               ),
             ],
@@ -231,7 +305,7 @@ class ProductDetailPage extends ConsumerWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                p.name,
+                product.name,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -259,7 +333,11 @@ class ProductDetailPage extends ConsumerWidget {
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF1348A0), Color(0xFF1D5FA8), Color(0xFF2563EB)],
+                  colors: [
+                    Color(0xFF0F3B82),
+                    Color(0xFF1D5FA8),
+                    Color(0xFF2563EB),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -270,11 +348,11 @@ class ProductDetailPage extends ConsumerWidget {
               right: -30,
               top: -20,
               child: Container(
-                width: 130,
-                height: 130,
+                width: 150,
+                height: 150,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.05),
+                  color: Colors.white.withValues(alpha: 0.06),
                 ),
               ),
             ),
@@ -282,11 +360,11 @@ class ProductDetailPage extends ConsumerWidget {
               right: 40,
               bottom: 10,
               child: Container(
-                width: 60,
-                height: 60,
+                width: 70,
+                height: 70,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.07),
+                  color: Colors.white.withValues(alpha: 0.08),
                 ),
               ),
             ),
@@ -294,7 +372,7 @@ class ProductDetailPage extends ConsumerWidget {
             SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 52, 14, 12),
+                padding: const EdgeInsets.fromLTRB(14, 58, 14, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -303,32 +381,32 @@ class ProductDetailPage extends ConsumerWidget {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Avatar do produto
                         Container(
-                          width: 46,
-                          height: 46,
+                          width: 48,
+                          height: 48,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                Colors.white.withValues(alpha: 0.25),
-                                Colors.white.withValues(alpha: 0.1),
+                                Colors.white.withValues(alpha: 0.28),
+                                Colors.white.withValues(alpha: 0.10),
                               ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(13),
                             border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
+                                color: Colors.white.withValues(alpha: 0.35),
                                 width: 1),
                           ),
-                          child: p.imageUrl != null && p.imageUrl!.isNotEmpty
+                          child: product.imageUrl != null &&
+                                  product.imageUrl!.isNotEmpty
                               ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(11),
-                                  child: Image.network(p.imageUrl!,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(product.imageUrl!,
                                       fit: BoxFit.cover),
                                 )
                               : const Icon(Icons.inventory_2_rounded,
-                                  color: Colors.white, size: 22),
+                                  color: Colors.white, size: 23),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -336,28 +414,29 @@ class ProductDetailPage extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if ((p.brand ?? '').isNotEmpty)
+                              if ((product.brand ?? '').isNotEmpty)
                                 Text(
-                                  p.brand!.toUpperCase(),
+                                  product.brand!.toUpperCase(),
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    fontSize: 9,
+                                    color:
+                                        Colors.white.withValues(alpha: 0.7),
+                                    fontSize: 9.5,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 1.2,
                                   ),
                                 ),
-                              if ((p.barcode ?? '').isNotEmpty)
+                              if ((product.barcode ?? '').isNotEmpty)
                                 Row(children: [
                                   Icon(Icons.qr_code_rounded,
-                                      size: 9,
-                                      color:
-                                          Colors.white.withValues(alpha: 0.5)),
+                                      size: 10,
+                                      color: Colors.white
+                                          .withValues(alpha: 0.55)),
                                   const SizedBox(width: 3),
-                                  Text(p.barcode!,
+                                  Text(product.barcode!,
                                       style: TextStyle(
-                                          color:
-                                              Colors.white.withValues(alpha: 0.5),
-                                          fontSize: 9,
+                                          color: Colors.white
+                                              .withValues(alpha: 0.55),
+                                          fontSize: 9.5,
                                           letterSpacing: 0.5)),
                                 ]),
                             ],
@@ -365,25 +444,25 @@ class ProductDetailPage extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 9),
                     Wrap(
-                      spacing: 4,
-                      runSpacing: 3,
+                      spacing: 5,
+                      runSpacing: 4,
                       children: [
-                        _HChip(p.unit),
-                        _HChip(p.category.name,
+                        _HChip(product.unit),
+                        _HChip(product.category.name,
                             icon: Icons.category_outlined,
                             color: const Color(0xFFBAD4FF)),
-                        if (p.isPerishable)
-                          _HChip('Perecivel',
+                        if (product.isPerishable)
+                          _HChip('Perecível',
                               icon: Icons.schedule_rounded,
                               color: const Color(0xFFFFE0A0))
                         else
-                          _HChip('Nao perecivel',
+                          _HChip('Não perecível',
                               icon: Icons.shield_outlined,
                               color: const Color(0xFFA7F3D0)),
-                        if (p.minimumStock > 0)
-                          _HChip('Min: ${p.minimumStock}',
+                        if (product.minimumStock > 0)
+                          _HChip('Mín: ${product.minimumStock}',
                               icon: Icons.warning_amber_rounded,
                               color: const Color(0xFFFFE0A0)),
                       ],
@@ -399,7 +478,535 @@ class ProductDetailPage extends ConsumerWidget {
   }
 }
 
-// ─── Botão de navegação ────────────────────────────────────────────────────
+// ─── Loading / Error scaffolds ─────────────────────────────────────────────
+
+class _LoadingScaffold extends StatelessWidget {
+  final ColorScheme cs;
+  final bool isDark;
+  const _LoadingScaffold({required this.cs, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          expandedHeight: 165,
+          pinned: true,
+          backgroundColor: AppColors.brandPrimary600,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF0F3B82),
+                  Color(0xFF1D5FA8),
+                  Color(0xFF2563EB),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (_, __) => const Padding(
+                padding: EdgeInsets.only(bottom: AppSpacing.md),
+                child: CasaCardSkeleton(),
+              ),
+              childCount: 4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ErrorScaffold extends StatelessWidget {
+  final String message;
+  final ColorScheme cs;
+  const _ErrorScaffold({required this.message, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline_rounded,
+                size: 48, color: cs.error),
+            const SizedBox(height: AppSpacing.md),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: cs.onSurface)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Banner de vencidos ────────────────────────────────────────────────────
+
+class _ExpiredBanner extends StatelessWidget {
+  final Product product;
+  final List<Batch> expired;
+  final bool isDark;
+  final ColorScheme cs;
+  final VoidCallback onResolveAll;
+  const _ExpiredBanner({
+    required this.product,
+    required this.expired,
+    required this.isDark,
+    required this.cs,
+    required this.onResolveAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final totalUnits = expired.fold<int>(0, (s, b) => s + b.quantity);
+    final accent = const Color(0xFFEF4444);
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [
+                  const Color(0xFF3F1414),
+                  const Color(0xFF2A0F0F),
+                ]
+              : [
+                  const Color(0xFFFEF2F2),
+                  const Color(0xFFFEE2E2),
+                ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.35), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: isDark ? 0.20 : 0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: isDark ? 0.22 : 0.14),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: accent.withValues(alpha: 0.45), width: 1.2),
+              ),
+              child: Icon(Icons.warning_amber_rounded,
+                  color: accent, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${expired.length} lote${expired.length > 1 ? 's' : ''} vencido${expired.length > 1 ? 's' : ''}',
+                    style: TextStyle(
+                      color:
+                          isDark ? const Color(0xFFFCA5A5) : accent,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    '$totalUnits ${product.unit} pendentes de baixa',
+                    style: TextStyle(
+                      color: cs.onSurfaceVariant,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: onResolveAll,
+              style: FilledButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                textStyle: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700),
+                elevation: 0,
+              ),
+              icon: const Icon(Icons.task_alt_rounded, size: 15),
+              label: const Text('Resolver'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Bottom sheet de resolução (vencidos) ──────────────────────────────────
+
+class _ResolveExpiredSheet extends ConsumerStatefulWidget {
+  final Product product;
+  final List<Batch> batches;
+  final bool isDark;
+  final ColorScheme cs;
+  const _ResolveExpiredSheet({
+    required this.product,
+    required this.batches,
+    required this.isDark,
+    required this.cs,
+  });
+
+  @override
+  ConsumerState<_ResolveExpiredSheet> createState() =>
+      _ResolveExpiredSheetState();
+}
+
+class _ResolveExpiredSheetState extends ConsumerState<_ResolveExpiredSheet> {
+  bool _submitting = false;
+  final _noteCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _apply({
+    required MovementType type,
+    required MovementReasonCode reasonCode,
+    required String successMessage,
+  }) async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    final notifier = ref.read(stockNotifierProvider.notifier);
+    final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
+    try {
+      for (final b in widget.batches) {
+        await notifier.writeOffExpiredBatch(
+          b,
+          type: type,
+          reasonCode: reasonCode,
+          note: note,
+        );
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      showCasaSnackbar(context, message: successMessage, isSuccess: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      showCasaSnackbar(context,
+          message: 'Erro ao registrar baixa: $e', isError: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = widget.cs;
+    final isDark = widget.isDark;
+    final totalUnits =
+        widget.batches.fold<int>(0, (s, b) => s + b.quantity);
+    final bg = isDark ? const Color(0xFF111827) : cs.surface;
+
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadius.modal)),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 38,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(
+                        color: const Color(0xFFEF4444)
+                            .withValues(alpha: 0.35)),
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded,
+                      color: Color(0xFFEF4444), size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.batches.length == 1
+                            ? 'Lote vencido'
+                            : '${widget.batches.length} lotes vencidos',
+                        style: TextStyle(
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                      Text(
+                        '$totalUnits ${widget.product.unit} de ${widget.product.name}',
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'O que deseja fazer?',
+              style: TextStyle(
+                color: cs.onSurfaceVariant,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _ResolveOption(
+              icon: Icons.delete_sweep_rounded,
+              title: 'Descartar (validade vencida)',
+              subtitle:
+                  'Baixa total · status descartado · motivo: validade',
+              color: const Color(0xFFEF4444),
+              isDark: isDark,
+              cs: cs,
+              enabled: !_submitting,
+              onTap: () => _apply(
+                type: MovementType.descarte,
+                reasonCode: MovementReasonCode.validade,
+                successMessage: 'Lote(s) descartado(s) por validade.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            _ResolveOption(
+              icon: Icons.warning_amber_rounded,
+              title: 'Descartar (avaria/estraga­do)',
+              subtitle:
+                  'Baixa total · status descartado · motivo: avaria',
+              color: const Color(0xFFF59E0B),
+              isDark: isDark,
+              cs: cs,
+              enabled: !_submitting,
+              onTap: () => _apply(
+                type: MovementType.descarte,
+                reasonCode: MovementReasonCode.avaria,
+                successMessage: 'Lote(s) descartado(s) por avaria.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            _ResolveOption(
+              icon: Icons.volunteer_activism_rounded,
+              title: 'Registrar como doação',
+              subtitle:
+                  'Baixa total como saída · status distribuído · motivo: doação',
+              color: const Color(0xFF22C55E),
+              isDark: isDark,
+              cs: cs,
+              enabled: !_submitting,
+              onTap: () => _apply(
+                type: MovementType.saida,
+                reasonCode: MovementReasonCode.doacao,
+                successMessage: 'Lote(s) registrado(s) como doação.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _noteCtrl,
+              enabled: !_submitting,
+              minLines: 1,
+              maxLines: 3,
+              style: TextStyle(color: cs.onSurface, fontSize: 13),
+              decoration: InputDecoration(
+                labelText: 'Observação (opcional)',
+                labelStyle:
+                    TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+                hintText: 'Ex.: Conferido por... / Destino...',
+                hintStyle: TextStyle(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                    fontSize: 12),
+                filled: true,
+                fillColor: cs.surfaceContainerHigh,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.input),
+                  borderSide: BorderSide(color: cs.outlineVariant),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.input),
+                  borderSide: BorderSide(color: cs.outlineVariant),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.input),
+                  borderSide:
+                      const BorderSide(color: AppColors.brandPrimary600),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            if (_submitting)
+              const Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed:
+                  _submitting ? null : () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: cs.onSurfaceVariant,
+                minimumSize: const Size.fromHeight(40),
+              ),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ResolveOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final bool isDark;
+  final ColorScheme cs;
+  final bool enabled;
+  final VoidCallback onTap;
+  const _ResolveOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.isDark,
+    required this.cs,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: enabled ? onTap : null,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 11, 10, 11),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: color.withValues(alpha: isDark ? 0.30 : 0.22),
+                  width: 1),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: isDark ? 0.20 : 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: color, size: 18),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 10.5,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios_rounded,
+                    size: 12, color: cs.onSurfaceVariant),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Botão de navegação (no AppBar) ────────────────────────────────────────
 
 class _NavButton extends StatelessWidget {
   final IconData icon;
@@ -411,21 +1018,21 @@ class _NavButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 34,
-        height: 34,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.15),
+          color: Colors.white.withValues(alpha: 0.16),
           shape: BoxShape.circle,
-          border:
-              Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+          border: Border.all(
+              color: Colors.white.withValues(alpha: 0.22), width: 1),
         ),
-        child: Icon(icon, color: Colors.white, size: 16),
+        child: Icon(icon, color: Colors.white, size: 17),
       ),
     );
   }
 }
 
-// ─── Header chip ──────────────────────────────────────────────────────────
+// ─── Chip do header ────────────────────────────────────────────────────────
 
 class _HChip extends StatelessWidget {
   final String label;
@@ -439,28 +1046,28 @@ class _HChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
+        color: Colors.white.withValues(alpha: 0.13),
         borderRadius: BorderRadius.circular(AppRadius.pill),
         border:
-            Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
+            Border.all(color: Colors.white.withValues(alpha: 0.20), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 9, color: c),
+            Icon(icon, size: 9.5, color: c),
             const SizedBox(width: 3),
           ],
           Text(label,
               style: TextStyle(
-                  fontSize: 9, color: c, fontWeight: FontWeight.w600)),
+                  fontSize: 9.5, color: c, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 }
 
-// ─── Stats row ────────────────────────────────────────────────────────────
+// ─── Stats row ─────────────────────────────────────────────────────────────
 
 class _StatsRow extends StatelessWidget {
   final int totalBatches;
@@ -469,23 +1076,26 @@ class _StatsRow extends StatelessWidget {
   final int critical;
   final int expired;
   final bool isDark;
-  const _StatsRow(
-      {required this.totalBatches,
-      required this.totalQty,
-      required this.totalValue,
-      required this.critical,
-      required this.expired,
-      required this.isDark});
+  final ColorScheme cs;
+  const _StatsRow({
+    required this.totalBatches,
+    required this.totalQty,
+    required this.totalValue,
+    required this.critical,
+    required this.expired,
+    required this.isDark,
+    required this.cs,
+  });
 
   @override
   Widget build(BuildContext context) {
     final currFmt = NumberFormat.currency(
         locale: 'pt_BR', symbol: 'R\$', decimalDigits: 0);
     final alertCount = expired > 0 ? expired : critical;
-    final alertLabel = expired > 0 ? 'Vencidos' : 'Criticos';
+    final alertLabel = expired > 0 ? 'Vencidos' : 'Críticos';
     final alertColor = expired > 0
-        ? const Color(0xFFF87171)
-        : const Color(0xFFFBBF24);
+        ? const Color(0xFFEF4444)
+        : const Color(0xFFF59E0B);
     final alertIcon =
         expired > 0 ? Icons.cancel_rounded : Icons.warning_amber_rounded;
 
@@ -497,6 +1107,7 @@ class _StatsRow extends StatelessWidget {
           icon: Icons.layers_rounded,
           color: const Color(0xFF60A5FA),
           isDark: isDark,
+          cs: cs,
         ),
         const SizedBox(width: 8),
         _StatCard(
@@ -505,14 +1116,16 @@ class _StatsRow extends StatelessWidget {
           icon: Icons.widgets_outlined,
           color: const Color(0xFF818CF8),
           isDark: isDark,
+          cs: cs,
         ),
         const SizedBox(width: 8),
         _StatCard(
           label: 'Valor',
           value: currFmt.format(totalValue),
           icon: Icons.attach_money_rounded,
-          color: const Color(0xFF4ADE80),
+          color: const Color(0xFF22C55E),
           isDark: isDark,
+          cs: cs,
           flex: 2,
         ),
         const SizedBox(width: 8),
@@ -522,6 +1135,7 @@ class _StatsRow extends StatelessWidget {
           icon: alertIcon,
           color: alertColor,
           isDark: isDark,
+          cs: cs,
         ),
       ],
     );
@@ -534,35 +1148,35 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final bool isDark;
+  final ColorScheme cs;
   final int flex;
-  const _StatCard(
-      {required this.label,
-      required this.value,
-      required this.icon,
-      required this.color,
-      required this.isDark,
-      this.flex = 1});
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+    required this.isDark,
+    required this.cs,
+    this.flex = 1,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final bg = isDark ? const Color(0xFF111827) : Colors.white;
-    final onBg = isDark ? const Color(0xFFE5E7EB) : const Color(0xFF1E293B);
-    final sub = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
-
     return Expanded(
       flex: flex,
       child: Container(
         padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
         decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(12),
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(13),
           border: Border.all(
-              color: color.withValues(alpha: isDark ? 0.2 : 0.15), width: 1),
+              color: color.withValues(alpha: isDark ? 0.28 : 0.18),
+              width: 1),
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: isDark ? 0.08 : 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: color.withValues(alpha: isDark ? 0.10 : 0.07),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -574,8 +1188,8 @@ class _StatCard extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: isDark ? 0.15 : 0.1),
-                borderRadius: BorderRadius.circular(7),
+                color: color.withValues(alpha: isDark ? 0.18 : 0.11),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, size: 14, color: color),
             ),
@@ -583,7 +1197,7 @@ class _StatCard extends StatelessWidget {
             Text(
               value,
               style: TextStyle(
-                color: onBg,
+                color: cs.onSurface,
                 fontWeight: FontWeight.w800,
                 fontSize: 15,
                 height: 1,
@@ -595,10 +1209,11 @@ class _StatCard extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                  color: sub,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2),
+                color: cs.onSurfaceVariant,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
             ),
           ],
         ),
@@ -607,7 +1222,7 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ─── Modal de confirmação de exclusão ─────────────────────────────────────
+// ─── Modal de confirmação de exclusão ──────────────────────────────────────
 
 class _DeleteConfirmDialog extends StatelessWidget {
   final Batch batch;
@@ -615,10 +1230,8 @@ class _DeleteConfirmDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF111827) : Colors.white;
-    final onBg = isDark ? const Color(0xFFE5E7EB) : const Color(0xFF1E293B);
-    final sub = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -626,14 +1239,14 @@ class _DeleteConfirmDialog extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(16),
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-              color: const Color(0xFFF87171).withValues(alpha: 0.3)),
+              color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.12),
-              blurRadius: 20,
+              blurRadius: 22,
               offset: const Offset(0, 6),
             ),
           ],
@@ -641,44 +1254,45 @@ class _DeleteConfirmDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Ícone
             Container(
-              width: 52,
-              height: 52,
+              width: 54,
+              height: 54,
               decoration: BoxDecoration(
-                color: const Color(0xFFF87171).withValues(alpha: 0.12),
+                color: const Color(0xFFEF4444).withValues(alpha: 0.14),
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: const Color(0xFFF87171).withValues(alpha: 0.3)),
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
               ),
               child: const Icon(Icons.delete_outline_rounded,
-                  color: Color(0xFFF87171), size: 24),
+                  color: Color(0xFFEF4444), size: 26),
             ),
             const SizedBox(height: 14),
             Text(
               'Excluir Lote',
               style: TextStyle(
-                color: onBg,
+                color: cs.onSurface,
                 fontWeight: FontWeight.w800,
                 fontSize: 16,
               ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Esta acao nao pode ser desfeita.\nTem certeza que deseja excluir este lote?',
+              'Esta ação remove o lote sem registrar baixa em estoque.\nUse "Resolver" para lotes vencidos quando quiser auditoria.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: sub, fontSize: 13, height: 1.4),
+              style: TextStyle(
+                  color: cs.onSurfaceVariant, fontSize: 12.5, height: 1.4),
             ),
             if ((batch.batchNumber ?? '').isNotEmpty) ...[
               const SizedBox(height: 10),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF87171).withValues(alpha: 0.08),
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                      color: const Color(0xFFF87171).withValues(alpha: 0.2)),
+                      color:
+                          const Color(0xFFEF4444).withValues(alpha: 0.2)),
                 ),
                 child: Text(
                   'Lote ${batch.batchNumber!}  ·  ${batch.quantity} unidades',
@@ -701,20 +1315,15 @@ class _DeleteConfirmDialog extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 11),
                       decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF1F2937)
-                            : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(9),
-                        border: Border.all(
-                            color: isDark
-                                ? const Color(0xFF374151)
-                                : const Color(0xFFE2E8F0)),
+                        color: cs.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: cs.outlineVariant),
                       ),
                       child: Text(
                         'Cancelar',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: sub,
+                          color: cs.onSurfaceVariant,
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
                         ),
@@ -730,11 +1339,12 @@ class _DeleteConfirmDialog extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 11),
                       decoration: BoxDecoration(
                         color: const Color(0xFFDC2626),
-                        borderRadius: BorderRadius.circular(9),
+                        borderRadius: BorderRadius.circular(10),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFDC2626).withValues(alpha: 0.3),
-                            blurRadius: 6,
+                            color: const Color(0xFFDC2626)
+                                .withValues(alpha: 0.3),
+                            blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
                         ],
@@ -760,34 +1370,39 @@ class _DeleteConfirmDialog extends StatelessWidget {
   }
 }
 
-// ─── Card de lote ─────────────────────────────────────────────────────────
+// ─── Card de lote ──────────────────────────────────────────────────────────
 
 class _BatchCard extends StatelessWidget {
   final Batch batch;
   final bool isDark;
+  final ColorScheme cs;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  const _BatchCard(
-      {required this.batch,
-      required this.isDark,
-      required this.onEdit,
-      required this.onDelete});
+  final VoidCallback? onResolveExpired;
+  const _BatchCard({
+    required this.batch,
+    required this.isDark,
+    required this.cs,
+    required this.onEdit,
+    required this.onDelete,
+    this.onResolveExpired,
+  });
 
   Color _statusColor() {
-    if (batch.noExpiry) return const Color(0xFF34D399);
-    if (batch.isExpired) return const Color(0xFFF87171);
+    if (batch.noExpiry) return const Color(0xFF22C55E);
+    if (batch.isExpired) return const Color(0xFFEF4444);
     final u = batch.daysToExpiry;
-    if (u <= 7) return const Color(0xFFF87171);
-    if (u <= 30) return const Color(0xFFFBBF24);
-    return const Color(0xFF34D399);
+    if (u <= 7) return const Color(0xFFEF4444);
+    if (u <= 30) return const Color(0xFFF59E0B);
+    return const Color(0xFF22C55E);
   }
 
   String _statusLabel() {
     if (batch.noExpiry) return 'Sem validade';
     if (batch.isExpired) return 'Vencido';
     final u = batch.daysToExpiry;
-    if (u <= 7) return 'Critico';
-    if (u <= 30) return 'Atencao';
+    if (u <= 7) return 'Crítico';
+    if (u <= 30) return 'Atenção';
     return 'OK';
   }
 
@@ -801,7 +1416,7 @@ class _BatchCard extends StatelessWidget {
   }
 
   String _originLabel() => switch (batch.origin) {
-        'doacao' => 'Doacao',
+        'doacao' => 'Doação',
         'compra' => 'Compra',
         'parceiro' => 'Parceiro',
         'transferencia' => 'Transf.',
@@ -815,42 +1430,40 @@ class _BatchCard extends StatelessWidget {
     final sc = _statusColor();
     final days = batch.daysToExpiry;
 
-    final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
-    final headerBg = sc.withValues(alpha: isDark ? 0.1 : 0.06);
-    final borderColor = sc.withValues(alpha: isDark ? 0.25 : 0.18);
-    final labelColor = sc;
-    final onCard = isDark ? const Color(0xFFE5E7EB) : const Color(0xFF1E293B);
-    final onCardSub = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
+    final cardBg = cs.surfaceContainerLow;
+    final headerBg = sc.withValues(alpha: isDark ? 0.12 : 0.07);
+    final borderColor = sc.withValues(alpha: isDark ? 0.28 : 0.20);
+    final onCardSub = cs.onSurfaceVariant;
 
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(13),
         border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: sc.withValues(alpha: isDark ? 0.08 : 0.06),
-            blurRadius: 10,
+            color: sc.withValues(alpha: isDark ? 0.08 : 0.05),
+            blurRadius: 12,
             offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Column(
         children: [
-          // ── HEADER ────────────────────────────────────────────────────
+          // ── HEADER ───────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.fromLTRB(12, 9, 10, 9),
             decoration: BoxDecoration(
               color: headerBg,
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(11)),
+                  const BorderRadius.vertical(top: Radius.circular(12)),
               border: Border(
-                  bottom: BorderSide(
-                      color: sc.withValues(alpha: isDark ? 0.15 : 0.1))),
+                bottom: BorderSide(
+                    color: sc.withValues(alpha: isDark ? 0.18 : 0.12)),
+              ),
             ),
             child: Row(
               children: [
-                // Dot + ícone + label
                 Container(
                   width: 7,
                   height: 7,
@@ -859,19 +1472,19 @@ class _BatchCard extends StatelessWidget {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                          color: sc.withValues(alpha: 0.5),
-                          blurRadius: 4,
+                          color: sc.withValues(alpha: 0.55),
+                          blurRadius: 5,
                           spreadRadius: 1)
                     ],
                   ),
                 ),
                 const SizedBox(width: 7),
-                Icon(_statusIcon(), size: 13, color: labelColor),
+                Icon(_statusIcon(), size: 13, color: sc),
                 const SizedBox(width: 4),
                 Text(
                   _statusLabel(),
                   style: TextStyle(
-                    color: labelColor,
+                    color: sc,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -895,46 +1508,46 @@ class _BatchCard extends StatelessWidget {
                   ),
                 ] else
                   const Spacer(),
-                // Quantidade pill
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: sc.withValues(alpha: isDark ? 0.15 : 0.09),
+                    color: sc.withValues(alpha: isDark ? 0.18 : 0.10),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: sc.withValues(alpha: 0.28)),
+                    border:
+                        Border.all(color: sc.withValues(alpha: 0.32)),
                   ),
                   child: Text(
                     '${batch.quantity} un.',
                     style: TextStyle(
-                        color: labelColor,
+                        color: sc,
                         fontSize: 11,
                         fontWeight: FontWeight.w700),
                   ),
                 ),
                 const SizedBox(width: 6),
-                // Editar
                 _ActionBtn(
                   icon: Icons.edit_rounded,
                   color: const Color(0xFF60A5FA),
                   isDark: isDark,
                   onTap: onEdit,
+                  tooltip: 'Editar',
                 ),
                 const SizedBox(width: 4),
-                // Excluir
                 _ActionBtn(
                   icon: Icons.delete_outline_rounded,
-                  color: const Color(0xFFF87171),
+                  color: const Color(0xFFEF4444),
                   isDark: isDark,
                   onTap: onDelete,
+                  tooltip: 'Excluir',
                 ),
               ],
             ),
           ),
 
-          // ── CORPO ─────────────────────────────────────────────────────
+          // ── CORPO ───────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+            padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -947,25 +1560,29 @@ class _BatchCard extends StatelessWidget {
                           icon: Icons.local_shipping_outlined,
                           label: _originLabel(),
                           color: const Color(0xFF818CF8),
-                          isDark: isDark),
+                          isDark: isDark,
+                          cs: cs),
                     if ((batch.batchNumber ?? '').isNotEmpty)
                       _InfoChip(
                           icon: Icons.tag_rounded,
                           label: batch.batchNumber!,
                           color: const Color(0xFFA78BFA),
-                          isDark: isDark),
+                          isDark: isDark,
+                          cs: cs),
                     if ((batch.shelfLocation ?? '').isNotEmpty)
                       _InfoChip(
                           icon: Icons.location_on_outlined,
                           label: batch.shelfLocation!,
                           color: const Color(0xFF38BDF8),
-                          isDark: isDark),
+                          isDark: isDark,
+                          cs: cs),
                     if (batch.unitPrice != null)
                       _InfoChip(
                           icon: Icons.attach_money_rounded,
                           label: currFmt.format(batch.unitPrice!),
-                          color: const Color(0xFF4ADE80),
-                          isDark: isDark),
+                          color: const Color(0xFF22C55E),
+                          isDark: isDark,
+                          cs: cs),
                   ],
                 ),
                 if ((batch.notes ?? '').isNotEmpty) ...[
@@ -973,19 +1590,41 @@ class _BatchCard extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.notes_rounded, size: 11, color: onCardSub),
+                      Icon(Icons.notes_rounded,
+                          size: 11, color: onCardSub),
                       const SizedBox(width: 5),
                       Expanded(
                         child: Text(
                           batch.notes!,
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 10.5,
                             color: onCardSub,
                             fontStyle: FontStyle.italic,
                           ),
                         ),
                       ),
                     ],
+                  ),
+                ],
+                if (onResolveExpired != null) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: onResolveExpired,
+                      icon: const Icon(Icons.task_alt_rounded, size: 16),
+                      label: const Text('Resolver lote vencido'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFEF4444),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        textStyle: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 12.5),
+                        elevation: 0,
+                      ),
+                    ),
                   ),
                 ],
               ],
@@ -995,36 +1634,43 @@ class _BatchCard extends StatelessWidget {
       ),
     );
   }
+
 }
 
-// ─── Action button (edit/delete) ──────────────────────────────────────────
+// ─── Action button ─────────────────────────────────────────────────────────
 
 class _ActionBtn extends StatelessWidget {
   final IconData icon;
   final Color color;
   final bool isDark;
   final VoidCallback onTap;
-  const _ActionBtn(
-      {required this.icon,
-      required this.color,
-      required this.isDark,
-      required this.onTap});
+  final String? tooltip;
+  const _ActionBtn({
+    required this.icon,
+    required this.color,
+    required this.isDark,
+    required this.onTap,
+    this.tooltip,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    final btn = GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 26,
-        height: 26,
+        width: 28,
+        height: 28,
         decoration: BoxDecoration(
-          color: color.withValues(alpha: isDark ? 0.13 : 0.08),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withValues(alpha: isDark ? 0.25 : 0.2)),
+          color: color.withValues(alpha: isDark ? 0.16 : 0.10),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+              color: color.withValues(alpha: isDark ? 0.30 : 0.22)),
         ),
-        child: Icon(icon, size: 12, color: color),
+        child: Icon(icon, size: 13, color: color),
       ),
     );
+    if (tooltip == null) return btn;
+    return Tooltip(message: tooltip!, child: btn);
   }
 }
 
@@ -1035,11 +1681,13 @@ class _InfoChip extends StatelessWidget {
   final String label;
   final Color color;
   final bool isDark;
+  final ColorScheme cs;
   const _InfoChip({
     required this.icon,
     required this.label,
     required this.color,
     required this.isDark,
+    required this.cs,
   });
 
   @override
@@ -1047,22 +1695,21 @@ class _InfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: isDark ? 0.12 : 0.07),
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: color.withValues(alpha: isDark ? 0.22 : 0.18)),
+        color: color.withValues(alpha: isDark ? 0.14 : 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+            color: color.withValues(alpha: isDark ? 0.24 : 0.18)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 10, color: color.withValues(alpha: 0.85)),
+          Icon(icon, size: 10.5, color: color.withValues(alpha: 0.9)),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
-              fontSize: 10,
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.75)
-                  : const Color(0xFF374151),
+              fontSize: 10.5,
+              color: cs.onSurface.withValues(alpha: 0.8),
               fontWeight: FontWeight.w600,
             ),
           ),
