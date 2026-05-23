@@ -11,8 +11,11 @@ final productsProvider = StreamProvider<List<Product>>((ref) {
   return ref.watch(productsDatasourceProvider).watchProducts();
 });
 
+// autoDispose garante que o cache é descartado quando o widget sai da tela.
+// Sem isso, um resultado null (produto não encontrado) ficaria em cache
+// permanentemente — mesmo depois de cadastrar o produto e escanear novamente.
 final productByBarcodeProvider =
-    FutureProvider.family<Product?, String>((ref, barcode) async {
+    FutureProvider.autoDispose.family<Product?, String>((ref, barcode) async {
   return ref.watch(productsDatasourceProvider).getProductByBarcode(barcode);
 });
 
