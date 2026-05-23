@@ -244,35 +244,21 @@ class _MovementPageState extends ConsumerState<MovementPage> {
       return;
     }
 
-    setState(() => _isLoading = true);
-    try {
-      final result = await ref.read(stockDatasourceProvider).registerBulkOutputFefo(
-            items: requests,
-            performedBy: user.id,
-            performedByName: user.name,
-            reasonCode: _reasonCode,
-            reason: _reasonLabels[_reasonCode],
-            activity: null,
-          );
-      if (!mounted) return;
-      // Limpa estado e para o loading ANTES de navegar para não travar o botão
-      setState(() {
-        _isLoading = false;
-        _selectedQtyByProduct.clear();
-      });
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute(builder: (_) => OutputViewPage(output: result)),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      showCasaSnackbar(
-        context,
-        message: error.toString().replaceFirst('Exception: ', ''),
-        isError: true,
-      );
-    }
+    setState(() => _selectedQtyByProduct.clear());
+
+    final pendingFuture = ref.read(stockDatasourceProvider).registerBulkOutputFefo(
+      items: requests,
+      performedBy: user.id,
+      performedByName: user.name,
+      reasonCode: _reasonCode,
+      reason: _reasonLabels[_reasonCode],
+      activity: null,
+    );
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(builder: (_) => OutputViewPage(pending: pendingFuture)),
+    );
   }
 
   Future<void> _submitRecipe(StockRecipe recipe) async {
