@@ -167,11 +167,15 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
     if (mounted) setState(() => _cameraFailed = false);
     _log('📷 Iniciando câmera... (tentativa ${attempt + 1})');
 
-    // No iOS/web, parar câmera antes de reiniciar evita
-    // que o browser trave o stream após a permissão ser concedida.
-    if (kIsWeb && attempt > 0) {
+    // Web: sempre para o stream anterior antes de iniciar (mesmo attempt=0).
+    // Sem o stop prévio, mobile_scanner pode tentar criar um segundo stream
+    // enquanto o anterior ainda está sendo liberado, causando flickering.
+    // attempt=0 usa 200 ms mínimo para o browser finalizar o track anterior.
+    if (kIsWeb) {
       try { await _camera.stop(); } catch (_) {}
-      await Future.delayed(Duration(milliseconds: 400 * attempt));
+      await Future.delayed(attempt > 0
+          ? Duration(milliseconds: 400 * attempt)
+          : const Duration(milliseconds: 200));
     }
 
     try {
