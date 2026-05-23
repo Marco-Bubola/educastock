@@ -297,7 +297,7 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                '${r.items.length} ${r.items.length == 1 ? 'item' : 'itens'} • ${totalQty} unid. total',
+                                                '${r.items.length} ${r.items.length == 1 ? 'item' : 'itens'} • $totalQty unid. total',
                                                 style: TextStyle(
                                                     color: textSub,
                                                     fontSize: 12),
@@ -450,7 +450,35 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 10),
+                                        const SizedBox(width: 8),
+                                        GestureDetector(
+                                          onTap: actionState.isLoading
+                                              ? null
+                                              : () => context.push(
+                                                  AppRoutes.recipeCreate,
+                                                  extra: r),
+                                          child: Container(
+                                            width: 44,
+                                            height: 44,
+                                            decoration: BoxDecoration(
+                                              color: isDark
+                                                  ? const Color(0xFF1E3A5F)
+                                                  : const Color(0xFFEFF6FF),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: isDark
+                                                    ? const Color(0xFF1E40AF)
+                                                    : const Color(0xFFBFDBFE),
+                                              ),
+                                            ),
+                                            child: const Icon(
+                                                Icons.edit_outlined,
+                                                color: Color(0xFF2563EB),
+                                                size: 20),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
                                         GestureDetector(
                                           onTap: actionState.isLoading
                                               ? null
@@ -638,8 +666,8 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
     // Group available stock by productId
     final Map<String, int> available = {};
     for (final b in batches) {
-      final pid = b.productId as String;
-      available[pid] = (available[pid] ?? 0) + (b.quantity as int);
+      final pid = b.productId;
+      available[pid] = (available[pid] ?? 0) + (b.quantity);
     }
 
     final items = recipe.items as List;
