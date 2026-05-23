@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../domain/entities/stock_movement.dart';
 import '../controllers/stock_provider.dart';
+import 'output_view_page.dart';
 
 class HistoryPage extends ConsumerStatefulWidget {
   const HistoryPage({super.key});
@@ -52,6 +53,44 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
 
   int get _activeFilterCount =>
       (_filterReason != null ? 1 : 0) + (_filterDateRange != null ? 1 : 0);
+
+  Future<void> _openOutputDetail(List<StockMovement> session) async {
+    final first = session.first;
+    final createdAt = first.performedAt.toIso8601String();
+    final performedBy = first.performedBy;
+
+    Map<String, dynamic>? output;
+    try {
+      output = await ref.read(stockDatasourceProvider).fetchOutputBySession(createdAt, performedBy);
+    } catch (_) {}
+
+    output ??= _reconstructOutputFromMovements(session);
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(builder: (_) => OutputViewPage(output: output!)),
+    );
+  }
+
+  Map<String, dynamic> _reconstructOutputFromMovements(List<StockMovement> movements) {
+    return {
+      'outputId': movements.first.id,
+      'createdAt': movements.first.performedAt.toIso8601String(),
+      'performedByName': movements.first.performedByName,
+      'reason': movements.first.reason,
+      'reasonCode': movements.first.reasonCode,
+      'movements': movements.map((m) => {
+        'productId': m.productId,
+        'productName': m.productName,
+        'batchId': m.batchId,
+        'consumed': m.quantity,
+        'before': (m.auditBefore?['quantity'] as num?)?.toInt() ?? 0,
+        'after': (m.auditAfter?['quantity'] as num?)?.toInt() ?? 0,
+        'shelfLocation': null,
+        'expiryDate': null,
+      }).toList(),
+    };
+  }
 
   void _showFilterModal() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -691,6 +730,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                               reasonLabels: _reasonLabels,
                               reasonIcons: _reasonIcons,
                               formatTime: _formatTime,
+                              onDetailsTap: () => _openOutputDetail(s),
                             )),
                       ],
                     ],
@@ -1048,6 +1088,7 @@ class _SessionCard extends StatefulWidget {
   final Map<String, String> reasonLabels;
   final Map<String, IconData> reasonIcons;
   final String Function(DateTime) formatTime;
+  final VoidCallback? onDetailsTap;
 
   const _SessionCard({
     required this.movements,
@@ -1058,6 +1099,7 @@ class _SessionCard extends StatefulWidget {
     required this.reasonLabels,
     required this.reasonIcons,
     required this.formatTime,
+    this.onDetailsTap,
   });
 
   @override
@@ -1284,6 +1326,37 @@ class _SessionCardState extends State<_SessionCard> {
                     ),
                   ),
                 ],
+
+                // Linha 4: botão ver relatório
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: widget.onDetailsTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: colors[0].withValues(alpha: isDark ? 0.15 : 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: colors[0].withValues(alpha: isDark ? 0.30 : 0.20)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.receipt_long_rounded, size: 14, color: colors[0]),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Ver relatório completo',
+                          style: TextStyle(
+                            color: colors[0],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_forward_rounded, size: 13, color: colors[0]),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
