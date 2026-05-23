@@ -798,6 +798,9 @@ class _ChartsTab extends ConsumerWidget {
               healthScore: healthScore,
               isDark: isDark,
               cs: cs,
+              criticalBatches: exp7List,
+              warningBatches: exp30List,
+              expiredBatches: batches.where((b) => b.isExpired).toList(),
             ),
             const SizedBox(height: AppSpacing.xl),
 
@@ -1123,7 +1126,10 @@ class _MlRiskTab extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sm),
           ...criticals.take(8).map((p) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                child: RiskInsightCard(prediction: p),
+                child: RiskInsightCard(
+                  prediction: p,
+                  onTap: () => _showRiskActionSheet(context, p),
+                ),
               )),
           if (criticals.length > 8)
             Padding(
@@ -1154,7 +1160,10 @@ class _MlRiskTab extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sm),
           ...amarelos.take(5).map((p) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                child: RiskInsightCard(prediction: p),
+                child: RiskInsightCard(
+                  prediction: p,
+                  onTap: () => _showRiskActionSheet(context, p),
+                ),
               )),
           if (amarelos.length > 5)
             Padding(
@@ -1248,6 +1257,239 @@ class _MlRiskTab extends ConsumerWidget {
     final cmp = order[a.level]!.compareTo(order[b.level]!);
     if (cmp != 0) return cmp;
     return b.confidence.compareTo(a.confidence);
+  }
+}
+
+// ─── Risk Action Sheet ────────────────────────────────────────────────────
+
+void _showRiskActionSheet(BuildContext context, RiskPrediction prediction) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => _RiskActionSheet(prediction: prediction),
+  );
+}
+
+class _RiskActionSheet extends StatelessWidget {
+  final RiskPrediction prediction;
+  const _RiskActionSheet({required this.prediction});
+
+  Color get _fg => switch (prediction.level) {
+        RiskLevel.vermelho => AppColors.danger600,
+        RiskLevel.amarelo => AppColors.warning600,
+        RiskLevel.verde => AppColors.success600,
+      };
+
+  IconData get _icon => switch (prediction.level) {
+        RiskLevel.vermelho => Icons.warning_rounded,
+        RiskLevel.amarelo => Icons.schedule_rounded,
+        RiskLevel.verde => Icons.check_circle_rounded,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = _fg;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadius.modal)),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: BoxDecoration(
+                    color: cs.outlineVariant,
+                    borderRadius: BorderRadius.circular(4)),
+              ),
+            ),
+            // Header info card
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: fg.withValues(alpha: isDark ? 0.14 : 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border: Border.all(color: fg.withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      color: fg.withValues(alpha: isDark ? 0.22 : 0.14),
+                      borderRadius: BorderRadius.circular(AppRadius.small),
+                    ),
+                    child: Icon(_icon, color: fg, size: 24),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          prediction.productName,
+                          style: AppTypography.labelLarge.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          prediction.level.description,
+                          style: AppTypography.bodySmall.copyWith(
+                              color: cs.onSurfaceVariant, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  RiskBadge(level: prediction.level),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Ações disponíveis',
+              style: AppTypography.labelMedium.copyWith(
+                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            if (prediction.level == RiskLevel.vermelho) ...[
+              _ActionTile(
+                icon: Icons.local_shipping_rounded,
+                label: 'Distribuir urgente',
+                description: 'Registre a saída imediata deste lote crítico',
+                color: AppColors.danger600,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push(AppRoutes.movement);
+                },
+                cs: cs,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              _ActionTile(
+                icon: Icons.delete_outline_rounded,
+                label: 'Registrar descarte',
+                description: 'Lote vencido ou inapropriado para uso',
+                color: AppColors.warning600,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push(AppRoutes.movement);
+                },
+                cs: cs,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
+            if (prediction.level == RiskLevel.amarelo) ...[
+              _ActionTile(
+                icon: Icons.local_shipping_rounded,
+                label: 'Planejar distribuição',
+                description: 'Registre a saída antes do vencimento',
+                color: AppColors.warning600,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push(AppRoutes.movement);
+                },
+                cs: cs,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+            ],
+            _ActionTile(
+              icon: Icons.psychology_rounded,
+              label: 'Ver análise de IA completa',
+              description: 'Detalhes do modelo de classificação de risco',
+              color: AppColors.brandPrimary600,
+              onTap: () {
+                Navigator.of(context).pop();
+                context.push(AppRoutes.mlInsights);
+              },
+              cs: cs,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Action Tile (shared) ─────────────────────────────────────────────────
+
+class _ActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String description;
+  final Color color;
+  final VoidCallback onTap;
+  final ColorScheme cs;
+
+  const _ActionTile({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.color,
+    required this.onTap,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.small),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: AppTypography.labelMedium.copyWith(
+                        fontWeight: FontWeight.w700, color: cs.onSurface),
+                  ),
+                  Text(
+                    description,
+                    style: AppTypography.bodySmall.copyWith(
+                        color: cs.onSurfaceVariant, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                color: cs.onSurfaceVariant, size: 18),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -3468,6 +3710,9 @@ class _ModernStatsBanner extends StatelessWidget {
   final int healthScore;
   final bool isDark;
   final ColorScheme cs;
+  final List<Batch> criticalBatches;
+  final List<Batch> warningBatches;
+  final List<Batch> expiredBatches;
 
   const _ModernStatsBanner({
     required this.totalBatches,
@@ -3479,6 +3724,9 @@ class _ModernStatsBanner extends StatelessWidget {
     required this.healthScore,
     required this.isDark,
     required this.cs,
+    this.criticalBatches = const [],
+    this.warningBatches = const [],
+    this.expiredBatches = const [],
   });
 
   @override
@@ -3615,6 +3863,15 @@ class _ModernStatsBanner extends StatelessWidget {
                 color: criticals > 0 ? AppColors.danger600 : AppColors.success600,
                 isDark: isDark,
                 cs: cs,
+                onTap: criticalBatches.isEmpty
+                    ? null
+                    : () => _showBatchListSheet(
+                          context,
+                          title: 'Lotes Críticos (≤7 dias)',
+                          batches: criticalBatches,
+                          color: AppColors.danger600,
+                          icon: Icons.warning_rounded,
+                        ),
               ),
             ),
             const SizedBox(width: AppSpacing.xs),
@@ -3626,6 +3883,15 @@ class _ModernStatsBanner extends StatelessWidget {
                 color: warnings > 0 ? AppColors.warning600 : AppColors.success600,
                 isDark: isDark,
                 cs: cs,
+                onTap: warningBatches.isEmpty
+                    ? null
+                    : () => _showBatchListSheet(
+                          context,
+                          title: 'Lotes em Atenção (≤30 dias)',
+                          batches: warningBatches,
+                          color: AppColors.warning600,
+                          icon: Icons.schedule_rounded,
+                        ),
               ),
             ),
             const SizedBox(width: AppSpacing.xs),
@@ -3637,6 +3903,15 @@ class _ModernStatsBanner extends StatelessWidget {
                 color: expired > 0 ? AppColors.danger600 : AppColors.success600,
                 isDark: isDark,
                 cs: cs,
+                onTap: expiredBatches.isEmpty
+                    ? null
+                    : () => _showBatchListSheet(
+                          context,
+                          title: 'Lotes Vencidos',
+                          batches: expiredBatches,
+                          color: AppColors.danger600,
+                          icon: Icons.cancel_outlined,
+                        ),
               ),
             ),
           ],
@@ -3696,6 +3971,7 @@ class _AlertChip extends StatelessWidget {
   final Color color;
   final bool isDark;
   final ColorScheme cs;
+  final VoidCallback? onTap;
 
   const _AlertChip({
     required this.icon,
@@ -3704,11 +3980,14 @@ class _AlertChip extends StatelessWidget {
     required this.color,
     required this.isDark,
     required this.cs,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       padding: const EdgeInsets.symmetric(
           vertical: AppSpacing.sm, horizontal: AppSpacing.sm),
       decoration: BoxDecoration(
@@ -3748,7 +4027,8 @@ class _AlertChip extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),  // closes Container
+    );  // closes GestureDetector
   }
 }
 
@@ -4618,7 +4898,12 @@ class _ForecastReportTab extends ConsumerWidget {
                   ...needsReplenishment.take(10).map(
                         (f) => Padding(
                           padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                          child: _ForecastReplenishCard(forecast: f, cs: cs, isDark: isDark),
+                          child: _ForecastReplenishCard(
+                            forecast: f,
+                            cs: cs,
+                            isDark: isDark,
+                            onTap: () => _showForecastActionSheet(context, f),
+                          ),
                         ),
                       ),
                 ],
@@ -5417,11 +5702,13 @@ class _ForecastReplenishCard extends StatelessWidget {
   final ConsumptionForecast forecast;
   final ColorScheme cs;
   final bool isDark;
+  final VoidCallback? onTap;
 
   const _ForecastReplenishCard({
     required this.forecast,
     required this.cs,
     required this.isDark,
+    this.onTap,
   });
 
   @override
@@ -5438,7 +5725,9 @@ class _ForecastReplenishCard extends StatelessWidget {
             : 'Repor';
     final daysLeft = forecast.daysOfStockRemaining.clamp(0, 999).toInt();
 
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -5565,11 +5854,232 @@ class _ForecastReplenishCard extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),  // closes Container
+    );  // closes GestureDetector
   }
 }
 
 
+
+// ─── Forecast Action Sheet ────────────────────────────────────────────────
+
+void _showForecastActionSheet(
+    BuildContext context, ConsumptionForecast forecast) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => _ForecastActionSheet(forecast: forecast),
+  );
+}
+
+class _ForecastActionSheet extends StatelessWidget {
+  final ConsumptionForecast forecast;
+  const _ForecastActionSheet({required this.forecast});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final urgencyColor = forecast.isCriticalStock
+        ? AppColors.danger600
+        : forecast.isLowStock
+            ? AppColors.warning600
+            : AppColors.brandPrimary600;
+
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadius.modal)),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: BoxDecoration(
+                    color: cs.outlineVariant,
+                    borderRadius: BorderRadius.circular(4)),
+              ),
+            ),
+            // Info header
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: urgencyColor.withValues(alpha: isDark ? 0.14 : 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border:
+                    Border.all(color: urgencyColor.withValues(alpha: 0.25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          forecast.productName,
+                          style: AppTypography.labelLarge.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      TrendChip(
+                          trend: forecast.trend,
+                          trendPercent: forecast.trendPercent),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      _ForecastStatChip(
+                        label: 'Estoque',
+                        value: '${forecast.currentStock} un.',
+                        color: urgencyColor,
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      _ForecastStatChip(
+                        label: 'Prev. 30d',
+                        value:
+                            '${forecast.forecastMonthly.toStringAsFixed(0)} un.',
+                        color: AppColors.secondaryBlue600,
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      _ForecastStatChip(
+                        label: 'Sugerir repor',
+                        value: '+${forecast.suggestedReplenishment} un.',
+                        color: AppColors.success600,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Ações disponíveis',
+              style: AppTypography.labelMedium.copyWith(
+                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _ActionTile(
+              icon: Icons.add_circle_outline_rounded,
+              label: 'Registrar entrada de estoque',
+              description:
+                  'Adicione ${forecast.suggestedReplenishment} unidades ao estoque',
+              color: AppColors.success600,
+              onTap: () {
+                Navigator.of(context).pop();
+                context.push(AppRoutes.movement);
+              },
+              cs: cs,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _ActionTile(
+              icon: Icons.file_download_outlined,
+              label: 'Exportar pedido deste produto',
+              description:
+                  'Gera CSV com sugestão de ${forecast.suggestedReplenishment} unidades',
+              color: AppColors.warning600,
+              onTap: () {
+                Navigator.of(context).pop();
+                _exportSingleForecastCsv(context, forecast);
+              },
+              cs: cs,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _ActionTile(
+              icon: Icons.trending_up_rounded,
+              label: 'Ver previsão completa',
+              description: 'Histórico e série temporal do produto',
+              color: AppColors.brandPrimary600,
+              onTap: () {
+                Navigator.of(context).pop();
+                context.push(AppRoutes.mlForecast);
+              },
+              cs: cs,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ForecastStatChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _ForecastStatChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+                fontSize: 9,
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w500)),
+        Text(value,
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+      ],
+    );
+  }
+}
+
+Future<void> _exportSingleForecastCsv(
+    BuildContext context, ConsumptionForecast f) async {
+  final buf = StringBuffer();
+  buf.writeln(
+      'Produto,Previsão 7d,Previsão 30d,Estoque atual,Sugestão de reposição,Tendência,Modelo');
+  buf.writeln([
+    '"${f.productName.replaceAll('"', '""')}"',
+    f.forecastWeekly.toStringAsFixed(1),
+    f.forecastMonthly.toStringAsFixed(1),
+    f.currentStock,
+    f.suggestedReplenishment,
+    f.trend,
+    f.source,
+  ].join(','));
+  try {
+    final dir = await getTemporaryDirectory();
+    final file = File(
+        '${dir.path}/pedido_${f.productId}_${DateTime.now().millisecondsSinceEpoch}.csv');
+    await file.writeAsString(buf.toString());
+    await Share.shareXFiles([XFile(file.path, mimeType: 'text/csv')],
+        text: 'Pedido — ${f.productName}');
+    if (!context.mounted) return;
+    showCasaSnackbar(context,
+        message: 'Pedido exportado!', isSuccess: true);
+  } catch (_) {
+    if (!context.mounted) return;
+    showCasaSnackbar(context,
+        message: 'Erro ao exportar.', isSuccess: false);
+  }
+}
+
+// ─── Grid de resumo (kept for reference) ─────────────────────────────────
 
 class _SummaryGrid extends StatelessWidget {
   final int totalBatches;
@@ -5995,6 +6505,190 @@ class _ExpiryBarChart extends StatelessWidget {
         duration: const Duration(milliseconds: 600),
         curve: Curves.easeInOut,
       ),
+    );
+  }
+}
+
+// ─── Batch List Sheet (Charts tab alert chips) ───────────────────────────
+
+void _showBatchListSheet(
+  BuildContext context, {
+  required String title,
+  required List<Batch> batches,
+  required Color color,
+  required IconData icon,
+}) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => _BatchListSheet(
+      title: title,
+      batches: batches,
+      color: color,
+      icon: icon,
+    ),
+  );
+}
+
+class _BatchListSheet extends StatelessWidget {
+  final String title;
+  final List<Batch> batches;
+  final Color color;
+  final IconData icon;
+
+  const _BatchListSheet({
+    required this.title,
+    required this.batches,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dateFmt = DateFormat('dd/MM/yyyy');
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppRadius.modal)),
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36, height: 4,
+                        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                        decoration: BoxDecoration(
+                            color: cs.outlineVariant,
+                            borderRadius: BorderRadius.circular(4)),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.small),
+                          ),
+                          child: Icon(icon, color: color, size: 20),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: AppTypography.labelLarge.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: cs.onSurface),
+                              ),
+                              Text(
+                                '${batches.length} lote${batches.length != 1 ? 's' : ''}',
+                                style: AppTypography.bodySmall
+                                    .copyWith(color: cs.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Divider(
+                        color: cs.outlineVariant.withValues(alpha: 0.3)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                      AppSpacing.sm, AppSpacing.lg, AppSpacing.xl),
+                  itemCount: batches.length,
+                  separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      color: cs.outlineVariant.withValues(alpha: 0.2)),
+                  itemBuilder: (_, i) {
+                    final b = batches[i];
+                    final days = b.noExpiry ? null : b.daysToExpiry;
+                    final daysText = b.noExpiry
+                        ? 'Sem validade'
+                        : b.isExpired
+                            ? 'Vencido há ${-days!}d'
+                            : 'Vence em ${days}d';
+                    final daysColor = b.isExpired
+                        ? AppColors.danger600
+                        : days != null && days <= 7
+                            ? AppColors.danger600
+                            : days != null && days <= 30
+                                ? AppColors.warning600
+                                : AppColors.success600;
+                    return Padding(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8, height: 8,
+                            decoration: BoxDecoration(
+                                color: daysColor, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  b.productName,
+                                  style: AppTypography.labelMedium.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: cs.onSurface),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  '${b.quantity} un.'
+                                  '${b.expiryDate != null ? ' · ${dateFmt.format(b.expiryDate!)}' : ''}',
+                                  style: AppTypography.bodySmall.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                      fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            daysText,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: daysColor),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
