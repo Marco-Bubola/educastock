@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -177,6 +178,12 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
 
+    String? imageUrl = _existingImageUrl;
+    if (_imageFile != null) {
+      final bytes = await _imageFile!.readAsBytes();
+      imageUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+    }
+
     final product = Product(
       id: widget.productId ?? '',
       name: _nameController.text.trim(),
@@ -186,6 +193,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
       category: _category,
       unit: _effectiveUnit,
       barcode: widget.barcode,
+      imageUrl: imageUrl,
       description: _descController.text.trim().isEmpty
           ? null
           : _descController.text.trim(),
@@ -195,10 +203,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
       createdBy: _originalCreatedBy ?? user.id,
     );
 
-    await ref.read(productFormProvider.notifier).saveProduct(
-          product,
-          imageFile: _imageFile,
-        );
+    await ref.read(productFormProvider.notifier).saveProduct(product);
 
     final state = ref.read(productFormProvider);
     if (!mounted) return;
@@ -697,8 +702,9 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                 onPickCamera: () async {
                   final picked = await _imagePicker.pickImage(
                     source: ImageSource.camera,
-                    imageQuality: 80,
-                    maxWidth: 1280,
+                    imageQuality: 72,
+                    maxWidth: 600,
+                    maxHeight: 600,
                   );
                   if (picked != null && mounted) {
                     setState(() => _imageFile = File(picked.path));
@@ -707,8 +713,9 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
                 onPickGallery: () async {
                   final picked = await _imagePicker.pickImage(
                     source: ImageSource.gallery,
-                    imageQuality: 80,
-                    maxWidth: 1280,
+                    imageQuality: 72,
+                    maxWidth: 600,
+                    maxHeight: 600,
                   );
                   if (picked != null && mounted) {
                     setState(() => _imageFile = File(picked.path));
@@ -825,21 +832,27 @@ class _ProductImagePicker extends StatelessWidget {
     final hasImage = imageFile != null || existingImageUrl != null;
 
     if (hasImage) {
+      Widget imageWidget;
+      if (imageFile != null) {
+        imageWidget = Image.file(imageFile!,
+            height: 180, width: double.infinity, fit: BoxFit.cover);
+      } else if (existingImageUrl!.startsWith('data:')) {
+        final base64Str = existingImageUrl!.split(',').last;
+        imageWidget = Image.memory(base64Decode(base64Str),
+            height: 180, width: double.infinity, fit: BoxFit.cover);
+      } else {
+        imageWidget = Image.network(existingImageUrl!,
+            height: 180,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            loadingBuilder: (_, child, loading) =>
+                loading == null ? child : const SizedBox(height: 180));
+      }
       return Column(
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.card),
-            child: imageFile != null
-                ? Image.file(imageFile!,
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover)
-                : Image.network(existingImageUrl!,
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (_, child, loading) =>
-                        loading == null ? child : const SizedBox(height: 180)),
+            child: imageWidget,
           ),
           const SizedBox(height: AppSpacing.sm),
           TextButton.icon(
