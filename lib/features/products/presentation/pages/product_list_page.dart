@@ -167,7 +167,8 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
     );
   }
 
-  List<Product> _applyFilters(List<Product> products) {
+  List<Product> _applyFilters(
+      List<Product> products, Map<String, int> stockMap) {
     var result = products.where((p) {
       final q = _query.trim().toLowerCase();
       if (q.isNotEmpty) {
@@ -185,15 +186,28 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
       return true;
     }).toList();
 
-    switch (_sortMode) {
-      case _SortMode.name:
-        result.sort((a, b) => a.name.compareTo(b.name));
-      case _SortMode.category:
-        result.sort((a, b) => a.category.name.compareTo(b.category.name));
-      case _SortMode.perishable:
-        result.sort((a, b) =>
-            (b.isPerishable ? 1 : 0).compareTo(a.isPerishable ? 1 : 0));
+    int primarySort(Product a, Product b) {
+      switch (_sortMode) {
+        case _SortMode.name:
+          return a.name.compareTo(b.name);
+        case _SortMode.category:
+          final byCat = a.category.name.compareTo(b.category.name);
+          return byCat != 0 ? byCat : a.name.compareTo(b.name);
+        case _SortMode.perishable:
+          final byPer =
+              (b.isPerishable ? 1 : 0).compareTo(a.isPerishable ? 1 : 0);
+          return byPer != 0 ? byPer : a.name.compareTo(b.name);
+      }
     }
+
+    // Inativos (sem estoque) sempre por último, mas mantendo a ordem interna
+    // de cada grupo conforme o sort selecionado.
+    result.sort((a, b) {
+      final aInactive = (stockMap[a.id] ?? 0) <= 0;
+      final bInactive = (stockMap[b.id] ?? 0) <= 0;
+      if (aInactive != bInactive) return aInactive ? 1 : -1;
+      return primarySort(a, b);
+    });
     return result;
   }
 
@@ -211,6 +225,7 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final productsAsync = ref.watch(productsProvider);
+    final stockMap = ref.watch(productAvailableQtyMapProvider);
     final user = ref.watch(currentUserProvider);
     final categoryLabelMap = ref.watch(categoryLabelMapProvider);
     final availableCategories = productsAsync.valueOrNull
@@ -327,7 +342,7 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
             Expanded(
               child: productsAsync.when(
                 data: (products) {
-                  final filtered = _applyFilters(products);
+                  final filtered = _applyFilters(products, stockMap);
                   if (filtered.isEmpty) {
                     return CasaEmptyState(
                       icon: Icons.inventory_2_outlined,
@@ -360,10 +375,12 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                       final p = filtered[i];
                       final catLabel = categoryLabelMap[p.category.name] ??
                           defaultCategoryLabel(p.category);
+                      final inactive = (stockMap[p.id] ?? 0) <= 0;
                       final card = _ProductGridCard(
                         product: p,
                         catLabel: catLabel,
                         index: i,
+                        inactive: inactive,
                         onTap: () => context.push('/products/${p.id}'),
                       );
                       if (i == 0) {
@@ -1517,6 +1534,7 @@ class _ProductGridCard extends ConsumerWidget {
   final Product product;
   final String catLabel;
   final int index;
+  final bool inactive;
   final VoidCallback onTap;
 
   const _ProductGridCard({
@@ -1524,12 +1542,14 @@ class _ProductGridCard extends ConsumerWidget {
     required this.catLabel,
     required this.index,
     required this.onTap,
+    this.inactive = false,
   });
 
   static const _paletteRed    = [Color(0xFFDC2626), Color(0xFFB91C1C)];
   static const _paletteYellow = [Color(0xFFD97706), Color(0xFFB45309)];
   static const _paletteGreen  = [Color(0xFF059669), Color(0xFF047857)];
   static const _paletteBlue   = [Color(0xFF2563EB), Color(0xFF1D4ED8)];
+  static const _paletteGray   = [Color(0xFF6B7280), Color(0xFF4B5563)];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1583,17 +1603,26 @@ class _ProductGridCard extends ConsumerWidget {
       palette     = _paletteGreen;
     }
 
+    // Produto sem estoque (inativo) sobrescreve toda a coloração com cinza
+    // e exibe badge "INATIVO".
+    if (inactive) {
+      palette = _paletteGray;
+      expiryColor = const Color(0xFF9CA3AF);
+      expiryIcon = Icons.do_not_disturb_on_outlined;
+      expiryBadge = 'INATIVO';
+    }
+
     final accent      = palette[0];
     final accentDark  = palette[1];
     final cardBg      = isDark ? const Color(0xFF0F172A) : Colors.white;
     final borderColor = accent.withValues(alpha: isDark ? 0.35 : 0.20);
 
-    return TweenAnimationBuilder<double>(
+    final entryFade = TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: 180 + index * 8),
       curve: Curves.easeOutCubic,
       builder: (_, v, child) => Opacity(
-        opacity: v,
+        opacity: v * (inactive ? 0.62 : 1),
         child: Transform.translate(offset: Offset(0, 10 * (1 - v)), child: child),
       ),
       child: GestureDetector(
@@ -1839,6 +1868,18 @@ class _ProductGridCard extends ConsumerWidget {
           ),
         ),
       ),
+    );
+
+    // Quando inativo, aplica dessaturação grayscale por cima do card todo.
+    if (!inactive) return entryFade;
+    return ColorFiltered(
+      colorFilter: const ColorFilter.matrix(<double>[
+        0.2126, 0.7152, 0.0722, 0, 0,
+        0.2126, 0.7152, 0.0722, 0, 0,
+        0.2126, 0.7152, 0.0722, 0, 0,
+        0,      0,      0,      1, 0,
+      ]),
+      child: entryFade,
     );
   }
 }
