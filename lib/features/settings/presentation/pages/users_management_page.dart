@@ -8,6 +8,8 @@ import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../controllers/system_settings_provider.dart';
 
 final _keyUserCard = GlobalKey();
+final _keyUserRole = GlobalKey();
+final _keyUserActive = GlobalKey();
 
 class UsersManagementPage extends ConsumerWidget {
   const UsersManagementPage({super.key});
@@ -32,15 +34,41 @@ class UsersManagementPage extends ConsumerWidget {
                 steps: [
                   TutorialStep(
                     key: _keyUserCard,
-                    title: 'Cartão de Usuário',
-                    description: 'Cada cartão representa um usuário cadastrado no sistema. Veja nome, e-mail, função (admin ou colaborador) e status de atividade de cada membro da equipe.',
+                    title: 'Cartão de Usuária',
+                    description: 'Cada cartão representa uma pessoa cadastrada no sistema. Mostra avatar com inicial, nome, e-mail e um chip verde/vermelho indicando se está ativa ou inativa. O conteúdo é centralizado para fácil leitura.',
                     icon: Icons.badge_rounded,
                     align: ContentAlign.bottom,
                     hints: const [
-                      '🟢 Ativo: usuário com acesso habilitado',
-                      '⚫ Inativo: acesso desabilitado temporariamente',
-                      'Toque no cartão para editar permissões ou desativar',
-                      'Admins têm acesso completo — cuidado ao promover',
+                      '🟢 Chip verde "Ativa" = pode fazer login',
+                      '🔴 Chip vermelho "Inativa" = bloqueada de acessar',
+                      'O avatar usa a inicial do nome com cor de fundo',
+                      'Toda mudança fica registrada no log de auditoria',
+                    ],
+                  ),
+                  TutorialStep(
+                    key: _keyUserRole,
+                    title: 'Perfil de Acesso',
+                    description: 'O dropdown define o nível de permissões da pessoa. Cada perfil libera funcionalidades diferentes — escolha conforme a responsabilidade dela na ONG.',
+                    icon: Icons.verified_user_rounded,
+                    align: ContentAlign.top,
+                    hints: const [
+                      '👑 Administrador: acesso total, gerencia tudo',
+                      '📦 Estoquista: cadastra, edita e dá saída',
+                      '🤝 Voluntário: apenas operações básicas',
+                      '👀 Consulta: somente leitura, não altera nada',
+                    ],
+                  ),
+                  TutorialStep(
+                    key: _keyUserActive,
+                    title: 'Ativar / Desativar',
+                    description: 'O switch permite bloquear o acesso da pessoa sem excluir o cadastro. Use para colaboradoras de férias, voluntárias temporárias ou quando alguém sair da ONG. O histórico fica preservado para auditoria.',
+                    icon: Icons.toggle_on_rounded,
+                    align: ContentAlign.top,
+                    hints: const [
+                      'Desativar é mais seguro que excluir — preserva o histórico',
+                      'A pessoa não consegue fazer login enquanto inativa',
+                      'Pode reativar a qualquer momento',
+                      'Use em vez de excluir para manter rastreabilidade',
                     ],
                   ),
                 ],
@@ -166,45 +194,51 @@ class UsersManagementPage extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    DropdownButtonFormField<UserRole>(
-                      initialValue: user.role,
-                      decoration: const InputDecoration(
-                        labelText: 'Perfil de acesso',
-                        prefixIcon: Icon(Icons.verified_user_outlined, size: 20),
+                    KeyedSubtree(
+                      key: i == 0 ? _keyUserRole : null,
+                      child: DropdownButtonFormField<UserRole>(
+                        initialValue: user.role,
+                        decoration: const InputDecoration(
+                          labelText: 'Perfil de acesso',
+                          prefixIcon: Icon(Icons.verified_user_outlined, size: 20),
+                        ),
+                        items: UserRole.values
+                            .map(
+                              (r) => DropdownMenuItem(
+                                value: r,
+                                child: Text(_roleLabel(r)),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (newRole) async {
+                          if (newRole == null) return;
+                          await ref
+                              .read(userManagementNotifierProvider.notifier)
+                              .updateRole(userId: user.id, role: newRole);
+                        },
                       ),
-                      items: UserRole.values
-                          .map(
-                            (r) => DropdownMenuItem(
-                              value: r,
-                              child: Text(_roleLabel(r)),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (newRole) async {
-                        if (newRole == null) return;
-                        await ref
-                            .read(userManagementNotifierProvider.notifier)
-                            .updateRole(userId: user.id, role: newRole);
-                      },
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Permitir login desta usuaria',
-                            style: AppTypography.bodyMedium,
+                    KeyedSubtree(
+                      key: i == 0 ? _keyUserActive : null,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Permitir login desta usuaria',
+                              style: AppTypography.bodyMedium,
+                            ),
                           ),
-                        ),
-                        Switch(
-                          value: user.isActive,
-                          onChanged: (v) async {
-                            await ref
-                                .read(userManagementNotifierProvider.notifier)
-                                .setActive(userId: user.id, isActive: v);
-                          },
-                        ),
-                      ],
+                          Switch(
+                            value: user.isActive,
+                            onChanged: (v) async {
+                              await ref
+                                  .read(userManagementNotifierProvider.notifier)
+                                  .setActive(userId: user.id, isActive: v);
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
