@@ -70,7 +70,8 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Configurações de Alertas',
         subtitle: 'Regras de vencimento e criticidade',
         profileName: user?.name,
@@ -111,8 +112,7 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: configState.when(
+      Expanded(child: configState.when(
           data: (config) {
             if (!_initialized) {
               _criticalCtrl.text = config.criticalDays.toString();
@@ -526,6 +526,7 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
           ),
         ),
       ),
+      ]),
     );
   }
 }
