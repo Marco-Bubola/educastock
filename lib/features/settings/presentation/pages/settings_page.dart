@@ -184,7 +184,8 @@ class SettingsPage extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Configuracoes',
         subtitle: 'Preferencias e conta',
         profileName: user?.name,
@@ -238,8 +239,7 @@ class SettingsPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: SafeArea(
-        child: ListView(
+      Expanded(child: ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
             // Perfil do usuário
@@ -407,6 +407,7 @@ class SettingsPage extends ConsumerWidget {
           ],
         ),
       ),
+      ]),
     );
   }
 
