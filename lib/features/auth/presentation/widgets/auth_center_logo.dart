@@ -16,15 +16,12 @@ class AuthCenterLogo extends StatelessWidget {
     return Column(
       children: [
         Container(
-          width: 86,
-          height: 86,
+          width: 112,
+          height: 112,
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.brandPrimary700, AppColors.brandPrimary500],
-            ),
+            color: AppColors.surface,
             boxShadow: const [
               BoxShadow(
                 color: Color(0x331D5FA8),
@@ -33,14 +30,13 @@ class AuthCenterLogo extends StatelessWidget {
               ),
             ],
             border: Border.all(
-              color: AppColors.surface.withValues(alpha: 0.65),
+              color: AppColors.brandPrimary100,
               width: 2,
             ),
           ),
-          child: const Icon(
-            Icons.inventory_2_rounded,
-            color: AppColors.surface,
-            size: 42,
+          child: Image.asset(
+            'assets/images/logo.png',
+            fit: BoxFit.contain,
           ),
         ),
         const SizedBox(height: AppSpacing.md),
