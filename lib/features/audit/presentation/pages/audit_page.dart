@@ -60,6 +60,8 @@ class _AuditPageState extends ConsumerState<AuditPage> {
   String? _filterUser;
   final _keyAuditList = GlobalKey();
   final _keyFilterBtn = GlobalKey();
+  final _keyExportBtn = GlobalKey();
+  final _keyAuditTile = GlobalKey();
 
   int get _activeFilterCount =>
       (_filterAction != null ? 1 : 0) +
@@ -312,27 +314,53 @@ class _AuditPageState extends ConsumerState<AuditPage> {
                 TutorialStep(
                   key: _keyFilterBtn,
                   title: 'Filtros de Auditoria',
-                  description: 'Filtre os registros de auditoria por tipo de ação (criação, edição, exclusão) e por período. Essencial para rastrear mudanças no sistema.',
+                  description: 'Toque no ícone de filtro para abrir um bottom sheet onde você pode filtrar por tipo de ação (criar/editar/excluir), por usuário, por entidade (produto/lote/categoria) e por intervalo de datas. O badge azul mostra quantos filtros estão ativos.',
                   icon: Icons.filter_alt_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Filtre por "create" para ver novos cadastros',
-                    'Filtre por "update" para ver edições realizadas',
-                    'Filtre por "delete" para verificar exclusões',
-                    'Defina um período para auditorias mensais',
+                    '🔵 "create" = novos cadastros (produtos, lotes, etc)',
+                    '🟡 "update" = edições e alterações',
+                    '🔴 "delete" = exclusões e descartes',
+                    'Combine filtros para investigar incidentes específicos',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyExportBtn,
+                  title: 'Exportar para CSV',
+                  description: 'O ícone de download exporta os registros filtrados em formato CSV (planilha). Essencial para auditoria externa, prestação de contas a doadores ou análise em Excel/Google Sheets.',
+                  icon: Icons.download_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Exporta APENAS os registros após aplicar filtros',
+                    'O arquivo abre direto no Excel e Google Sheets',
+                    'Inclui colunas: data, usuário, ação, entidade, antes, depois',
+                    'Use para relatórios mensais de governança',
                   ],
                 ),
                 TutorialStep(
                   key: _keyAuditList,
-                  title: 'Log de Auditoria Completo',
-                  description: 'Registro imutável de todas as ações realizadas no sistema. Cada entrada mostra quem fez a ação, quando, qual entidade foi modificada e os dados antes/depois da mudança.',
+                  title: 'Registro Imutável',
+                  description: 'Esta é a lista cronológica de todas as ações realizadas no sistema, em ordem mais recente primeiro. NADA pode ser apagado ou editado — é um log de auditoria à prova de adulteração para compliance e investigação.',
                   icon: Icons.security_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Todos os usuários têm suas ações registradas automaticamente',
-                    'Impossível apagar ou editar registros de auditoria',
-                    'Use para verificar quem alterou quantidades ou produtos',
-                    'Exporte para comprovação em prestações de contas',
+                    'Cada ação é registrada com timestamp e autor',
+                    'Mudanças de quantidade aparecem como "antes → depois"',
+                    'Mesmo admins NÃO podem apagar logs (proteção)',
+                    'Investigação de roubo/perda começa por aqui',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyAuditTile,
+                  title: 'Detalhes do Evento',
+                  description: 'Cada card é um evento registrado: você vê o ícone da ação (criar/editar/excluir), o nome do usuário, o produto ou entidade afetada e o horário exato. Para edições, mostra o valor antes e depois da mudança.',
+                  icon: Icons.fact_check_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Ícone verde = criação | azul = edição | vermelho = exclusão',
+                    'Toque para ver detalhes completos em modal',
+                    'Acompanhe responsabilidades por colaboradora',
+                    'Combine com Histórico de Saídas para visão completa',
                   ],
                 ),
               ],
@@ -341,6 +369,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
           logsAsync.whenData((logs) {
             final filtered = _applyFilters(logs);
             return IconButton(
+              key: _keyExportBtn,
               icon: const Icon(Icons.download_rounded),
               tooltip: 'Exportar CSV',
               onPressed: () => _exportAuditCsv(context, filtered),
@@ -401,6 +430,9 @@ class _AuditPageState extends ConsumerState<AuditPage> {
                 final tile = _AuditLogTile(log: filtered[i], cs: cs);
                 if (i == 0) {
                   return KeyedSubtree(key: _keyAuditList, child: tile);
+                }
+                if (i == 1) {
+                  return KeyedSubtree(key: _keyAuditTile, child: tile);
                 }
                 return tile;
               },
