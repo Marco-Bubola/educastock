@@ -91,7 +91,8 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
     return Scaffold(
       backgroundColor:
           isDark ? const Color(0xFF0F1520) : const Color(0xFFF5F7FB),
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Nova Localização',
         subtitle: 'Depósito · Prateleira · Nível',
         showBackButton: true,
@@ -162,7 +163,7 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
             ),
         ],
       ),
-      body: ListView(
+      Expanded(child: ListView(
         padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
         children: [
@@ -244,7 +245,8 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
           ),
           const SizedBox(height: AppSpacing.lg),
         ],
-      ),
+      )),
+      ]),
     );
   }
 
