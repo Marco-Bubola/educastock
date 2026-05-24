@@ -8,6 +8,7 @@ import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../ml/domain/entities/risk_prediction.dart';
 import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
 import '../../../ml/presentation/widgets/risk_widgets.dart';
 import '../../../ml/presentation/controllers/consumption_forecast_provider.dart';
@@ -880,11 +881,11 @@ class _MlRiskSection extends ConsumerWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
 
-        // Contadores por nível
+        // Donut chart + contadores por nível
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
           child: countsAsync.when(
-            data: (counts) => RiskSummaryRow(counts: counts),
+            data: (counts) => _RiskDistributionCard(counts: counts),
             loading: () => Row(
               children: List.generate(
                 3,
@@ -923,6 +924,176 @@ class _MlRiskSection extends ConsumerWidget {
           error: (_, __) => const SizedBox.shrink(),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Card de Distribuição de Risco (donut chart + contadores)
+// ---------------------------------------------------------------------------
+
+class _RiskDistributionCard extends StatelessWidget {
+  final Map<RiskLevel, int> counts;
+  const _RiskDistributionCard({required this.counts});
+
+  Color _colorFor(RiskLevel level) {
+    switch (level) {
+      case RiskLevel.verde:
+        return AppColors.success600;
+      case RiskLevel.amarelo:
+        return AppColors.warning600;
+      case RiskLevel.vermelho:
+        return AppColors.danger600;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final total = counts.values.fold<int>(0, (s, v) => s + v);
+
+    if (total == 0) {
+      return RiskSummaryRow(counts: counts);
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          // Donut chart
+          SizedBox(
+            width: 110,
+            height: 110,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
+                  PieChartData(
+                    sectionsSpace: 2,
+                    centerSpaceRadius: 32,
+                    startDegreeOffset: -90,
+                    sections: RiskLevel.values.map((level) {
+                      final value = (counts[level] ?? 0).toDouble();
+                      final color = _colorFor(level);
+                      return PieChartSectionData(
+                        color: color,
+                        value: value <= 0 ? 0.0001 : value,
+                        title: '',
+                        radius: 18,
+                      );
+                    }).toList(),
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$total',
+                      style: AppTypography.headingSmall.copyWith(
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 22,
+                      ),
+                    ),
+                    Text(
+                      'lotes',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          // Lista lateral com barras proporcionais
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: RiskLevel.values.map((level) {
+                final count = counts[level] ?? 0;
+                final pct = total == 0 ? 0.0 : count / total;
+                final color = _colorFor(level);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    level.label,
+                                    style: AppTypography.labelMedium.copyWith(
+                                      color: cs.onSurface,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '$count',
+                                  style: AppTypography.labelMedium.copyWith(
+                                    color: color,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '(${(pct * 100).toStringAsFixed(0)}%)',
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(2),
+                              child: LinearProgressIndicator(
+                                value: pct,
+                                minHeight: 4,
+                                backgroundColor: color.withValues(
+                                    alpha: isDark ? 0.15 : 0.10),
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(color),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1141,17 +1312,31 @@ class _CategoryPieChart extends ConsumerWidget {
 
 // ─── Line chart: movements last 30 days ─────────────────────────────────────
 
-class _MovementsLineChart extends ConsumerWidget {
+class _MovementsLineChart extends ConsumerStatefulWidget {
   final bool isDark;
   const _MovementsLineChart({required this.isDark});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MovementsLineChart> createState() =>
+      _MovementsLineChartState();
+}
+
+class _MovementsLineChartState extends ConsumerState<_MovementsLineChart> {
+  late final DateTimeRange range;
+
+  @override
+  void initState() {
+    super.initState();
     final now = DateTime.now();
-    final range = DateTimeRange(
-      start: now.subtract(const Duration(days: 29)),
-      end: now,
+    final today = DateTime(now.year, now.month, now.day);
+    range = DateTimeRange(
+      start: today.subtract(const Duration(days: 29)),
+      end: today,
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final movAsync = ref.watch(movementsReportProvider(range));
     return movAsync.when(
       loading: () =>
