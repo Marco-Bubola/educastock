@@ -21,8 +21,10 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
   TimeOfDay _silentFrom = const TimeOfDay(hour: 22, minute: 0);
   TimeOfDay _silentUntil = const TimeOfDay(hour: 7, minute: 0);
   bool _initialized = false;
+  final _keyExpirySwitch = GlobalKey();
   final _keyCriticalField = GlobalKey();
   final _keyWarningField = GlobalKey();
+  final _keySilentMode = GlobalKey();
 
   @override
   void dispose() {
@@ -84,27 +86,55 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
               context: context,
               steps: [
                 TutorialStep(
+                  key: _keyExpirySwitch,
+                  title: 'Ligar / Desligar Alertas',
+                  description: 'Este switch principal liga ou desliga todo o sistema de monitoramento de validade. Quando desligado, nenhum alerta é gerado nem enviado — útil para período de baixa atividade ou ajustes de configuração.',
+                  icon: Icons.notifications_active_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Recomendado: SEMPRE ligado em produção',
+                    'Quando desligado, a tela de Alertas fica vazia',
+                    'Ideal para férias coletivas ou testes',
+                    'Sem alertas = risco de produtos vencerem sem aviso',
+                  ],
+                ),
+                TutorialStep(
                   key: _keyCriticalField,
-                  title: 'Prazo Crítico (Dias)',
-                  description: 'Define quantos dias antes do vencimento um produto passa para situação crítica (vermelha). Lotes nesta faixa exigem ação imediata de distribuição ou descarte.',
+                  title: 'Prazo Crítico (vermelho)',
+                  description: 'Define em quantos dias antes do vencimento o produto entra na faixa CRÍTICA (vermelha). Itens nesta faixa exigem ação imediata: distribuir, doar ou descartar. Aparecem em destaque no dashboard.',
                   icon: Icons.emergency_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Recomendado: 7 dias para alimentos perecíveis',
-                    'Alertas críticos aparecem no dashboard com prioridade máxima',
-                    'Ajuste conforme o ritmo de distribuição da sua instituição',
+                    '🟥 Recomendado: 7 dias para alimentos frescos',
+                    '🟥 14 dias para refrigerados/laticínios',
+                    'Quanto menor o número, mais urgente o alerta',
+                    'Aparece no card vermelho do dashboard',
                   ],
                 ),
                 TutorialStep(
                   key: _keyWarningField,
-                  title: 'Prazo de Atenção (Dias)',
-                  description: 'Define quantos dias antes do vencimento um produto entra em situação de atenção (amarela). Use este prazo para planejar distribuições antes que se tornem críticos.',
+                  title: 'Prazo de Atenção (amarelo)',
+                  description: 'Define em quantos dias antes do vencimento o produto entra na faixa ATENÇÃO (amarela). Esta faixa é para planejamento — você ainda tem tempo de organizar uma distribuição antes que vire crítico.',
                   icon: Icons.warning_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Recomendado: 30 dias para planejamento adequado',
-                    'Deve ser maior que o prazo crítico',
-                    'Produtos nesta faixa aparecem nos alertas com prioridade média',
+                    '🟨 Recomendado: 30 dias para planejamento',
+                    '🟨 60 dias se a rotação for lenta',
+                    'Deve ser MAIOR que o prazo crítico',
+                    'Aparece no card amarelo do dashboard',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keySilentMode,
+                  title: 'Modo Silencioso',
+                  description: 'Define um intervalo de horas em que nenhuma notificação push é enviada (mas os alertas continuam sendo registrados). Útil para não incomodar a equipe fora do horário de trabalho.',
+                  icon: Icons.bedtime_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Padrão sugerido: 22h às 7h (durante o sono)',
+                    'Os alertas ainda aparecem na tela ao abrir o app',
+                    'Só silencia notificações push do celular',
+                    'Use horário comercial inverso para sua ONG',
                   ],
                 ),
               ],
@@ -197,6 +227,7 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
                     children: [
                       // Toggle ativo/inativo
                       Row(
+                        key: _keyExpirySwitch,
                         children: [
                           Container(
                             width: 38,
@@ -351,6 +382,7 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
 
                 // ─── Modo silencioso ─────────────────────────────────────────
                 Container(
+                  key: _keySilentMode,
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(AppRadius.card),
