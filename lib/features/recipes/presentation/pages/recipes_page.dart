@@ -15,7 +15,10 @@ class RecipesPage extends ConsumerStatefulWidget {
 
 class _RecipesPageState extends ConsumerState<RecipesPage> {
   String _search = '';
+  final _keyRecipeHeader = GlobalKey();
+  final _keyRecipeSearch = GlobalKey();
   final _keyRecipeCard = GlobalKey();
+  final _keyRecipeFab = GlobalKey();
 
   static const _gradients = [
     [Color(0xFF7C3AED), Color(0xFF4F46E5)],
@@ -62,16 +65,55 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
               context: context,
               steps: [
                 TutorialStep(
-                  key: _keyRecipeCard,
-                  title: 'Receitas de Saída',
-                  description: 'As receitas são modelos de distribuição com múltiplos ingredientes. Ideal para cozinhas que preparam refeições usando itens do estoque — deduz vários produtos de uma vez.',
+                  key: _keyRecipeHeader,
+                  title: 'Painel de Receitas',
+                  description: 'Este banner roxo mostra o resumo das suas receitas cadastradas. Receitas são modelos prontos que dão baixa em vários produtos de uma só vez — ideais para cozinhas que preparam refeições padrão (kit lanche, cesta básica, mochila escolar).',
                   icon: Icons.menu_book_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Toque em uma receita para ver ingredientes e quantidades',
-                    'Use "Executar" na tela de Saída para dar baixa na receita inteira',
-                    'Crie novas receitas com o botão "+" no canto inferior',
-                    'O sistema verifica se há estoque suficiente antes de executar',
+                    'O número grande mostra quantas receitas estão ativas',
+                    'Cada receita = um modelo de distribuição reutilizável',
+                    'Crie receitas para refeições recorrentes da ONG',
+                    'Economiza tempo no dia-a-dia da distribuição',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyRecipeSearch,
+                  title: 'Buscar Receita',
+                  description: 'Digite o nome da receita para localizá-la rapidamente na lista. A busca também procura nas descrições — então palavras como "lanche", "café" ou "almoço" funcionam mesmo sem estar no nome.',
+                  icon: Icons.search_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Busca em tempo real enquanto você digita',
+                    'Ignora maiúsculas e acentos',
+                    'Procura no nome E na descrição da receita',
+                    'Toque no X para limpar e ver todas novamente',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyRecipeCard,
+                  title: 'Cartão de Receita',
+                  description: 'Cada cartão mostra uma receita com sua faixa colorida no topo, ícone, nome, descrição e badge com total de ingredientes. Toque no cartão para ver os detalhes completos ou nos ícones de ação (editar/excluir) à direita.',
+                  icon: Icons.restaurant_menu_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'A faixa colorida no topo é só visual — cada receita tem uma cor',
+                    'O badge mostra: quantidade de produtos · total de unidades',
+                    'Toque longo: ações rápidas (executar, duplicar, excluir)',
+                    'Receitas podem ser executadas na tela de Distribuição/Saída',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyRecipeFab,
+                  title: 'Criar Nova Receita',
+                  description: 'Toque no botão roxo "+" para abrir o assistente de criação. Você dá um nome (ex: "Kit Lanche da Tarde"), uma descrição opcional e adiciona os produtos com suas quantidades. A receita fica pronta para ser executada quantas vezes quiser.',
+                  icon: Icons.add_circle_outline_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Use nomes claros que toda a equipe entenda',
+                    'Adicione apenas produtos que tenham estoque ativo',
+                    'A descrição ajuda a lembrar quando usar a receita',
+                    'Receitas podem ser editadas a qualquer momento',
                   ],
                 ),
               ],
@@ -92,13 +134,17 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
             slivers: [
               // Header stats
               SliverToBoxAdapter(
-                child: _buildHeader(isDark, recipes.length, textPrimary, textSub),
+                child: KeyedSubtree(
+                  key: _keyRecipeHeader,
+                  child: _buildHeader(isDark, recipes.length, textPrimary, textSub),
+                ),
               ),
               // Search bar
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: Container(
+                    key: _keyRecipeSearch,
                     decoration: BoxDecoration(
                       color: cardBg,
                       borderRadius: BorderRadius.circular(14),
@@ -649,6 +695,7 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
 
   Widget _buildFab() {
     return FloatingActionButton.extended(
+      key: _keyRecipeFab,
       onPressed: _openCreateRecipeSheet,
       backgroundColor: const Color(0xFF7C3AED),
       foregroundColor: Colors.white,
