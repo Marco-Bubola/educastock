@@ -25,7 +25,8 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
     if (currentUser == null || !currentUser.canApproveAdjustments) {
       return Scaffold(
         backgroundColor: cs.surface,
-        appBar: ModernProfileAppBar(
+        body: Column(children: [
+        ModernProfileAppBar(
           title: 'Aprovações de Ajuste',
           subtitle: 'Acesso restrito',
           showBackButton: true,
@@ -53,13 +54,12 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
             ),
           ],
         ),
-        body: const SafeArea(
-          child: CasaEmptyState(
+        const Expanded(child: CasaEmptyState(
             icon: Icons.lock_outline_rounded,
             title: 'Acesso restrito',
             description: 'Apenas administradores podem aprovar ajustes.',
-          ),
-        ),
+          )),
+        ]),
       );
     }
 
@@ -67,7 +67,8 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Aprovações de Ajuste',
         subtitle: 'Solicitações pendentes de revisão',
         showBackButton: true,
@@ -95,8 +96,7 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: SafeArea(
-        child: requestsAsync.when(
+      Expanded(child: requestsAsync.when(
           data: (requests) {
             if (requests.isEmpty) {
               return const CasaEmptyState(
@@ -173,6 +173,7 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
           ),
         ),
       ),
+      ]),
     );
   }
 }
