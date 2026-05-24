@@ -8,6 +8,7 @@ import '../controllers/system_settings_provider.dart';
 
 final _keyCategorySummary = GlobalKey();
 final _keyCategoryList = GlobalKey();
+final _keyCategorySwitch = GlobalKey();
 
 class CategoriesSettingsPage extends ConsumerWidget {
   const CategoriesSettingsPage({super.key});
@@ -36,26 +37,41 @@ class CategoriesSettingsPage extends ConsumerWidget {
               steps: [
                 TutorialStep(
                   key: _keyCategorySummary,
-                  title: 'Resumo por Categoria',
-                  description: 'Visão geral das categorias existentes com total de produtos em cada uma. Use para entender a composição do estoque e identificar categorias com baixo volume.',
+                  title: 'Resumo de Categorias',
+                  description: 'Este banner gradiente mostra "X de Y ativas" — quantas categorias estão sendo exibidas no cadastro de produtos em relação ao total disponível no sistema. Use este indicador para acompanhar a organização do catálogo.',
                   icon: Icons.donut_small_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'O número mostra total de produtos (não lotes)',
-                    'Toque para filtrar o estoque por categoria',
-                    'Crie categorias específicas para sua realidade',
+                    'O número grande = categorias ATIVAS',
+                    'Categorias inativas não aparecem na criação de produtos',
+                    'Mantenha só o que faz sentido para sua ONG',
+                    'Use categorias inativas para "arquivar" sem perder histórico',
                   ],
                 ),
                 TutorialStep(
                   key: _keyCategoryList,
                   title: 'Lista de Categorias',
-                  description: 'Gerencie as categorias de produtos disponíveis no sistema. Adicione, edite ou remova categorias conforme a necessidade da sua instituição.',
+                  description: 'Cada linha representa uma categoria do sistema. A borda lateral azul indica que está ativa; cinza indica oculta. Toque no switch à direita para alternar a visibilidade no cadastro de produtos.',
                   icon: Icons.category_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Categorias são compartilhadas com todos os usuários',
-                    'Evite muitas categorias — mantenha organizado',
-                    'Categorias padrão: Alimento, Higiene, Material Escolar',
+                    'Categorias padrão: Alimento, Bebida, Limpeza, Higiene, Escolar, Roupas, Outro',
+                    'A ordem é alfabética e fixa',
+                    'Subtítulo "Visível no cadastro" = aparece nas listas',
+                    'Subtítulo "Oculta" = não aparece em novos produtos',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyCategorySwitch,
+                  title: 'Ativar / Ocultar Categoria',
+                  description: 'O switch alterna a visibilidade da categoria. Ocultar não exclui — produtos existentes daquela categoria continuam funcionando normalmente. Só desativa para novos cadastros.',
+                  icon: Icons.toggle_on_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Mudança aplica imediatamente para toda a equipe',
+                    'Produtos com categoria oculta continuam aparecendo nos relatórios',
+                    'Reative a qualquer momento sem perda de dados',
+                    'Útil para temporadas (ex: ocultar "Roupas" no verão)',
                   ],
                 ),
               ],
@@ -205,15 +221,18 @@ class CategoriesSettingsPage extends ConsumerWidget {
                               ],
                             ),
                           ),
-                          Switch(
-                            value: item.isActive,
-                            onChanged: (v) async {
-                              await ref
-                                  .read(categorySettingsNotifierProvider
-                                      .notifier)
-                                  .setCategoryActive(
-                                      key: item.key, isActive: v);
-                            },
+                          KeyedSubtree(
+                            key: idx == 0 ? _keyCategorySwitch : null,
+                            child: Switch(
+                              value: item.isActive,
+                              onChanged: (v) async {
+                                await ref
+                                    .read(categorySettingsNotifierProvider
+                                        .notifier)
+                                    .setCategoryActive(
+                                        key: item.key, isActive: v);
+                              },
+                            ),
                           ),
                         ],
                       ),
