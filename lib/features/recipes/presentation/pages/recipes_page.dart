@@ -50,7 +50,8 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
 
     return Scaffold(
       backgroundColor: bg,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Receitas de Saída',
         subtitle: 'Modelos ativos para baixa rápida',
         showBackButton: true,
@@ -78,8 +79,7 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
           ),
         ],
       ),
-      floatingActionButton: _buildFab(),
-      body: recipesAsync.when(
+      Expanded(child: recipesAsync.when(
         data: (recipes) {
           final filtered = recipes.where((r) {
             final q = _search.trim().toLowerCase();
@@ -542,7 +542,9 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
           child: Text('Erro: $e',
               style: const TextStyle(color: Color(0xFFDC2626))),
         ),
-      ),
+      )),
+      ]),
+      floatingActionButton: _buildFab(),
     );
   }
 
