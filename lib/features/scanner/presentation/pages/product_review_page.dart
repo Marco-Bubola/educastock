@@ -9,6 +9,7 @@ import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../data/datasources/open_food_facts_datasource.dart';
 import '../controllers/scanner_provider.dart';
+import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../products/domain/entities/product.dart';
@@ -54,6 +55,18 @@ class _ProductReviewPageState extends ConsumerState<ProductReviewPage>
     final scanState = ref.watch(scannerProvider);
     final localProductAsync =
         ref.watch(productByBarcodeProvider(widget.barcode));
+    final user = ref.watch(currentUserProvider);
+    final alertCount = ref.watch(allAvailableBatchesProvider).when(
+          data: (list) => list
+              .where((b) =>
+                  !b.noExpiry && (b.isExpired || b.daysToExpiry <= 30))
+              .length,
+          loading: () => 0,
+          error: (_, __) => 0,
+        );
+    final initial = (user?.name ?? '').trim().isEmpty
+        ? 'U'
+        : user!.name.trim().substring(0, 1).toUpperCase();
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light
@@ -79,12 +92,46 @@ class _ProductReviewPageState extends ConsumerState<ProductReviewPage>
                 ),
               ),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.help_outline_rounded,
-                      color: Colors.white70, size: 22),
+                buildHelpButton(
+                  context: context,
                   onPressed: () => _showHelp(context),
                 ),
-                const SizedBox(width: 4),
+                CasaAlertsBellButton(
+                  alertCount: alertCount,
+                  onDarkBg: true,
+                ),
+                const Padding(
+                  padding: EdgeInsets.only(left: AppSpacing.xs),
+                  child: CasaThemeToggleButton(),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xs),
+                  child: GestureDetector(
+                    onTap: () => context.push(AppRoutes.settings),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          initial,
+                          style: AppTypography.labelMedium.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
               title: const Text(
                 'Revisão do Produto',
