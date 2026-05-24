@@ -173,16 +173,16 @@ class _BrandPanel extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: compact ? 64 : 72,
-                height: compact ? 64 : 72,
+                width: compact ? 72 : 84,
+                height: compact ? 72 : 84,
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: const Color(0x1FFFFFFF),
+                  color: AppColors.surface,
                   borderRadius: BorderRadius.circular(AppRadius.card),
                 ),
-                child: const Icon(
-                  Icons.inventory_2_rounded,
-                  color: AppColors.surface,
-                  size: 38,
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  fit: BoxFit.contain,
                 ),
               ),
               const SizedBox(width: AppSpacing.lg),
