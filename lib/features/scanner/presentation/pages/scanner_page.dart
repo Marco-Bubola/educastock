@@ -62,7 +62,9 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
 
   bool   _navigating    = false;
   bool   _zoomSupported = true;
-  double _zoom          = kIsWeb ? 1.0 : _kInitialZoomMobile;
+  // Web: 1.5× digital zoom — barcodes ficam na proporção correta do scan box
+  // sem perda de qualidade (ZXing lê do frame nativo full HD, não do CSS zoom)
+  double _zoom          = kIsWeb ? 1.5 : _kInitialZoomMobile;
   bool   _detected      = false;
 
   // ── Log visual de diagnóstico ─────────────────────────────────────────
