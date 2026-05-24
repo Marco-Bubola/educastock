@@ -402,7 +402,8 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
 
     return Scaffold(
       backgroundColor: bg,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Histórico',
         subtitle: 'Registro completo de saídas',
         actions: [
@@ -486,7 +487,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           ),
         ],
       ),
-      body: Column(
+      Expanded(child: Column(
         children: [
           // ─── Header de stats ────────────────────────────────────────────────
           _buildHeader(isDark, textPrimary, textSub, cardBg, borderColor,
@@ -739,7 +740,8 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               ),
             ),
           ],
-        ),
+        )),
+        ]),
     );
   }
 
