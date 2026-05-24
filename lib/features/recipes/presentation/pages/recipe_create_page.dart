@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/controllers/products_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
@@ -121,6 +122,7 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
+    final stockMap = ref.watch(productAvailableQtyMapProvider);
     final labelMap = ref.watch(categoryLabelMapProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -135,8 +137,20 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
       appBar: _buildAppBar(isDark, textSub),
       body: productsAsync.when(
         data: (products) {
-          final categories = products.map((p) => p.category.name).toSet().toList()..sort();
-          final filtered = products.where((p) {
+          // Receita só pode usar produtos que tenham estoque (ativo).
+          // Mantemos itens já selecionados (caso o usuário esteja editando
+          // uma receita e o lote tenha acabado posteriormente).
+          final inStockProducts = products
+              .where((p) =>
+                  (stockMap[p.id] ?? 0) > 0 ||
+                  (_selectedQty[p.id] ?? 0) > 0)
+              .toList();
+          final categories = inStockProducts
+              .map((p) => p.category.name)
+              .toSet()
+              .toList()
+            ..sort();
+          final filtered = inStockProducts.where((p) {
             final q = _search.trim().toLowerCase();
             final ok = q.isEmpty ||
                 p.name.toLowerCase().contains(q) ||
@@ -196,7 +210,7 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
                           isDark: isDark,
                           child: _SelectedIngredientsList(
                             selectedQty: Map.from(_selectedQty),
-                            products: products,
+                            products: inStockProducts,
                             isDark: isDark,
                             cardBg: cardBg,
                             borderColor: borderColor,
@@ -348,7 +362,7 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
               ),
 
               // ── Barra inferior de salvar ──
-              _buildBottomBar(context, isDark, cardBg, borderColor, textSub, products),
+              _buildBottomBar(context, isDark, cardBg, borderColor, textSub, inStockProducts),
             ],
           );
         },
