@@ -21,7 +21,8 @@ class CategoriesSettingsPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Categorias',
         subtitle: 'Controle de categorias de produtos',
         profileName: user?.name,
@@ -62,8 +63,7 @@ class CategoriesSettingsPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: SafeArea(
-        child: categories.when(
+      Expanded(child: categories.when(
           data: (items) {
             final active = items.where((i) => i.isActive).length;
             return ListView(
@@ -236,6 +236,7 @@ class CategoriesSettingsPage extends ConsumerWidget {
           ),
         ),
       ),
+      ]),
     );
   }
 }
