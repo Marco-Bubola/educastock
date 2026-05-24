@@ -16,6 +16,7 @@ class StockAlert {
   final String message;
   final DateTime createdAt;
   final bool resolved;
+  final DateTime? snoozedUntil;
 
   const StockAlert({
     required this.id,
@@ -26,7 +27,15 @@ class StockAlert {
     required this.message,
     required this.createdAt,
     this.resolved = false,
+    this.snoozedUntil,
   });
+
+  bool get isManual => productId == 'manual';
+
+  bool get isSnoozed {
+    final s = snoozedUntil;
+    return s != null && s.isAfter(DateTime.now());
+  }
 
   factory StockAlert.fromMap(Map<String, dynamic> map, String id) {
     return StockAlert(
@@ -41,6 +50,7 @@ class StockAlert {
       message: map['message'] as String,
       createdAt: (map['createdAt'] as Timestamp).toDate(),
       resolved: map['resolved'] as bool? ?? false,
+      snoozedUntil: (map['snoozedUntil'] as Timestamp?)?.toDate(),
     );
   }
 }
@@ -55,12 +65,32 @@ class AlertsRemoteDatasource {
         .where('resolved', isEqualTo: false)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((s) =>
-            s.docs.map((d) => StockAlert.fromMap(d.data(), d.id)).toList());
+        .map((s) => s.docs
+            .map((d) => StockAlert.fromMap(d.data(), d.id))
+            .where((a) => !a.isSnoozed) // adiados ficam ocultos até a hora
+            .toList());
   }
 
   Future<void> resolveAlert(String id) async {
     await _col.doc(id).update({'resolved': true});
+  }
+
+  Future<void> resolveMany(Iterable<String> ids) async {
+    final batch = FirebaseFirestore.instance.batch();
+    for (final id in ids) {
+      batch.update(_col.doc(id), {'resolved': true});
+    }
+    await batch.commit();
+  }
+
+  Future<void> deleteAlert(String id) async {
+    await _col.doc(id).delete();
+  }
+
+  Future<void> snoozeAlert(String id, Duration duration) async {
+    await _col.doc(id).update({
+      'snoozedUntil': Timestamp.fromDate(DateTime.now().add(duration)),
+    });
   }
 
   Future<void> createManualAlert({
@@ -96,6 +126,18 @@ class AlertsNotifier extends AsyncNotifier<void> {
 
   Future<void> resolve(String alertId) async {
     await ref.read(alertsDatasourceProvider).resolveAlert(alertId);
+  }
+
+  Future<void> resolveAll(Iterable<String> ids) async {
+    await ref.read(alertsDatasourceProvider).resolveMany(ids);
+  }
+
+  Future<void> delete(String alertId) async {
+    await ref.read(alertsDatasourceProvider).deleteAlert(alertId);
+  }
+
+  Future<void> snooze(String alertId, Duration duration) async {
+    await ref.read(alertsDatasourceProvider).snoozeAlert(alertId, duration);
   }
 
   Future<void> createManualAlert({
