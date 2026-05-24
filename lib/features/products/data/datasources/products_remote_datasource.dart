@@ -24,11 +24,29 @@ class ProductsRemoteDatasource {
   }
 
   Future<Product?> getProductByBarcode(String barcode) async {
-    final snap = await _col
-        .where('barcode', isEqualTo: barcode)
-        .where('isActive', isEqualTo: true)
-        .limit(1)
-        .get();
+    // Força busca no servidor para garantir dado fresco.
+    // Sem Source.server o Firestore pode retornar o cache local (stale) que
+    // ainda não tem um produto recém-cadastrado → resultado null incorreto.
+    // Fallback para cache quando offline / timeout de rede.
+    QuerySnapshot snap;
+    try {
+      snap = await _col
+          .where('barcode', isEqualTo: barcode)
+          .where('isActive', isEqualTo: true)
+          .limit(1)
+          .get(const GetOptions(source: Source.server));
+    } catch (_) {
+      // Offline ou erro de rede — usa cache local como fallback
+      try {
+        snap = await _col
+            .where('barcode', isEqualTo: barcode)
+            .where('isActive', isEqualTo: true)
+            .limit(1)
+            .get(const GetOptions(source: Source.cache));
+      } catch (_) {
+        return null;
+      }
+    }
     if (snap.docs.isEmpty) return null;
     final d = snap.docs.first;
     return Product.fromMap(d.data() as Map<String, dynamic>, d.id);
