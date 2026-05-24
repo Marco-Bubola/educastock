@@ -19,7 +19,8 @@ class UsersManagementPage extends ConsumerWidget {
 
     if (currentUser == null || !currentUser.canManageUsers) {
       return Scaffold(
-        appBar: ModernProfileAppBar(
+        body: Column(children: [
+        ModernProfileAppBar(
           title: 'Gerenciar usuárias',
           subtitle: 'Acesso restrito',
           showBackButton: true,
@@ -47,16 +48,18 @@ class UsersManagementPage extends ConsumerWidget {
             ),
           ],
         ),
-        body: const Center(
+        const Expanded(child: Center(
           child: Text('Acesso restrito a administradoras.'),
-        ),
+        )),
+        ]),
       );
     }
 
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Gerenciar usuarias',
         subtitle: 'Controle de perfis e acessos',
         profileName: currentUser.name,
@@ -86,8 +89,7 @@ class UsersManagementPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: SafeArea(
-        child: usersState.when(
+      Expanded(child: usersState.when(
           data: (users) => ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.lg),
             itemCount: users.length,
@@ -226,6 +228,7 @@ class UsersManagementPage extends ConsumerWidget {
           ),
         ),
       ),
+      ]),
     );
   }
 
