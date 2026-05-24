@@ -134,7 +134,46 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
 
     return Scaffold(
       backgroundColor: bg,
-      appBar: _buildAppBar(isDark, textSub),
+      appBar: ModernProfileAppBar(
+        title: _isEditing ? 'Editar Receita' : 'Nova Receita',
+        subtitle: _isEditing
+            ? 'Altere os dados e salve'
+            : 'Monte um modelo de distribuição',
+        showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaHelpModal(
+              context: context,
+              pageTitle: _isEditing ? 'Editar receita' : 'Nova receita',
+              pageDescription:
+                  'Receitas são modelos para baixa rápida de vários produtos de uma só vez.',
+              accentColor: _kPurple,
+              headerIcon: Icons.restaurant_menu_rounded,
+              tips: const [
+                HelpTip(
+                  icon: Icons.label_rounded,
+                  title: 'Dê um nome claro',
+                  description:
+                      'Use nomes como "Kit Lanche", "Cesta Básica", "Mochila Escolar" — fáceis de reconhecer na hora da distribuição.',
+                ),
+                HelpTip(
+                  icon: Icons.add_shopping_cart_rounded,
+                  title: 'Adicione os ingredientes',
+                  description:
+                      'Toque nos produtos abaixo e defina a quantidade de cada item que compõe uma execução da receita.',
+                ),
+                HelpTip(
+                  icon: Icons.outbound_rounded,
+                  title: 'Use na distribuição',
+                  description:
+                      'Na tela de Saída, escolha esta receita e o sistema dá baixa em todos os itens automaticamente.',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
       body: productsAsync.when(
         data: (products) {
           // Receita só pode usar produtos que tenham estoque (ativo).
@@ -370,37 +409,6 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
         error: (e, _) => Center(
           child: Text('Erro: $e', style: const TextStyle(color: Color(0xFFDC2626))),
         ),
-      ),
-    );
-  }
-
-  // ─── AppBar ──────────────────────────────────────────────────────────────
-
-  PreferredSizeWidget _buildAppBar(bool isDark, Color textSub) {
-    return AppBar(
-      backgroundColor: isDark ? const Color(0xFF0B1120) : const Color(0xFFF1F5F9),
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      leading: IconButton(
-        icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : const Color(0xFF0F172A), size: 20),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _isEditing ? 'Editar Receita' : 'Nova Receita',
-            style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF0F172A),
-              fontWeight: FontWeight.w800,
-              fontSize: 17,
-            ),
-          ),
-          Text(
-            _isEditing ? 'Altere os dados e salve' : 'Monte um modelo de distribuição',
-            style: TextStyle(color: textSub, fontSize: 11),
-          ),
-        ],
       ),
     );
   }
