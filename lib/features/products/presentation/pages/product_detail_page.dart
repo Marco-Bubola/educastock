@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../stock/domain/entities/stock_movement.dart';
@@ -230,14 +231,27 @@ class _DetailBody extends ConsumerWidget {
 
 // ─── SliverAppBar moderno ──────────────────────────────────────────────────
 
-class _ProductSliverAppBar extends StatelessWidget {
+class _ProductSliverAppBar extends ConsumerWidget {
   final Product product;
   final String productId;
   const _ProductSliverAppBar(
       {required this.product, required this.productId});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    final alertCount = ref.watch(allAvailableBatchesProvider).when(
+          data: (list) => list
+              .where((b) =>
+                  !b.noExpiry && (b.isExpired || b.daysToExpiry <= 30))
+              .length,
+          loading: () => 0,
+          error: (_, __) => 0,
+        );
+    final initial = (user?.name ?? '').trim().isEmpty
+        ? 'U'
+        : user!.name.trim().substring(0, 1).toUpperCase();
+
     return SliverAppBar(
       expandedHeight: 165,
       pinned: true,
@@ -291,6 +305,38 @@ class _ProductSliverAppBar extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+        ),
+        CasaAlertsBellButton(alertCount: alertCount, onDarkBg: true),
+        const Padding(
+          padding: EdgeInsets.only(left: AppSpacing.xs),
+          child: CasaThemeToggleButton(),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          child: GestureDetector(
+            onTap: () => context.push(AppRoutes.settings),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.35),
+                  width: 1.5,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: AppTypography.labelMedium.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ],
