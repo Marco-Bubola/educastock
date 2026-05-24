@@ -23,6 +23,8 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   DateTimeRange? _filterDateRange;
   final _keyFilterRow = GlobalKey();
   final _keyHistoryList = GlobalKey();
+  final _keyHistoryHeader = GlobalKey();
+  final _keyHistoryExport = GlobalKey();
 
   static const _reasonColors = <String, List<Color>>{
     'uso': [Color(0xFF2563EB), Color(0xFF1D4ED8)],
@@ -413,36 +415,63 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               context: context,
               steps: [
                 TutorialStep(
+                  key: _keyHistoryHeader,
+                  title: 'Resumo do Histórico',
+                  description: 'O header colorido mostra o resumo dos últimos 30 dias: total de movimentações registradas, soma de unidades distribuídas, descartes por vencimento e o item mais movimentado. Use estes números para ter visão geral de saídas.',
+                  icon: Icons.dashboard_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Os números atualizam ao mudar filtros',
+                    'Compare com mês anterior para detectar tendências',
+                    'Use em reuniões para apresentar volume de operações',
+                    'Total inclui TODAS as saídas (uso, doação, descarte)',
+                  ],
+                ),
+                TutorialStep(
                   key: _keyFilterRow,
-                  title: 'Filtros do Histórico',
-                  description: 'Filtre as movimentações por tipo (distribuição, receita, vencimento, avaria, doação) e por período. Ideal para auditorias e prestação de contas.',
+                  title: 'Filtros de Movimentação',
+                  description: 'Use os filtros para refinar a lista: busca por nome de produto ou usuário, chips de tipo (distribuição, vencimento, avaria, doação) e seletor de período. Combine filtros para análises específicas.',
                   icon: Icons.filter_alt_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Selecione um período específico para relatórios mensais',
-                    'Filtre por "Vencimento" para ver produtos descartados',
-                    'Filtre por "Distribuição" para controle de saídas por uso',
-                    'Exporte como CSV para planilhas Excel',
+                    '🔍 Busca: nome do produto ou da colaboradora',
+                    'Chips de motivo: vencimento, avaria, doação, uso',
+                    'Período: hoje, semana, mês, customizado',
+                    'Filtros combinam — use vários ao mesmo tempo',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyHistoryExport,
+                  title: 'Exportar CSV',
+                  description: 'O botão de download exporta os registros filtrados em planilha CSV. Essencial para relatórios mensais, prestação de contas a doadores e análise financeira no Excel ou Google Sheets.',
+                  icon: Icons.download_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Exporta APENAS o que está visível com filtros aplicados',
+                    'Inclui: data, produto, qty, motivo, usuária, observação',
+                    'Use para fechamento mensal/trimestral',
+                    'Compatível com Excel, Google Sheets, LibreOffice',
                   ],
                 ),
                 TutorialStep(
                   key: _keyHistoryList,
                   title: 'Registro de Movimentações',
-                  description: 'Lista completa de todas as entradas e saídas do estoque em ordem cronológica. Cada registro mostra produto, quantidade, usuário responsável e motivo da movimentação.',
+                  description: 'Lista cronológica (mais recente primeiro) de todas as saídas e descartes. Cada cartão mostra produto, quantidade, motivo colorido, colaboradora responsável e horário. Toque para ver detalhes completos da movimentação.',
                   icon: Icons.history_rounded,
-                  align: ContentAlign.bottom,
+                  align: ContentAlign.top,
                   hints: const [
-                    '🔵 Azul: distribuição por uso',
-                    '🟣 Roxo: saída por receita',
-                    '🟡 Amarelo: descarte por vencimento',
-                    '🔴 Vermelho: baixa por avaria',
-                    '🟢 Verde: doação registrada',
+                    '🔵 Azul: distribuição (uso normal)',
+                    '🟣 Roxo: receita executada (kit)',
+                    '🟡 Amarelo: vencimento (descarte preventivo)',
+                    '🔴 Vermelho: avaria (produto danificado)',
+                    '🟢 Verde: doação registrada como saída',
                   ],
                 ),
               ],
             ),
           ),
           IconButton(
+            key: _keyHistoryExport,
             icon: const Icon(Icons.download_rounded),
             tooltip: 'Exportar CSV',
             onPressed: () {
@@ -490,8 +519,11 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       Expanded(child: Column(
         children: [
           // ─── Header de stats ────────────────────────────────────────────────
-          _buildHeader(isDark, textPrimary, textSub, cardBg, borderColor,
-              movementsAsync),
+          KeyedSubtree(
+            key: _keyHistoryHeader,
+            child: _buildHeader(isDark, textPrimary, textSub, cardBg, borderColor,
+                movementsAsync),
+          ),
 
             // ─── Search + Filtros ────────────────────────────────────────────
             Padding(
