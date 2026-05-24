@@ -73,6 +73,45 @@
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // 1b. BARCODE DETECTOR ML (API nativa do browser — Chrome/Edge/Android)
+    // Usa o pipeline ML nativo do S.O. — detecta qualquer rotação sem canvas ops.
+    // Usado como 1ª tentativa no live scan E na captura de foto.
+    // ZXing continua como complemento quando o ML não encontra.
+    // ─────────────────────────────────────────────────────────────────────────
+    window._barcodeDetector = null;
+    if ('BarcodeDetector' in window) {
+      try {
+        BarcodeDetector.getSupportedFormats().then(function(supported) {
+          var desired = ['ean_13','ean_8','qr_code','code_128','code_39',
+                         'upc_a','upc_e','itf','data_matrix','pdf_417','aztec','codabar'];
+          var formats = desired.filter(function(f) { return supported.indexOf(f) >= 0; });
+          if (!formats.length) formats = ['ean_13','ean_8','qr_code','code_128','upc_a'];
+          window._barcodeDetector = new BarcodeDetector({ formats: formats });
+          console.log('[EducaStock] BarcodeDetector ML ✅ (' + formats.length + ' formatos)');
+        }).catch(function() {
+          window._barcodeDetector = new BarcodeDetector({
+            formats: ['ean_13','ean_8','qr_code','code_128','code_39','upc_a','upc_e','itf']
+          });
+          console.log('[EducaStock] BarcodeDetector ML ✅ (formatos padrão)');
+        });
+      } catch(e) {
+        console.log('[EducaStock] BarcodeDetector não disponível:', e.message || e);
+      }
+    } else {
+      console.log('[EducaStock] BarcodeDetector API não suportada — ZXing exclusivo');
+    }
+
+    // Helper: prefere formatos de produto (EAN/Code) sobre QR Code
+    window._preferProduct = function(barcodes) {
+      if (!barcodes || !barcodes.length) return null;
+      var prod = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','data_matrix'];
+      for (var i = 0; i < barcodes.length; i++) {
+        if (prod.indexOf(barcodes[i].format) >= 0) return barcodes[i];
+      }
+      return barcodes[0];
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
     // 2. UTILITÁRIOS DE CANVAS
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -484,31 +523,38 @@
         var s = track.getSettings();
         console.log('[EducaStock] Câmera: ' + (s.width||'?') + 'x' + (s.height||'?')
           + ' foco:' + (s.focusMode||'n/a') + ' facing:' + (s.facingMode||'n/a'));
-        if (s.width && s.width >= 1080) return; // já em boa resolução — sem renegociação
-        // Único disparo — sem retry, sem interval
+        if (s.width && s.width >= 1920) return; // já em Full HD — sem renegociação
+        // Único disparo — sem retry, sem interval.
+        // Ordem de preferência: 1080p → 720p → 540p (browser escolhe o melhor suportado)
         track.applyConstraints({
           advanced: [
-            { width: { ideal: 1280 }, height: { ideal: 720 } },
-            { width: { ideal: 960  }, height: { ideal: 540 } },
+            { width: { ideal: 1920 }, height: { ideal: 1080 } },
+            { width: { ideal: 1280 }, height: { ideal: 720  } },
+            { width: { ideal: 960  }, height: { ideal: 540  } },
           ]
         }).then(function() {
           var ns = track.getSettings();
-          console.log('[EducaStock] Câmera ajustada: ' + (ns.width||'?') + 'x' + (ns.height||'?'));
+          console.log('[EducaStock] Câmera ajustada para Full HD: ' + (ns.width||'?') + 'x' + (ns.height||'?'));
         }).catch(function() {}); // falha silenciosa — câmera continua funcionando
       } catch(e) {}
     }, 5000);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 7. SCAN DE FRAME (loop contínuo — usa estratégia rápida de 4 tentativas)
+    // 7. SCAN DE FRAME (loop contínuo — ML primeiro, ZXing como complemento)
+    // Fluxo: BarcodeDetector ML (nativo) → ImageCapture+ZXing → canvas+ZXing
+    // BarcodeDetector: mais rápido, suporta qualquer rotação, sem canvas ops.
+    // ZXing: complemento quando ML não encontra (baixo contraste, formatos raros).
     // ─────────────────────────────────────────────────────────────────────────
     window._zxingScanFrameCb = function(cb) {
-      if (!window._zxingReader) { cb(null); return; }
+      if (!window._zxingReader && !window._barcodeDetector) { cb(null); return; }
       var video = document.querySelector('video');
       if (!video || video.readyState < 2) { cb(null); return; }
       var vw = video.videoWidth, vh = video.videoHeight;
       if (!vw || !vh) { cb(null); return; }
 
-      function decodeFromVideo() {
+      // ZXing via canvas do elemento de vídeo (fallback final)
+      function zxingFromVideoEl() {
+        if (!window._zxingReader) { cb(null); return; }
         try {
           var c = document.createElement('canvas');
           c.width = vw; c.height = vh;
@@ -517,10 +563,13 @@
         } catch(e) { cb(null); }
       }
 
-      var ic = window._getImageCapture();
-      if (ic) {
+      // ZXing via ImageCapture.grabFrame() (maior qualidade de frame)
+      function zxingViaGrabFrame() {
+        if (!window._zxingReader) { cb(null); return; }
+        var ic = window._getImageCapture();
+        if (!ic) { zxingFromVideoEl(); return; }
         ic.grabFrame().then(function(frame) {
-          if (!frame) { decodeFromVideo(); return; }
+          if (!frame) { zxingFromVideoEl(); return; }
           try {
             var fc = document.createElement('canvas');
             fc.width  = frame.width  || vw;
@@ -530,11 +579,27 @@
             cb(window._zxingDecodeLive(fc));
           } catch(e) {
             if (frame && frame.close) frame.close();
-            decodeFromVideo();
+            zxingFromVideoEl();
           }
-        }, function() { decodeFromVideo(); });
+        }, function() { zxingFromVideoEl(); });
+      }
+
+      // 1ª tentativa: BarcodeDetector ML — nativo, suporta rotação automática
+      if (window._barcodeDetector) {
+        window._barcodeDetector.detect(video).then(function(barcodes) {
+          if (barcodes && barcodes.length) {
+            var hit = window._preferProduct(barcodes);
+            if (hit && hit.rawValue) { cb(hit.rawValue); return; }
+          }
+          // ML não encontrou → complementa com ZXing (frame de alta qualidade)
+          zxingViaGrabFrame();
+        }).catch(function() {
+          // BarcodeDetector falhou → ZXing direto
+          zxingViaGrabFrame();
+        });
       } else {
-        decodeFromVideo();
+        // BarcodeDetector não disponível → ZXing direto
+        zxingViaGrabFrame();
       }
     };
 
@@ -581,14 +646,15 @@
 
     // ─────────────────────────────────────────────────────────────────────────
     // 9. CAPTURA FOTO E DETECTA (botão câmera na UI)
+    // Fluxo: takePhoto → ML → ZXing full → grabFrame → ML → ZXing full
+    // BarcodeDetector ML é tentado em CADA fonte de imagem antes do ZXing.
     // ─────────────────────────────────────────────────────────────────────────
     window._captureAndScanCb = function(cb) {
-      if (!window._zxingReader) { cb('ERR:no_detector'); return; }
+      if (!window._zxingReader && !window._barcodeDetector) { cb('ERR:no_detector'); return; }
 
       var ic = window._getImageCapture();
 
-      // Fallback: <input type=file capture=environment> (funciona no iOS Safari
-      // quando ImageCapture não está disponível ou takePhoto falha)
+      // Fallback: <input type=file capture=environment> (iOS Safari sem ImageCapture)
       function fileInputFallback() {
         var input    = document.createElement('input');
         input.type   = 'file';
@@ -603,13 +669,16 @@
           try {
             if (document.body.contains(input)) document.body.removeChild(input);
           } catch(_) {}
-          cb(v);
+          // Para o file input: ML + ZXing no arquivo escolhido
+          if (v && typeof v !== 'string') {
+            detectBlobMLThenZXing(v, function() { cb(null); });
+          } else { cb(v); }
         }
 
         input.addEventListener('change', function() {
           var file = input.files && input.files[0];
           if (!file) { done(null); return; }
-          window._detectInBlob(file, done);
+          done(file); // passa o Blob para done() → detectBlobMLThenZXing
         });
 
         var wasHidden = false;
@@ -622,37 +691,68 @@
         input.click();
       }
 
-      if (!ic) { fileInputFallback(); return; }
-
-      // takePhoto() captura em alta resolução sem abrir câmera nativa.
-      // Tenta com configurações de alta qualidade primeiro.
-      var photoPromise;
-      try {
-        photoPromise = ic.takePhoto({ imageWidth: 1920, imageHeight: 1080 });
-      } catch(e) {
-        photoPromise = ic.takePhoto();
+      // ML + ZXing full em um Blob (foto ou arquivo)
+      function detectBlobMLThenZXing(blob, onNotFound) {
+        function tryZXing() {
+          if (!window._zxingReader) { onNotFound(); return; }
+          window._detectInBlob(blob, function(r) { if (r) cb(r); else onNotFound(); });
+        }
+        if (window._barcodeDetector) {
+          window._barcodeDetector.detect(blob)
+            .then(function(barcodes) {
+              if (barcodes && barcodes.length) {
+                var hit = window._preferProduct(barcodes);
+                if (hit && hit.rawValue) { cb(hit.rawValue); return; }
+              }
+              tryZXing(); // ML não achou → ZXing completo (20 estratégias)
+            }).catch(tryZXing);
+        } else { tryZXing(); }
       }
 
-      photoPromise.then(function(blob) {
-        window._detectInBlob(blob, function(result) {
-          if (result) { cb(result); return; }
-
-          // takePhoto não detectou — tenta também com grabFrame (frame atual)
-          // útil quando o takePhoto captura um frame diferente do que o usuário vê
-          ic.grabFrame().then(function(frame) {
-            if (!frame) { cb(null); return; }
-            try {
-              var fc = document.createElement('canvas');
-              fc.width  = frame.width;
-              fc.height = frame.height;
-              fc.getContext('2d').drawImage(frame, 0, 0);
-              if (frame.close) frame.close();
-              window._zxingDecodeFull(fc, cb);
-            } catch(e) {
-              if (frame && frame.close) frame.close();
-              cb(null);
+      // Último recurso: grabFrame + ML + ZXing
+      function tryGrabFrame() {
+        if (!ic) { cb(null); return; }
+        ic.grabFrame().then(function(frame) {
+          if (!frame) { cb(null); return; }
+          try {
+            var fc = document.createElement('canvas');
+            fc.width  = frame.width;
+            fc.height = frame.height;
+            fc.getContext('2d').drawImage(frame, 0, 0);
+            if (frame.close) frame.close();
+            if (window._barcodeDetector) {
+              window._barcodeDetector.detect(fc)
+                .then(function(barcodes) {
+                  if (barcodes && barcodes.length) {
+                    var hit = window._preferProduct(barcodes);
+                    if (hit && hit.rawValue) { cb(hit.rawValue); return; }
+                  }
+                  if (window._zxingReader) window._zxingDecodeFull(fc, cb);
+                  else cb(null);
+                }).catch(function() {
+                  if (window._zxingReader) window._zxingDecodeFull(fc, cb);
+                  else cb(null);
+                });
+            } else {
+              if (window._zxingReader) window._zxingDecodeFull(fc, cb);
+              else cb(null);
             }
-          }, function() { cb(null); });
+          } catch(e) { if (frame && frame.close) frame.close(); cb(null); }
+        }, function() { cb(null); });
+      }
+
+      if (!ic) { fileInputFallback(); return; }
+
+      // takePhoto() captura em alta resolução (Full HD) sem abrir câmera nativa
+      var photoPromise;
+      try { photoPromise = ic.takePhoto({ imageWidth: 1920, imageHeight: 1080 }); }
+      catch(e) { photoPromise = ic.takePhoto(); }
+
+      photoPromise.then(function(blob) {
+        // 1ª tentativa: ML + ZXing na foto capturada
+        detectBlobMLThenZXing(blob, function() {
+          // Não encontrou na foto → tenta grabFrame (frame em tempo real)
+          tryGrabFrame();
         });
       }, function(err) {
         console.warn('[EducaStock] takePhoto falhou:', err && err.message ? err.message : err);
