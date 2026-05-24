@@ -298,7 +298,8 @@ class _AuditPageState extends ConsumerState<AuditPage> {
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Auditoria',
         subtitle: 'Histórico de alterações críticas',
         showBackButton: true,
@@ -380,8 +381,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: logsAsync.when(
+      Expanded(child: logsAsync.when(
           data: (logs) {
             final filtered = _applyFilters(logs);
             if (filtered.isEmpty) {
@@ -420,6 +420,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
           ),
         ),
       ),
+      ]),
     );
   }
 }
