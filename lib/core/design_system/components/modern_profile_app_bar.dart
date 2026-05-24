@@ -17,7 +17,7 @@ const _kHeaderGradient = LinearGradient(
   end: Alignment.bottomRight,
 );
 
-class ModernProfileAppBar extends ConsumerWidget implements PreferredSizeWidget {
+class ModernProfileAppBar extends ConsumerWidget {
   final String title;
   final String? subtitle;
   final String? profileName;
@@ -39,9 +39,6 @@ class ModernProfileAppBar extends ConsumerWidget implements PreferredSizeWidget 
     Color? foregroundColor,
     this.showBackButton = false,
   });
-
-  @override
-  Size get preferredSize => const Size.fromHeight(64);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -517,7 +514,7 @@ class _AlertBubble extends StatelessWidget {
               return InkWell(
                 onTap: () {
                   Navigator.of(context).pop();
-                  context.push('${AppRoutes.productDetail}/${b.productId}');
+                  context.push('/products/${b.productId}');
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
