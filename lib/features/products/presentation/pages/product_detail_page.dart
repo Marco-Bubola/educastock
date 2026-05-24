@@ -269,39 +269,43 @@ class _ProductSliverAppBar extends ConsumerWidget {
             steps: [
               TutorialStep(
                 key: _keyDetailInfo,
-                title: 'Informações do Produto',
-                description:
-                    'Veja todos os dados cadastrais e estatísticas do produto: total de lotes, itens, valor em estoque e alertas de validade.',
+                title: 'Estatísticas do Produto',
+                description: 'Os 4 cards coloridos na linha superior mostram os números mais importantes do produto: total de lotes ativos, quantidade total em estoque (somando todos os lotes), valor financeiro estimado e alertas (vencidos ou críticos).',
                 icon: Icons.info_rounded,
                 align: ContentAlign.bottom,
                 hints: const [
-                  'A quantidade total soma todos os lotes disponíveis',
-                  'Toque no lápis no topo para editar o produto',
+                  '📦 Lotes: quantos lotes ativos existem',
+                  '🔢 Itens: total de unidades somadas',
+                  '💰 Valor: estimativa em reais (R\$) do estoque',
+                  '⚠️ Alertas: vencidos primeiro, depois críticos',
+                  '✏️ Botão lápis no topo edita os dados do produto',
                 ],
               ),
               TutorialStep(
                 key: _keyDetailBatches,
-                title: 'Lotes do Produto',
-                description:
-                    'Cada lote tem sua própria quantidade, validade e localização. Lotes vencidos exibem ações rápidas para descarte ou registro de uso.',
+                title: 'Lotes Ativos',
+                description: 'Lista todos os lotes registrados para este produto. Cada cartão mostra: status colorido, número do lote, quantidade, data de validade com contagem de dias, origem (doação/compra), localização física e preço unitário. Lotes vencidos têm botão "Resolver" para baixa rápida.',
                 icon: Icons.inventory_rounded,
                 align: ContentAlign.bottom,
                 hints: const [
-                  '🔴 Vencido — toque em "Resolver" para descartar ou registrar uso',
+                  '🔴 Vencido → toque "Resolver" para baixa rápida',
                   '🟡 Borda amarela = vence em até 30 dias',
-                  '🟢 Borda verde = validade segura',
+                  '🟢 Borda verde = validade segura (>30 dias)',
+                  '✏️ Ícone lápis edita o lote',
+                  '🗑️ Ícone lixeira exclui SEM baixa em estoque',
                 ],
               ),
               TutorialStep(
                 key: _keyDetailFAB,
                 title: 'Adicionar Novo Lote',
-                description:
-                    'Registre um novo lote para este produto. Informe quantidade, validade, origem e localização.',
+                description: 'Toque no botão azul "Novo Lote" para registrar uma nova entrada deste produto. Você informa número do lote, quantidade, validade, origem, localização e preço unitário. Cada nova compra/doação deve virar um lote separado para rastreabilidade.',
                 icon: Icons.add_box_rounded,
                 align: ContentAlign.top,
                 hints: const [
-                  'Cada compra/doação deve virar um lote separado',
-                  'Lotes com validades diferentes devem ser separados',
+                  '📦 Cada entrada = 1 lote separado',
+                  '📅 Validades diferentes SEMPRE em lotes separados',
+                  '⚡ Atalho: escaneie código de barras na tela inicial',
+                  '🏷️ Use o número LOT impresso na embalagem',
                 ],
               ),
             ],
