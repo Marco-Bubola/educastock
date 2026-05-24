@@ -21,7 +21,8 @@ class MlInsightsPage extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Análise de Risco ML',
         subtitle: 'Classificação inteligente de lotes',
         showBackButton: true,
@@ -79,8 +80,7 @@ class MlInsightsPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: SafeArea(
-        child: ListView(
+      Expanded(child: ListView(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
           children: [
             // --- TFLite badge ---
@@ -216,6 +216,7 @@ class MlInsightsPage extends ConsumerWidget {
           ],
         ),
       ),
+      ]),
     );
   }
 
