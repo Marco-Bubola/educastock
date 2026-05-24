@@ -318,59 +318,58 @@ class _MovementPageState extends ConsumerState<MovementPage> {
             onPressed: () {
               final steps = <TutorialStep>[
                 TutorialStep(
-                  key: _keySearchBar,
-                  title: 'Buscar Produto para Saída',
-                  description:
-                      'Digite o nome do produto ou receita que deseja distribuir. O sistema mostrará os itens disponíveis em estoque com suas quantidades e validades.',
-                  icon: Icons.search_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Busca em tempo real enquanto você digita',
-                    'Lotes com borda vermelha já estão vencidos',
-                    '🟡 Amarelo = vence em até 30 dias — distribua primeiro!',
-                    'Quantidade disponível aparece abaixo de cada produto',
-                  ],
-                ),
-                TutorialStep(
                   key: _keyModeTabs,
-                  title: 'Escolha o tipo de saída',
-                  description:
-                      'Use essas abas para alternar entre produto avulso e receita. Em receitas, você seleciona um modelo pronto e o sistema distribui todos os itens da receita.',
+                  title: 'Modo de Distribuição',
+                  description: 'Escolha entre dois modos: "Produto Avulso" (você seleciona itens individualmente) ou "Receita Ativa" (usa um modelo pronto que distribui múltiplos itens de uma vez). A aba selecionada fica destacada em azul.',
                   icon: Icons.swap_horiz_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Produto Avulso: selecione itens individualmente',
-                    'Receita Ativa: escolhe um kit completo de distribuição',
-                    'A aba selecionada fica destacada em azul',
+                    '📦 Avulso: você escolhe item por item',
+                    '📋 Receita: kit pronto (ex: Kit Lanche)',
+                    '🚀 Receitas são mais rápidas para distribuições padrão',
+                    'Pode alternar entre modos sem perder seleções',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keySearchBar,
+                  title: 'Buscar Itens',
+                  description: 'Digite no campo de busca para encontrar produtos ou receitas pelo nome. A busca acontece em tempo real e mostra apenas itens com estoque disponível. Use também os chips de categoria para filtrar visualmente.',
+                  icon: Icons.search_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '⌨️ Busca em tempo real, sem precisar enter',
+                    '🏷️ Mostra apenas produtos COM estoque',
+                    '🎨 Use chips de categoria para refinar',
+                    '🔴/🟡 As cores indicam validade próxima',
                   ],
                 ),
                 if (_mode == _OutputMode.products)
                   TutorialStep(
                     key: _keyProductGrid,
-                    title: 'Selecionar produtos e quantidades',
-                    description:
-                        'Cada card mostra o produto, validade e a quantidade disponível. Use os botões + e - para ajustar a quantidade que será distribuída.',
+                    title: 'Selecionar Produtos',
+                    description: 'Cada card é um produto disponível. Mostra nome, marca, quantidade total em estoque e badge colorido de validade do lote mais próximo do vencimento. Use os botões + e - para ajustar quanto vai distribuir. O sistema aplica FEFO automaticamente.',
                     icon: Icons.inventory_2_rounded,
                     align: ContentAlign.top,
                     hints: const [
-                      '🔴 Vermelho: produto vencido — não distribuir',
-                      '🟡 Amarelo: vence em até 30 dias — prioridade',
-                      '🟢 Verde: validade ok — distribuição normal',
-                      'A quantidade escolhida aparece no canto do card',
+                      '🔴 Vermelho: lote vencido — confira antes de distribuir',
+                      '🟡 Amarelo: vence em 30 dias — prioridade alta',
+                      '🟢 Verde: validade segura — distribuição normal',
+                      '➕➖ Use +/- para ajustar quantidade',
+                      '🔢 Badge no canto = quantidade selecionada',
                     ],
                   )
                 else
                   TutorialStep(
                     key: _keyRecipeGrid,
-                    title: 'Selecionar uma receita ativa',
-                    description:
-                        'Escolha um modelo de distribuição pronto. Ao selecionar, o sistema calcula automaticamente todas as quantidades necessárias.',
+                    title: 'Selecionar Receita',
+                    description: 'Lista de receitas ativas (modelos prontos com múltiplos produtos). Toque em uma receita para selecionar — o sistema calcula automaticamente todas as quantidades necessárias e verifica se há estoque suficiente.',
                     icon: Icons.menu_book_rounded,
                     align: ContentAlign.top,
                     hints: const [
-                      'Toque no card para selecionar a receita',
-                      'Confira a descrição e os ingredientes',
-                      'Você pode voltar para Produto Avulso a qualquer momento',
+                      '📋 Cada receita = vários produtos de uma vez',
+                      '✅ Sistema verifica estoque antes de executar',
+                      '👆 Toque uma vez para selecionar',
+                      '🔙 Pode voltar para Avulso a qualquer momento',
                     ],
                   ),
                 if (_mode == _OutputMode.products ||
@@ -379,15 +378,14 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                   TutorialStep(
                     key: _keyConfirmFab,
                     title: 'Confirmar Distribuição',
-                    description:
-                        'Após selecionar as quantidades (ou escolher uma receita ativa), toque aqui para confirmar a saída. O sistema registra automaticamente quem distribuiu, quando e para qual finalidade.',
+                    description: 'Quando estiver com a seleção pronta, toque no botão azul para revisar e confirmar. Você verá uma tela de resumo com todos os itens, quantidades e lotes que serão baixados. A saída fica registrada com seu nome, hora e motivo.',
                     icon: Icons.send_rounded,
                     align: ContentAlign.top,
                     hints: const [
-                      'Revise os itens e quantidades antes de confirmar',
-                      'A saída deduz automaticamente do estoque disponível',
-                      'O histórico de saídas fica registrado em "Histórico"',
-                      'Não é possível desfazer uma saída confirmada',
+                      '👀 Tela de revisão antes de confirmar definitivo',
+                      '📉 Estoque é deduzido AUTOMATICAMENTE',
+                      '📜 Aparece no Histórico imediatamente',
+                      '⚠️ Saída confirmada NÃO pode ser desfeita',
                     ],
                   ),
               ];
