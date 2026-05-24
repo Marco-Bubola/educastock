@@ -115,4 +115,29 @@ class ConsumptionForecast {
 
   bool get isProphet => source == 'prophet';
   bool get isMovingAverage => source == 'moving_average';
+
+  /// Retorna uma cópia com o estoque atual sobrescrito e
+  /// `suggestedReplenishment` recalculado (mesma fórmula do Colab:
+  /// max(0, forecastMonthly * 1.2 - currentStock)).
+  ConsumptionForecast copyWithLiveStock(int liveStock) {
+    final target = (forecastMonthly * 1.2).round();
+    final newSuggested = (target - liveStock).clamp(0, 1 << 31);
+    return ConsumptionForecast(
+      productId: productId,
+      productName: productName,
+      categoryId: categoryId,
+      forecastWeekly: forecastWeekly,
+      forecastMonthly: forecastMonthly,
+      currentStock: liveStock,
+      suggestedReplenishment: newSuggested,
+      ciLower: ciLower,
+      ciUpper: ciUpper,
+      trend: trend,
+      trendPercent: trendPercent,
+      modelVersion: modelVersion,
+      generatedAt: generatedAt,
+      dataPoints: dataPoints,
+      source: source,
+    );
+  }
 }
