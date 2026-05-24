@@ -121,16 +121,6 @@
       ]
     },
     {
-      "collectionGroup": "consumption_forecasts",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "suggestedReplenishment",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "recipes",
       "queryScope": "COLLECTION",
       "fields": [
@@ -141,6 +131,20 @@
         {
           "fieldPath": "name",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "alerts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "resolved",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
         }
       ]
     }
