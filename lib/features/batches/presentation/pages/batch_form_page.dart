@@ -311,38 +311,41 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
               steps: [
                 TutorialStep(
                   key: _keyBatchQty,
-                  title: 'Número do Lote e Quantidade',
-                  description:
-                      'Informe o número de identificação do lote e a quantidade de unidades recebidas.',
+                  title: 'Identificação do Lote',
+                  description: 'Preencha o número que identifica este lote (geralmente impresso na embalagem como "LOT" + código) e a quantidade total de unidades recebidas. Cada lote representa UMA entrada com mesma origem e validade.',
                   icon: Icons.tag_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Use o código impresso na embalagem do fornecedor',
-                    'Um lote = uma entrada com mesma origem e validade',
+                    '🏷️ Use o código LOT impresso pelo fornecedor',
+                    '📦 1 lote = 1 entrada com mesma validade',
+                    '🔢 Quantidade em unidades (kg, un, L conforme produto)',
+                    'Lotes diferentes do mesmo produto = entradas separadas',
                   ],
                 ),
                 TutorialStep(
                   key: _keyBatchExpiry,
-                  title: 'Data de Validade',
-                  description:
-                      'Informe a data de validade impressa na embalagem.',
+                  title: 'Validade e Origem',
+                  description: 'Informe a data de validade EXATA da embalagem (campo só aparece se o produto for perecível) e a origem do lote: Doação, Compra, Parceiro ou Transferência. Estes dados alimentam alertas e relatórios.',
                   icon: Icons.event_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Sempre registre a data exata da embalagem',
-                    'Produtos não perecíveis não precisam de data',
+                    '📅 Validade alimenta o sistema de alertas automaticamente',
+                    '🎁 Doação: itens recebidos sem custo',
+                    '🛒 Compra: itens adquiridos pela ONG',
+                    '🤝 Parceiro: vindos de organizações parceiras',
                   ],
                 ),
                 TutorialStep(
                   key: _keyBatchLocation,
-                  title: 'Localização no Depósito',
-                  description:
-                      'Selecione a prateleira e o nível onde este lote está guardado.',
+                  title: 'Localização Física',
+                  description: 'Selecione onde este lote será guardado fisicamente no depósito. Escolha a prateleira e o nível na lista suspensa. Esta informação ajuda a equipe a encontrar rapidamente o lote na hora da distribuição.',
                   icon: Icons.shelves,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Escolha a prateleira (A, B...) e o nível (1, 2...)',
-                    'Crie novas localizações em Configurações → Depósito',
+                    '📍 Padrão: "Prateleira A · Nível 1"',
+                    '➕ Não tem a localização? Crie em Configurações → Depósito',
+                    '🥶 Use nomes especiais para áreas (geladeira, freezer)',
+                    'Localização correta acelera distribuição em 70%',
                   ],
                 ),
               ],
