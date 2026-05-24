@@ -20,7 +20,8 @@ class LocationsPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Depósito',
         subtitle: 'Prateleiras e armários',
         profileName: user?.name,
@@ -63,8 +64,7 @@ class LocationsPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: SafeArea(
-        child: locations.when(
+      Expanded(child: locations.when(
           data: (items) {
             if (items.isEmpty) {
               return _EmptyLocations(
@@ -106,6 +106,7 @@ class LocationsPage extends ConsumerWidget {
           ),
         ),
       ),
+      ]),
       floatingActionButton: FloatingActionButton.extended(
         key: _keyLocationFAB,
         onPressed: () => context.push(AppRoutes.locationCreate),
