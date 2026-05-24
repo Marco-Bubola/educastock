@@ -296,7 +296,8 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
     }
 
     return Scaffold(
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: _isEdit ? 'Editar Lote' : 'Cadastrar Lote',
         subtitle: productName != null
             ? 'Produto: $productName'
@@ -349,13 +350,8 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
           ),
         ],
       ),
-      floatingActionButton: _BatchSaveFab(
-          isLoading: isLoading,
-          isEdit: _isEdit,
-          onSave: _submit),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerFloat,
-      body: SafeArea(
+      Expanded(child: SafeArea(
+        top: false,
         child: Form(
           key: _formKey,
           child: ListView(
@@ -761,7 +757,14 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
             ],
           ),
         ),
-      ),
+      )),
+      ]),
+      floatingActionButton: _BatchSaveFab(
+          isLoading: isLoading,
+          isEdit: _isEdit,
+          onSave: _submit),
+      floatingActionButtonLocation:
+          FloatingActionButtonLocation.centerFloat,
     );
   }
 }
