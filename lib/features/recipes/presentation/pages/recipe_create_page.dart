@@ -134,7 +134,8 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
 
     return Scaffold(
       backgroundColor: bg,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: _isEditing ? 'Editar Receita' : 'Nova Receita',
         subtitle: _isEditing
             ? 'Altere os dados e salve'
@@ -174,7 +175,7 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
           ),
         ],
       ),
-      body: productsAsync.when(
+      Expanded(child: productsAsync.when(
         data: (products) {
           // Receita só pode usar produtos que tenham estoque (ativo).
           // Mantemos itens já selecionados (caso o usuário esteja editando
@@ -409,7 +410,8 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
         error: (e, _) => Center(
           child: Text('Erro: $e', style: const TextStyle(color: Color(0xFFDC2626))),
         ),
-      ),
+      )),
+      ]),
     );
   }
 
