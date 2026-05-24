@@ -7,6 +7,8 @@ import '../../domain/entities/consumption_forecast.dart';
 
 final _keyForecastList = GlobalKey();
 final _keyForecastInfo = GlobalKey();
+final _keyForecastKpi = GlobalKey();
+final _keyForecastFilter = GlobalKey();
 
 class ForecastPage extends ConsumerStatefulWidget {
   const ForecastPage({super.key});
@@ -39,28 +41,54 @@ class _ForecastPageState extends ConsumerState<ForecastPage> {
               steps: [
                 TutorialStep(
                   key: _keyForecastInfo,
-                  title: 'Previsão com Prophet',
-                  description:
-                      'As previsões são geradas pelo modelo Prophet da Meta via Google Colab, treinado com o histórico real de saídas do estoque. Execute o notebook periodicamente para atualizar.',
+                  title: 'Modelo Prophet (Meta)',
+                  description: 'Este banner explica como as previsões são geradas: o algoritmo Prophet (da Meta/Facebook) analisa o histórico real de saídas, detecta tendências, sazonalidade e eventos especiais (datas comemorativas) e projeta o consumo futuro de cada produto.',
                   icon: Icons.psychology_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Execute o notebook Colab mensalmente ou após grandes movimentações',
-                    'Prophet analisa tendências, sazonalidade e eventos',
-                    'Previsão semanal + mensal por produto',
+                    '🤖 IA estatística rodando em Google Colab',
+                    'Precisa de pelo menos 30 dias de histórico',
+                    'Re-execute mensalmente ou após eventos atípicos',
+                    'Mais histórico = previsões mais precisas',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyForecastKpi,
+                  title: 'Indicadores Rápidos',
+                  description: 'Os cards KPI no topo resumem o estado geral da previsão: total de produtos analisados, quantos precisam reposição urgente, consumo médio diário e tendência geral do estoque. Use para decisões rápidas de compra.',
+                  icon: Icons.analytics_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Cards são interativos — toque para filtrar a lista',
+                    'Indicadores atualizam em tempo real',
+                    'Verde = situação controlada | Vermelho = ação imediata',
+                    'Use estes números na reunião de compras',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyForecastFilter,
+                  title: 'Filtros Inteligentes',
+                  description: 'Os chips de filtro permitem focar em diferentes recortes: "Todos", "Precisam Reposição" (urgência), "Crítico" (menos de 7 dias) ou "Crescendo" (consumo subindo). Combine com outros para encontrar produtos específicos.',
+                  icon: Icons.filter_alt_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Filtro padrão: "Todos" mostra a lista completa',
+                    '"Crescendo": produtos com tendência de alta',
+                    'Use "Crítico" antes de compras emergenciais',
+                    'O contador no header acompanha o filtro',
                   ],
                 ),
                 TutorialStep(
                   key: _keyForecastList,
                   title: 'Sugestões de Reposição',
-                  description:
-                      'Produtos ordenados por urgência de reposição. A sugestão considera o consumo previsto para 30 dias com margem de segurança de 20%.',
+                  description: 'Lista ordenada por urgência. Cada card mostra: produto, dias restantes de estoque, consumo médio, tendência (↑↓), quantidade sugerida para comprar (já com margem de 20%). O sistema sugere quantidade ideal para 30 dias.',
                   icon: Icons.add_shopping_cart_rounded,
                   align: ContentAlign.top,
                   hints: const [
-                    '🔴 Crítico: menos de 7 dias de estoque',
-                    '🟡 Baixo: menos de 14 dias de estoque',
-                    'O indicador de tendência mostra se o consumo está aumentando',
+                    '🔴 Crítico: menos de 7 dias — comprar HOJE',
+                    '🟡 Baixo: menos de 14 dias — compra programada',
+                    '↗️ Tendência crescente: aumente a quantidade',
+                    'Quantidade sugerida = consumo 30d × 1.2 - estoque atual',
                   ],
                 ),
               ],
@@ -82,6 +110,8 @@ class _ForecastPageState extends ConsumerState<ForecastPage> {
               onFilterChanged: (f) => setState(() => _filter = f),
               forecastListKey: _keyForecastList,
               forecastInfoKey: _keyForecastInfo,
+              forecastKpiKey: _keyForecastKpi,
+              forecastFilterKey: _keyForecastFilter,
             );
           },
         ),
@@ -113,6 +143,8 @@ class _ForecastBody extends StatelessWidget {
   final ValueChanged<_FilterMode> onFilterChanged;
   final GlobalKey forecastListKey;
   final GlobalKey forecastInfoKey;
+  final GlobalKey forecastKpiKey;
+  final GlobalKey forecastFilterKey;
 
   const _ForecastBody({
     required this.allForecasts,
@@ -122,6 +154,8 @@ class _ForecastBody extends StatelessWidget {
     required this.onFilterChanged,
     required this.forecastListKey,
     required this.forecastInfoKey,
+    required this.forecastKpiKey,
+    required this.forecastFilterKey,
   });
 
   @override
@@ -145,12 +179,16 @@ class _ForecastBody extends StatelessWidget {
         // ─── KPIs rápidos ───────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: _ForecastKpiRow(forecasts: allForecasts),
+          child: KeyedSubtree(
+            key: forecastKpiKey,
+            child: _ForecastKpiRow(forecasts: allForecasts),
+          ),
         ),
         const SizedBox(height: AppSpacing.xl),
 
         // ─── Filtros ────────────────────────────────────────────────────
         Padding(
+          key: forecastFilterKey,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
