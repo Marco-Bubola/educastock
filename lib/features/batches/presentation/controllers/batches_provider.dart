@@ -18,6 +18,21 @@ final allAvailableBatchesProvider = StreamProvider<List<Batch>>((ref) {
   return ref.watch(batchesDatasourceProvider).watchAllAvailableBatches();
 });
 
+/// Mapa productId → quantidade total disponível (soma de todos os lotes
+/// com status `disponivel`). Recalcula automaticamente quando o stream de
+/// batches muda. Usado para determinar se um produto está "ativo" (tem
+/// estoque) ou "inativo" (sem estoque).
+final productAvailableQtyMapProvider = Provider<Map<String, int>>((ref) {
+  final batches =
+      ref.watch(allAvailableBatchesProvider).valueOrNull ?? const <Batch>[];
+  final map = <String, int>{};
+  for (final b in batches) {
+    if (b.quantity <= 0) continue;
+    map[b.productId] = (map[b.productId] ?? 0) + b.quantity;
+  }
+  return map;
+});
+
 final expiringBatchesProvider =
     FutureProvider.family<List<Batch>, int>((ref, days) {
   return ref
