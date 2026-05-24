@@ -231,7 +231,8 @@ class _OutputViewPageState extends State<OutputViewPage>
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: context.pageBg,
-        appBar: ModernProfileAppBar(
+        body: Column(children: [
+        ModernProfileAppBar(
           title: 'Relatório de Saída',
           subtitle: 'Detalhes da distribuição',
           showBackButton: true,
@@ -239,8 +240,7 @@ class _OutputViewPageState extends State<OutputViewPage>
             buildHelpButton(context: context, onPressed: _showTutorial),
           ],
         ),
-        bottomNavigationBar: _BottomBar(isDark: isDark),
-        body: CustomScrollView(
+        Expanded(child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(
@@ -338,7 +338,9 @@ class _OutputViewPageState extends State<OutputViewPage>
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
-        ),
+        )),
+        ]),
+        bottomNavigationBar: _BottomBar(isDark: isDark),
       ),
     );
   }
@@ -394,20 +396,13 @@ class _LoadingViewState extends State<_LoadingView>
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF09111F) : const Color(0xFFF0F4FA),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0A1929),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white54, size: 18),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text(
-          'Registrando saída…',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-      ),
       body: Column(
         children: [
+          ModernProfileAppBar(
+            title: 'Registrando saída…',
+            subtitle: 'Processando movimentação',
+            showBackButton: true,
+          ),
           // ── Gradiente superior com spinner ──
           Container(
             width: double.infinity,
