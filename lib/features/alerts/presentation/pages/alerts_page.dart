@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
@@ -18,6 +18,9 @@ class AlertsPage extends ConsumerStatefulWidget {
 class _AlertsPageState extends ConsumerState<AlertsPage> {
   final _keyAlertCard = GlobalKey();
   final _keyAlertList = GlobalKey();
+  final _keyFilters = GlobalKey();
+
+  AlertLevel? _filter; // null = todos
 
   @override
   void initState() {
@@ -46,7 +49,8 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
     if (alertsConfig.valueOrNull?.expiryEnabled == false) {
       return Scaffold(
         backgroundColor: cs.surface,
-        appBar: ModernProfileAppBar(
+        body: Column(children: [
+        ModernProfileAppBar(
           title: 'Alertas',
           subtitle: 'Alertas desativados',
           profileName: user?.name,
@@ -60,7 +64,8 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
                   TutorialStep(
                     key: _keyAlertCard,
                     title: 'Alertas de Vencimento',
-                    description: 'Os alertas mostram produtos próximos do vencimento ou já vencidos. Ative os alertas em Configurações para começar o monitoramento automático.',
+                    description:
+                        'Os alertas mostram produtos próximos do vencimento ou já vencidos. Ative os alertas em Configurações para começar o monitoramento automático.',
                     icon: Icons.notification_important_rounded,
                     align: ContentAlign.bottom,
                     hints: const [
@@ -74,22 +79,24 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
             ),
           ],
         ),
-        body: const SafeArea(
-          child: CasaEmptyState(
+        const Expanded(child: CasaEmptyState(
             icon: Icons.notifications_off_outlined,
             title: 'Alertas desativados',
             description: 'Ative em Configurações → Alertas para monitorar prazos.',
-          ),
-        ),
+          )),
+        ]),
       );
     }
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
-        title: 'Alertas de Validade',
+      body: Column(children: [
+      ModernProfileAppBar(
+        title: 'Notificações',
         subtitle: alertsAsync.when(
-          data: (list) => '${list.length} alerta(s) ativo(s)',
+          data: (list) => list.isEmpty
+              ? 'Tudo em dia'
+              : '${list.length} ${list.length == 1 ? 'alerta ativo' : 'alertas ativos'}',
           loading: () => 'Carregando...',
           error: (_, __) => 'Erro ao carregar',
         ),
@@ -104,27 +111,41 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
                 TutorialStep(
                   key: _keyAlertCard,
                   title: 'Card de Alerta',
-                  description: 'Cada card mostra um produto com validade próxima ou vencida. A cor indica a urgência: vermelho = crítico, amarelo = atenção.',
+                  description:
+                      'Cada card mostra um produto com validade próxima ou vencida. A cor indica a urgência: vermelho = crítico, amarelo = atenção.',
                   icon: Icons.notification_important_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
                     '🔴 Vermelho: vence em até 7 dias ou já venceu — ação imediata!',
                     '🟡 Amarelo: vence em até 30 dias — monitore e distribua',
-                    'Toque no card para ir direto ao produto e lote',
-                    'Distribua primeiro os itens com validade mais próxima',
+                    'Toque no card para abrir o produto',
+                    'Use o menu (⋮) para Resolver, Adiar ou Excluir',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyFilters,
+                  title: 'Filtros rápidos',
+                  description:
+                      'Filtre por nível de urgência tocando nas pílulas. O contador no topo mostra quantos alertas existem em cada categoria.',
+                  icon: Icons.filter_alt_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Toque em "Críticos" para ver só os vermelhos',
+                    'Toque novamente para limpar o filtro',
+                    'Use "Resolver todos" para limpar a lista filtrada',
                   ],
                 ),
                 TutorialStep(
                   key: _keyAlertList,
                   title: 'Lista de Alertas',
-                  description: 'Todos os produtos que precisam de atenção estão listados aqui em ordem de urgência. Resolva os vermelhos primeiro para evitar desperdício e garantir segurança alimentar.',
+                  description:
+                      'Todos os produtos que precisam de atenção estão listados aqui em ordem de urgência. Arraste para o lado para resolver rapidamente.',
                   icon: Icons.list_alt_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'A lista atualiza automaticamente conforme o estoque muda',
-                    'Produtos vencidos: registre descarte em "Saída" → Vencimento',
-                    'Dica: distribua por FEFO (First Expiry, First Out)',
-                    'Toque em um alerta para ver os lotes específicos do produto',
+                    'Arraste para a direita = resolver',
+                    'Arraste para a esquerda = excluir',
+                    'Toque longo para ver mais ações',
                   ],
                 ),
               ],
@@ -132,8 +153,7 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: alertsAsync.when(
+      Expanded(child: alertsAsync.when(
           loading: () => ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.lg),
             itemCount: 5,
@@ -147,32 +167,82 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
           ),
           data: (alerts) {
             if (alerts.isEmpty) {
-              return const CasaEmptyState(
-                icon: Icons.check_circle_outline_rounded,
-                title: 'Nenhum alerta ativo',
-                description: 'Tudo em dia! Nenhum produto com validade próxima.',
-              );
+              return _EmptyAllClear(cs: cs);
             }
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
-              itemCount: alerts.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(height: AppSpacing.sm),
-              itemBuilder: (_, i) {
-                final card = _AlertCard(alert: alerts[i], cs: cs);
-                if (i == 0) {
-                  return KeyedSubtree(key: _keyAlertCard, child: card);
-                }
-                if (i == 1) {
-                  return KeyedSubtree(key: _keyAlertList, child: card);
-                }
-                return card;
-              },
+
+            final filtered = _filter == null
+                ? alerts
+                : alerts.where((a) => a.level == _filter).toList();
+
+            final counts = _SeverityCounts.from(alerts);
+
+            return CustomScrollView(
+              slivers: [
+                // ── Banner de stats ─────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
+                    child: _StatsBanner(counts: counts, cs: cs),
+                  ),
+                ),
+
+                // ── Filtros + ação em massa ─────────────────────
+                SliverToBoxAdapter(
+                  child: KeyedSubtree(
+                    key: _keyFilters,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.md),
+                      child: _FiltersRow(
+                        current: _filter,
+                        counts: counts,
+                        onChanged: (lvl) =>
+                            setState(() => _filter = _filter == lvl ? null : lvl),
+                        onResolveAll: filtered.isEmpty
+                            ? null
+                            : () => _confirmResolveAll(filtered),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ── Lista ────────────────────────────────────────
+                if (filtered.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _EmptyForFilter(level: _filter, cs: cs),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxxl),
+                    sliver: SliverList.separated(
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: AppSpacing.sm),
+                      itemBuilder: (_, i) {
+                        final card = _ModernAlertCard(
+                          alert: filtered[i],
+                          cs: cs,
+                          onOpenActions: () => _showActionsSheet(filtered[i]),
+                        );
+                        if (i == 0) {
+                          return KeyedSubtree(key: _keyAlertCard, child: card);
+                        }
+                        if (i == 1) {
+                          return KeyedSubtree(key: _keyAlertList, child: card);
+                        }
+                        return card;
+                      },
+                    ),
+                  ),
+              ],
             );
           },
         ),
       ),
+      ]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateAlertSheet(context),
         icon: const Icon(Icons.add_alert_rounded),
@@ -181,6 +251,243 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
       ),
     );
   }
+
+  // ─── Ações ──────────────────────────────────────────────────────────────
+
+  Future<void> _confirmResolveAll(List<StockAlert> list) async {
+    final ok = await CasaDialogConfirmacao.show(
+      context: context,
+      title: 'Resolver ${list.length} ${list.length == 1 ? "alerta" : "alertas"}?',
+      message:
+          'Todos os alertas visíveis serão marcados como resolvidos. Você pode reativá-los criando novos.',
+      confirmLabel: 'Resolver todos',
+      cancelLabel: 'Cancelar',
+    );
+    if (ok != true || !mounted) return;
+    try {
+      HapticFeedback.mediumImpact();
+      await ref
+          .read(alertsNotifierProvider.notifier)
+          .resolveAll(list.map((a) => a.id));
+      if (!mounted) return;
+      showCasaSnackbar(context,
+          message: '${list.length} alertas resolvidos!', isSuccess: true);
+    } catch (_) {
+      if (!mounted) return;
+      showCasaSnackbar(context,
+          message: 'Erro ao resolver alertas.', isError: true);
+    }
+  }
+
+  Future<void> _showActionsSheet(StockAlert alert) async {
+    final cs = Theme.of(context).colorScheme;
+    final color = _colorForLevel(alert.level);
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: cs.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          color.withValues(alpha: 0.9),
+                          color.withValues(alpha: 0.55),
+                        ]),
+                        borderRadius: BorderRadius.circular(AppRadius.small),
+                      ),
+                      child: Icon(_iconForLevel(alert.level),
+                          color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(alert.productName,
+                              style: AppTypography.labelMedium.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: cs.onSurface),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                          Text(
+                            _relativeTime(alert.createdAt),
+                            style: AppTypography.bodySmall.copyWith(
+                                color: cs.onSurfaceVariant, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
+              // Actions
+              if (!alert.isManual)
+                _SheetAction(
+                  icon: Icons.inventory_2_rounded,
+                  label: 'Ver produto',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.push('/products/${alert.productId}');
+                  },
+                ),
+              _SheetAction(
+                icon: Icons.check_circle_outline_rounded,
+                label: 'Resolver',
+                color: AppColors.success600,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _resolveAlert(alert);
+                },
+              ),
+              _SheetAction(
+                icon: Icons.snooze_rounded,
+                label: 'Adiar...',
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _showSnoozeSheet(alert);
+                },
+              ),
+              _SheetAction(
+                icon: Icons.delete_outline_rounded,
+                label: 'Excluir',
+                color: AppColors.danger600,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _deleteAlert(alert);
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showSnoozeSheet(StockAlert alert) async {
+    final cs = Theme.of(context).colorScheme;
+    final options = [
+      ('1 hora', const Duration(hours: 1)),
+      ('4 horas', const Duration(hours: 4)),
+      ('Amanhã', const Duration(days: 1)),
+      ('Próxima semana', const Duration(days: 7)),
+    ];
+
+    final picked = await showModalBottomSheet<Duration>(
+      context: context,
+      backgroundColor: cs.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
+                child: Row(
+                  children: [
+                    const Icon(Icons.snooze_rounded,
+                        color: AppColors.brandPrimary600),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text('Adiar alerta', style: AppTypography.headingSmall),
+                  ],
+                ),
+              ),
+              for (final (label, dur) in options)
+                _SheetAction(
+                  icon: Icons.timer_outlined,
+                  label: label,
+                  onTap: () => Navigator.pop(ctx, dur),
+                ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (picked == null || !mounted) return;
+    try {
+      await ref.read(alertsNotifierProvider.notifier).snooze(alert.id, picked);
+      if (!mounted) return;
+      showCasaSnackbar(context, message: 'Alerta adiado.', isSuccess: true);
+    } catch (_) {
+      if (!mounted) return;
+      showCasaSnackbar(context,
+          message: 'Erro ao adiar alerta.', isError: true);
+    }
+  }
+
+  Future<void> _resolveAlert(StockAlert alert) async {
+    try {
+      HapticFeedback.lightImpact();
+      await ref.read(alertsNotifierProvider.notifier).resolve(alert.id);
+      if (!mounted) return;
+      showCasaSnackbar(context,
+          message: 'Alerta resolvido!', isSuccess: true);
+    } catch (_) {
+      if (!mounted) return;
+      showCasaSnackbar(context,
+          message: 'Erro ao resolver alerta.', isError: true);
+    }
+  }
+
+  Future<void> _deleteAlert(StockAlert alert) async {
+    final ok = await CasaDialogConfirmacao.show(
+      context: context,
+      title: 'Excluir alerta?',
+      message: 'Esta ação não pode ser desfeita.',
+      confirmLabel: 'Excluir',
+      isDanger: true,
+    );
+    if (ok != true || !mounted) return;
+    try {
+      HapticFeedback.mediumImpact();
+      await ref.read(alertsNotifierProvider.notifier).delete(alert.id);
+      if (!mounted) return;
+      showCasaSnackbar(context,
+          message: 'Alerta excluído.', isSuccess: true);
+    } catch (_) {
+      if (!mounted) return;
+      showCasaSnackbar(context,
+          message: 'Erro ao excluir alerta.', isError: true);
+    }
+  }
+
+  // ─── Criação manual ─────────────────────────────────────────────────────
 
   Future<void> _showCreateAlertSheet(BuildContext context) async {
     final nameController = TextEditingController();
@@ -191,8 +498,8 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppRadius.modal)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModal) {
@@ -250,11 +557,7 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
                 Wrap(
                   spacing: AppSpacing.sm,
                   children: AlertLevel.values.map((lvl) {
-                    final color = switch (lvl) {
-                      AlertLevel.critical => AppColors.danger600,
-                      AlertLevel.warning => AppColors.warning600,
-                      AlertLevel.info => AppColors.brandPrimary600,
-                    };
+                    final color = _colorForLevel(lvl);
                     final label = switch (lvl) {
                       AlertLevel.critical => '🔴 Crítico',
                       AlertLevel.warning => '🟡 Atenção',
@@ -304,8 +607,7 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
                           final msg = msgController.text.trim();
                           if (name.isEmpty || msg.isEmpty) {
                             showCasaSnackbar(ctx,
-                                message:
-                                    'Preencha todos os campos.',
+                                message: 'Preencha todos os campos.',
                                 isError: true);
                             return;
                           }
@@ -344,97 +646,684 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
   }
 }
 
-// ─── Alert card ───────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// Helpers visuais
+// ═══════════════════════════════════════════════════════════════════════════
 
-class _AlertCard extends ConsumerWidget {
-  final StockAlert alert;
-  final ColorScheme cs;
-
-  const _AlertCard({required this.alert, required this.cs});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final fmt = DateFormat('dd/MM/yyyy HH:mm');
-
-    final color = switch (alert.level) {
+Color _colorForLevel(AlertLevel lvl) => switch (lvl) {
       AlertLevel.critical => AppColors.danger600,
       AlertLevel.warning => AppColors.warning600,
       AlertLevel.info => AppColors.brandPrimary600,
     };
 
-    final icon = switch (alert.level) {
+IconData _iconForLevel(AlertLevel lvl) => switch (lvl) {
       AlertLevel.critical => Icons.warning_amber_rounded,
       AlertLevel.warning => Icons.schedule_rounded,
       AlertLevel.info => Icons.info_outline_rounded,
     };
 
+String _labelForLevel(AlertLevel lvl) => switch (lvl) {
+      AlertLevel.critical => 'Críticos',
+      AlertLevel.warning => 'Atenção',
+      AlertLevel.info => 'Info',
+    };
+
+String _relativeTime(DateTime dt) {
+  final diff = DateTime.now().difference(dt);
+  if (diff.inSeconds < 60) return 'agora';
+  if (diff.inMinutes < 60) {
+    final m = diff.inMinutes;
+    return 'há $m min';
+  }
+  if (diff.inHours < 24) {
+    final h = diff.inHours;
+    return 'há $h ${h == 1 ? "hora" : "horas"}';
+  }
+  if (diff.inDays < 7) {
+    final d = diff.inDays;
+    return 'há $d ${d == 1 ? "dia" : "dias"}';
+  }
+  if (diff.inDays < 30) {
+    final w = (diff.inDays / 7).floor();
+    return 'há $w ${w == 1 ? "semana" : "semanas"}';
+  }
+  final months = (diff.inDays / 30).floor();
+  return 'há $months ${months == 1 ? "mês" : "meses"}';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Stats banner
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SeverityCounts {
+  final int critical;
+  final int warning;
+  final int info;
+  const _SeverityCounts(this.critical, this.warning, this.info);
+
+  int get total => critical + warning + info;
+
+  factory _SeverityCounts.from(List<StockAlert> list) {
+    var c = 0, w = 0, i = 0;
+    for (final a in list) {
+      switch (a.level) {
+        case AlertLevel.critical:
+          c++;
+        case AlertLevel.warning:
+          w++;
+        case AlertLevel.info:
+          i++;
+      }
+    }
+    return _SeverityCounts(c, w, i);
+  }
+
+  int countFor(AlertLevel lvl) => switch (lvl) {
+        AlertLevel.critical => critical,
+        AlertLevel.warning => warning,
+        AlertLevel.info => info,
+      };
+}
+
+class _StatsBanner extends StatelessWidget {
+  final _SeverityCounts counts;
+  final ColorScheme cs;
+  const _StatsBanner({required this.counts, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border(
-          left: BorderSide(color: color, width: 4),
-          top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-          right: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
-          bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.35)),
+        gradient: LinearGradient(
+          colors: isDark
+              ? [
+                  AppColors.brandPrimary800.withValues(alpha: 0.5),
+                  AppColors.brandPrimary600.withValues(alpha: 0.25),
+                ]
+              : [
+                  AppColors.brandPrimary600.withValues(alpha: 0.08),
+                  AppColors.secondarySky500.withValues(alpha: 0.05),
+                ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04), blurRadius: 6),
+        borderRadius: BorderRadius.circular(AppRadius.modal),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+              child: _StatTile(
+                  label: 'Críticos',
+                  count: counts.critical,
+                  color: AppColors.danger600,
+                  icon: Icons.warning_amber_rounded,
+                  cs: cs)),
+          Container(
+              width: 1,
+              height: 42,
+              color: cs.outlineVariant.withValues(alpha: 0.35)),
+          Expanded(
+              child: _StatTile(
+                  label: 'Atenção',
+                  count: counts.warning,
+                  color: AppColors.warning600,
+                  icon: Icons.schedule_rounded,
+                  cs: cs)),
+          Container(
+              width: 1,
+              height: 42,
+              color: cs.outlineVariant.withValues(alpha: 0.35)),
+          Expanded(
+              child: _StatTile(
+                  label: 'Info',
+                  count: counts.info,
+                  color: AppColors.brandPrimary600,
+                  icon: Icons.info_outline_rounded,
+                  cs: cs)),
         ],
       ),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppRadius.small),
-            ),
-            child: Icon(icon, color: color, size: 20),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+  final IconData icon;
+  final ColorScheme cs;
+
+  const _StatTile({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.icon,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
           ),
-          const SizedBox(width: AppSpacing.md),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '$count',
+          style: AppTypography.headingMedium.copyWith(
+            color: cs.onSurface,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          label,
+          style: AppTypography.bodySmall.copyWith(
+            color: cs.onSurfaceVariant,
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Filtros + ação em massa
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _FiltersRow extends StatelessWidget {
+  final AlertLevel? current;
+  final _SeverityCounts counts;
+  final ValueChanged<AlertLevel> onChanged;
+  final VoidCallback? onResolveAll;
+
+  const _FiltersRow({
+    required this.current,
+    required this.counts,
+    required this.onChanged,
+    required this.onResolveAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: Row(
+        children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  alert.message,
-                  style: AppTypography.labelMedium.copyWith(
-                    color: cs.onSurface,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final lvl in AlertLevel.values) ...[
+                    _FilterChip(
+                      label: _labelForLevel(lvl),
+                      count: counts.countFor(lvl),
+                      color: _colorForLevel(lvl),
+                      selected: current == lvl,
+                      onTap: () => onChanged(lvl),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          if (onResolveAll != null)
+            Padding(
+              padding: const EdgeInsets.only(left: AppSpacing.sm),
+              child: TextButton.icon(
+                onPressed: onResolveAll,
+                icon: const Icon(Icons.done_all_rounded, size: 16),
+                label: const Text('Resolver todos'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.success600,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                  textStyle: AppTypography.labelSmall.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  fmt.format(alert.createdAt),
-                  style: AppTypography.bodySmall
-                      .copyWith(color: cs.onSurfaceVariant, fontSize: 11),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected
+                ? color.withValues(alpha: 0.18)
+                : cs.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(
+              color: selected
+                  ? color.withValues(alpha: 0.55)
+                  : cs.outlineVariant.withValues(alpha: 0.45),
+              width: 1.2,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: AppSpacing.xs + 2),
+              Text(
+                label,
+                style: AppTypography.labelSmall.copyWith(
+                  color: selected ? color : cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? color.withValues(alpha: 0.25)
+                      : cs.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: Text(
+                  '$count',
+                  style: AppTypography.labelSmall.copyWith(
+                    color: selected ? color : cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Card moderno
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ModernAlertCard extends ConsumerWidget {
+  final StockAlert alert;
+  final ColorScheme cs;
+  final VoidCallback onOpenActions;
+
+  const _ModernAlertCard({
+    required this.alert,
+    required this.cs,
+    required this.onOpenActions,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final color = _colorForLevel(alert.level);
+    final icon = _iconForLevel(alert.level);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Dismissible(
+      key: ValueKey('alert-${alert.id}'),
+      // Direita: resolver (verde)
+      background: _SwipeBg(
+        align: Alignment.centerLeft,
+        color: AppColors.success600,
+        icon: Icons.check_circle_rounded,
+        label: 'Resolver',
+      ),
+      // Esquerda: excluir (vermelho)
+      secondaryBackground: _SwipeBg(
+        align: Alignment.centerRight,
+        color: AppColors.danger600,
+        icon: Icons.delete_forever_rounded,
+        label: 'Excluir',
+      ),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          HapticFeedback.lightImpact();
+          try {
+            await ref
+                .read(alertsNotifierProvider.notifier)
+                .resolve(alert.id);
+            if (context.mounted) {
+              showCasaSnackbar(context,
+                  message: 'Alerta resolvido!', isSuccess: true);
+            }
+            return true;
+          } catch (_) {
+            if (context.mounted) {
+              showCasaSnackbar(context,
+                  message: 'Erro ao resolver.', isError: true);
+            }
+            return false;
+          }
+        } else {
+          final ok = await CasaDialogConfirmacao.show(
+            context: context,
+            title: 'Excluir alerta?',
+            message: 'Esta ação não pode ser desfeita.',
+            confirmLabel: 'Excluir',
+            isDanger: true,
+          );
+          if (ok != true) return false;
+          try {
+            HapticFeedback.mediumImpact();
+            await ref
+                .read(alertsNotifierProvider.notifier)
+                .delete(alert.id);
+            if (context.mounted) {
+              showCasaSnackbar(context,
+                  message: 'Alerta excluído.', isSuccess: true);
+            }
+            return true;
+          } catch (_) {
+            if (context.mounted) {
+              showCasaSnackbar(context,
+                  message: 'Erro ao excluir.', isError: true);
+            }
+            return false;
+          }
+        }
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.modal),
+          onTap: alert.isManual
+              ? onOpenActions
+              : () {
+                  HapticFeedback.selectionClick();
+                  context.push('/products/${alert.productId}');
+                },
+          onLongPress: () {
+            HapticFeedback.mediumImpact();
+            onOpenActions();
+          },
+          child: Ink(
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppRadius.modal),
+              border: Border.all(
+                color: color.withValues(alpha: isDark ? 0.35 : 0.22),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: isDark ? 0.18 : 0.07),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                // Barra vertical de cor (gradiente)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 4,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [color, color.withValues(alpha: 0.55)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(AppRadius.modal),
+                        bottomLeft: Radius.circular(AppRadius.modal),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding:
+                      const EdgeInsets.fromLTRB(AppSpacing.md + 4, AppSpacing.md, 4, AppSpacing.md),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Ícone em badge gradiente
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              color.withValues(alpha: 0.95),
+                              color.withValues(alpha: 0.55),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.small),
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.35),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(icon, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      // Conteúdo
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    alert.productName,
+                                    style: AppTypography.labelMedium.copyWith(
+                                      color: cs.onSurface,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                _LevelPill(level: alert.level, color: color),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              alert.message,
+                              style: AppTypography.bodySmall.copyWith(
+                                color: cs.onSurfaceVariant,
+                                height: 1.3,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            Row(
+                              children: [
+                                Icon(Icons.access_time_rounded,
+                                    size: 12,
+                                    color: cs.onSurfaceVariant
+                                        .withValues(alpha: 0.7)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _relativeTime(alert.createdAt),
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                if (!alert.isManual) ...[
+                                  const SizedBox(width: AppSpacing.sm),
+                                  Container(
+                                    width: 3,
+                                    height: 3,
+                                    decoration: BoxDecoration(
+                                      color: cs.onSurfaceVariant
+                                          .withValues(alpha: 0.5),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  Icon(Icons.touch_app_outlined,
+                                      size: 12,
+                                      color: cs.onSurfaceVariant
+                                          .withValues(alpha: 0.7)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Ver produto',
+                                    style: AppTypography.bodySmall.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Menu (3 pontos)
+                      IconButton(
+                        tooltip: 'Mais ações',
+                        icon: Icon(Icons.more_vert_rounded,
+                            color: cs.onSurfaceVariant),
+                        onPressed: onOpenActions,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            tooltip: 'Resolver',
-            icon: Icon(Icons.check_circle_outline_rounded,
-                color: AppColors.success600, size: 22),
-            onPressed: () async {
-              try {
-                await ref
-                    .read(alertsNotifierProvider.notifier)
-                    .resolve(alert.id);
-                if (!context.mounted) return;
-                showCasaSnackbar(context,
-                    message: 'Alerta resolvido!', isSuccess: true);
-              } catch (_) {
-                if (!context.mounted) return;
-                showCasaSnackbar(context,
-                    message: 'Erro ao resolver alerta.', isError: true);
-              }
-            },
+        ),
+      ),
+    );
+  }
+}
+
+class _LevelPill extends StatelessWidget {
+  final AlertLevel level;
+  final Color color;
+  const _LevelPill({required this.level, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (level) {
+      AlertLevel.critical => 'CRÍTICO',
+      AlertLevel.warning => 'ATENÇÃO',
+      AlertLevel.info => 'INFO',
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: color.withValues(alpha: 0.35), width: 0.8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          color: color,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+class _SwipeBg extends StatelessWidget {
+  final Alignment align;
+  final Color color;
+  final IconData icon;
+  final String label;
+
+  const _SwipeBg({
+    required this.align,
+    required this.color,
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color.withValues(alpha: 0.85), color],
+          begin: align == Alignment.centerLeft
+              ? Alignment.centerLeft
+              : Alignment.centerRight,
+          end: align == Alignment.centerLeft
+              ? Alignment.centerRight
+              : Alignment.centerLeft,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.modal),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      alignment: align,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 22),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            label,
+            style: AppTypography.labelMedium.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -442,4 +1331,139 @@ class _AlertCard extends ConsumerWidget {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Sheet action item
+// ═══════════════════════════════════════════════════════════════════════════
 
+class _SheetAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  final VoidCallback onTap;
+
+  const _SheetAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final c = color ?? cs.onSurface;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        child: Row(
+          children: [
+            Icon(icon, color: c, size: 22),
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              label,
+              style: AppTypography.bodyMedium.copyWith(
+                color: c,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Empty states
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _EmptyAllClear extends StatelessWidget {
+  final ColorScheme cs;
+  const _EmptyAllClear({required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.success600.withValues(alpha: 0.18),
+                    AppColors.success600.withValues(alpha: 0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle_rounded,
+                  size: 48, color: AppColors.success600),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Tudo em dia!',
+              style: AppTypography.headingMedium.copyWith(
+                color: cs.onSurface,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Nenhum produto com validade próxima.\nVocê está no controle.',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyMedium.copyWith(
+                color: cs.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyForFilter extends StatelessWidget {
+  final AlertLevel? level;
+  final ColorScheme cs;
+  const _EmptyForFilter({required this.level, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = level == null
+        ? AppColors.success600
+        : _colorForLevel(level!);
+    final label =
+        level == null ? 'tudo em dia' : 'nenhum em ${_labelForLevel(level!).toLowerCase()}';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.filter_alt_off_rounded,
+                size: 48, color: color.withValues(alpha: 0.65)),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Sem alertas — $label',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyMedium.copyWith(
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
