@@ -290,7 +290,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: isEditing ? 'Editar Produto' : 'Novo Produto',
         subtitle: isEditing ? 'Atualize os dados do produto' : 'Preencha as informações do produto',
         showBackButton: true,
@@ -353,15 +354,7 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
           ),
         ],
       ),
-      bottomNavigationBar: KeyedSubtree(
-        key: _keySaveBtn,
-        child: _SaveBar(
-          isEditing: isEditing,
-          isLoading: isLoading,
-          onSave: _submit,
-        ),
-      ),
-      body: SafeArea(
+      Expanded(child: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
@@ -761,6 +754,15 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
               ),
             ],
           ),
+        ),
+      )),
+      ]),
+      bottomNavigationBar: KeyedSubtree(
+        key: _keySaveBtn,
+        child: _SaveBar(
+          isEditing: isEditing,
+          isLoading: isLoading,
+          onSave: _submit,
         ),
       ),
     );
