@@ -24,6 +24,10 @@ class ModernProfileAppBar extends ConsumerWidget {
   final VoidCallback? onProfileTap;
   final List<Widget>? actions;
   final bool showBackButton;
+  /// Conteúdo opcional renderizado abaixo do título, dentro do mesmo
+  /// gradiente do header. Use para KPIs, busca, filtros, etc — estilo
+  /// "hero header" do dashboard.
+  final Widget? extraContent;
 
   const ModernProfileAppBar({
     super.key,
@@ -38,6 +42,7 @@ class ModernProfileAppBar extends ConsumerWidget {
     // ignore: unused_element
     Color? foregroundColor,
     this.showBackButton = false,
+    this.extraContent,
   });
 
   @override
@@ -68,128 +73,165 @@ class ModernProfileAppBar extends ConsumerWidget {
           decoration: const BoxDecoration(gradient: _kHeaderGradient),
           child: SafeArea(
             bottom: false,
-            child: SizedBox(
-              height: 64,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                child: Row(
-                  children: [
-                    // ── Botão de voltar ─────────────────────────────
-                  if (showBackButton)
-                    Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.sm),
-                      child: InkWell(
-                        onTap: () => Navigator.of(context).maybePop(),
-                        borderRadius: BorderRadius.circular(AppRadius.small),
-                        child: Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Icon(Icons.arrow_back_ios_new_rounded,
-                              size: 18, color: Colors.white),
-                        ),
-                      ),
-                    ),
-
-                  // ── Título + subtítulo ───────────────────────────────
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Linha principal: voltar + título + ações ──────────
+                SizedBox(
+                  height: 64,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg),
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 3.5,
-                              height: 16,
-                              margin: const EdgeInsets.only(right: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(2),
+                        if (showBackButton)
+                          Padding(
+                            padding: const EdgeInsets.only(right: AppSpacing.sm),
+                            child: InkWell(
+                              onTap: () => Navigator.of(context).maybePop(),
+                              borderRadius: BorderRadius.circular(AppRadius.small),
+                              child: Padding(
+                                padding: const EdgeInsets.all(6),
+                                child: Icon(Icons.arrow_back_ios_new_rounded,
+                                    size: 18, color: Colors.white),
                               ),
                             ),
-                            Flexible(
-                              child: Text(
-                                title,
-                                style: AppTypography.headingMedium.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
+                          ),
+
+                        // ── Título + subtítulo ─────────────────────
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 3.5,
+                                    height: 16,
+                                    margin: const EdgeInsets.only(right: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  Flexible(
+                                    child: Text(
+                                      title,
+                                      style: AppTypography.headingMedium
+                                          .copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (subtitle != null) ...[
+                                const SizedBox(height: 1),
+                                Text(
+                                  subtitle!,
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color:
+                                        Colors.white.withValues(alpha: 0.65),
+                                    fontSize: 11,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              ],
+                            ],
+                          ),
+                        ),
+
+                        // ── Actions extras ─────────────────────────
+                        if ((actions ?? []).isNotEmpty)
+                          IconTheme(
+                            data: const IconThemeData(
+                                color: Colors.white, size: 22),
+                            child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: actions!),
+                          ),
+
+                        // ── Sino de alertas ────────────────────────
+                        CasaAlertsBellButton(
+                          alertCount: alertCount,
+                          onDarkBg: true,
+                        ),
+
+                        // ── Toggle dark/light ──────────────────────
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(left: AppSpacing.xs),
+                          child: CasaThemeToggleButton(),
+                        ),
+
+                        // ── Avatar de perfil ───────────────────────
+                        if (profileName != null || onProfileTap != null) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          GestureDetector(
+                            onTap: onProfileTap,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.18),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color:
+                                      Colors.white.withValues(alpha: 0.35),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  initial,
+                                  style: AppTypography.labelMedium.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                        if (subtitle != null) ...[
-                          const SizedBox(height: 1),
-                          Text(
-                            subtitle!,
-                            style: AppTypography.bodySmall.copyWith(
-                              color: Colors.white.withValues(alpha: 0.65),
-                              fontSize: 11,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ],
                     ),
                   ),
+                ),
 
-                  // ── Actions extras ───────────────────────────────────
-                  if ((actions ?? []).isNotEmpty)
-                    IconTheme(
-                      data: const IconThemeData(color: Colors.white, size: 22),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: actions!),
-                    ),
-
-                  // ── Sino de alertas ──────────────────────────────────
-                  CasaAlertsBellButton(
-                    alertCount: alertCount,
-                    onDarkBg: true,
-                  ),
-
-                  // ── Toggle dark/light ────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.only(left: AppSpacing.xs),
-                    child: CasaThemeToggleButton(),
-                  ),
-
-                  // ── Avatar de perfil (se fornecido) ─────────────────
-                  if (profileName != null || onProfileTap != null) ...[
-                    const SizedBox(width: AppSpacing.xs),
-                    GestureDetector(
-                      onTap: onProfileTap,
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.18),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.35),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            initial,
-                            style: AppTypography.labelMedium.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
+                // ── Conteúdo extra (KPIs, busca, filtros) ─────────────
+                if (extraContent != null) ...[
+                  // Divisor decorativo gradiente
+                  Container(
+                    height: 1,
+                    margin: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.lg),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withValues(alpha: 0.25),
+                          Colors.transparent,
+                        ],
                       ),
                     ),
-                  ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, AppSpacing.md, AppSpacing.lg,
+                        AppSpacing.md),
+                    child: extraContent!,
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
         ),
       ),
-    ),
     );
   }
 }
