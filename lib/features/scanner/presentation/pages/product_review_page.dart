@@ -38,6 +38,11 @@ class _ProductReviewPageState extends ConsumerState<ProductReviewPage>
     _heroFade = CurvedAnimation(parent: _heroCtrl, curve: Curves.easeOut);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Invalida o cache do provider antes de assistir para garantir busca
+      // fresca toda vez que a página abre. autoDispose descarta quando sai
+      // da tela, mas há uma janela de tempo onde o disposal ainda não ocorreu
+      // e o resultado null (de uma scan anterior) seria retornado do cache.
+      ref.invalidate(productByBarcodeProvider(widget.barcode));
       ref.read(scannerProvider.notifier).onBarcodeDetected(widget.barcode);
     });
   }
