@@ -5,6 +5,9 @@ import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../data/datasources/stock_remote_datasource.dart';
 
 final _keyApprovalCard = GlobalKey();
+final _keyApproveBtn = GlobalKey();
+final _keyRejectBtn = GlobalKey();
+final _keyReasonBox = GlobalKey();
 
 final _stockDatasourceProvider= Provider<StockRemoteDatasource>(
   (_) => StockRemoteDatasource(),
@@ -80,15 +83,54 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
               steps: [
                 TutorialStep(
                   key: _keyApprovalCard,
-                  title: 'Aprovação de Ajustes',
-                  description: 'Ajustes de estoque realizados por colaboradores ficam pendentes de aprovação pelo administrador. Revise cada ajuste, verifique o motivo e aprove ou rejeite.',
+                  title: 'Card de Solicitação',
+                  description: 'Cada card representa uma solicitação de ajuste de estoque feita por uma colaboradora não-admin. Mostra: produto afetado, quantidade ajustada (+ ou −), nome de quem solicitou e horário. Como admin, cabe a você revisar e decidir.',
                   icon: Icons.approval_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Ajustes incluem correções de quantidade e descarte por avaria',
-                    'Verifique o motivo informado pelo colaborador',
-                    'Aprovações ficam registradas no log de auditoria',
-                    'Rejeições devolvem o estoque ao valor original',
+                    'Badge amarelo no canto = quantidade ajustada',
+                    '"+" indica entrada extra, "-" indica baixa',
+                    'Solicitações ficam paradas até decisão do admin',
+                    'Apenas admins veem esta tela (acesso restrito)',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyReasonBox,
+                  title: 'Motivo da Solicitação',
+                  description: 'A caixa cinza mostra o motivo informado pela colaboradora ao solicitar o ajuste. LEIA COM ATENÇÃO antes de decidir — motivos comuns incluem: avaria, validade, doação não registrada, erro de digitação, conferência de inventário.',
+                  icon: Icons.notes_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'Motivo "avaria" = produto danificado, descarte justificado',
+                    'Motivo "inventário" = correção de divergência física',
+                    'Motivos vagos: peça mais detalhes antes de aprovar',
+                    'Use o log de auditoria para verificar histórico da pessoa',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyApproveBtn,
+                  title: 'Aprovar Ajuste',
+                  description: 'O botão azul "Aprovar" confirma o ajuste e aplica a mudança no estoque imediatamente. A operação fica registrada no log de auditoria com seu nome como aprovador. Use somente quando o motivo for legítimo e verificável.',
+                  icon: Icons.check_circle_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Aprovação aplica IMEDIATAMENTE no estoque',
+                    'Seu nome fica vinculado à decisão (auditoria)',
+                    'Verifique fisicamente antes de aprovar grandes ajustes',
+                    'Em dúvida, prefira rejeitar e pedir esclarecimento',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyRejectBtn,
+                  title: 'Rejeitar Ajuste',
+                  description: 'O botão "Rejeitar" cancela a solicitação sem alterar o estoque. A colaboradora é notificada e pode fazer nova solicitação com mais detalhes. Use quando o motivo não estiver claro ou a quantidade parecer suspeita.',
+                  icon: Icons.cancel_rounded,
+                  align: ContentAlign.top,
+                  hints: const [
+                    'Rejeitar NÃO afeta o estoque (continua original)',
+                    'A colaboradora pode reabrir a solicitação melhorada',
+                    'Em casos suspeitos, abra um diálogo antes',
+                    'Sempre aprovado/rejeitado fica em auditoria',
                   ],
                 ),
               ],
@@ -124,6 +166,9 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
                   requestedByName: requestedByName,
                   reason: reason,
                   cs: cs,
+                  reasonKey: i == 0 ? _keyReasonBox : null,
+                  approveKey: i == 0 ? _keyApproveBtn : null,
+                  rejectKey: i == 0 ? _keyRejectBtn : null,
                   onApprove: () async {
                     await ref
                         .read(_stockDatasourceProvider)
@@ -186,6 +231,9 @@ class _AdjustmentCard extends StatelessWidget {
   final ColorScheme cs;
   final VoidCallback onApprove;
   final VoidCallback onReject;
+  final Key? reasonKey;
+  final Key? approveKey;
+  final Key? rejectKey;
 
   const _AdjustmentCard({
     required this.productName,
@@ -195,6 +243,9 @@ class _AdjustmentCard extends StatelessWidget {
     required this.cs,
     required this.onApprove,
     required this.onReject,
+    this.reasonKey,
+    this.approveKey,
+    this.rejectKey,
   });
 
   @override
@@ -270,6 +321,7 @@ class _AdjustmentCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           Container(
+            key: reasonKey,
             padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md, vertical: AppSpacing.xs),
             decoration: BoxDecoration(
@@ -286,19 +338,25 @@ class _AdjustmentCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: CasaButton(
-                  label: 'Aprovar',
-                  icon: Icons.check_circle_outline_rounded,
-                  onPressed: onApprove,
+                child: KeyedSubtree(
+                  key: approveKey,
+                  child: CasaButton(
+                    label: 'Aprovar',
+                    icon: Icons.check_circle_outline_rounded,
+                    onPressed: onApprove,
+                  ),
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: CasaButton(
-                  label: 'Rejeitar',
-                  variant: CasaButtonVariant.secondary,
-                  icon: Icons.close_rounded,
-                  onPressed: onReject,
+                child: KeyedSubtree(
+                  key: rejectKey,
+                  child: CasaButton(
+                    label: 'Rejeitar',
+                    variant: CasaButtonVariant.secondary,
+                    icon: Icons.close_rounded,
+                    onPressed: onReject,
+                  ),
                 ),
               ),
             ],
