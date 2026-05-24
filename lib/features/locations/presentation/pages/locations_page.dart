@@ -9,6 +9,8 @@ import '../../domain/entities/storage_location.dart';
 
 final _keyLocationFAB = GlobalKey();
 final _keyLocationsList = GlobalKey();
+final _keyLocationBanner = GlobalKey();
+final _keyLocationCard = GlobalKey();
 
 class LocationsPage extends ConsumerWidget {
   const LocationsPage({super.key});
@@ -34,29 +36,55 @@ class LocationsPage extends ConsumerWidget {
               context: context,
               steps: [
                 TutorialStep(
+                  key: _keyLocationBanner,
+                  title: 'Banner do Depósito',
+                  description: 'O banner azul mostra a visão geral: ícone de armazém, total de localizações cadastradas e quantas prateleiras diferentes existem. Pense nele como o "mapa resumido" do seu depósito físico.',
+                  icon: Icons.warehouse_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    'O badge "X spots" = soma de todos os níveis',
+                    'Cada localização é uma combinação prateleira + nível',
+                    'Use este número para planejar capacidade total',
+                    'Toque no botão "+" embaixo para adicionar mais',
+                  ],
+                ),
+                TutorialStep(
                   key: _keyLocationsList,
-                  title: 'Prateleiras do Depósito',
-                  description:
-                      'Lista de todas as prateleiras e armários onde os produtos são armazenados. Cada lote de estoque é associado a uma localização específica.',
+                  title: 'Organização por Prateleira',
+                  description: 'A lista agrupa as localizações por prateleira. Cada grupo tem um cabeçalho colorido (Prateleira A, B, C...) com a contagem de níveis. Os cards filhos mostram os níveis individuais com badges, capacidade e data de criação.',
                   icon: Icons.shelves,
                   align: ContentAlign.bottom,
                   hints: const [
-                    'Ex: "Prateleira A · Nível 1", "Armário B · Nível 2"',
-                    'Localizações ajudam a encontrar produtos fisicamente',
-                    'Desative localizações que não são mais usadas',
+                    'Cada prateleira recebe uma cor automática diferente',
+                    'Níveis são listados de cima para baixo dentro do grupo',
+                    'Padrão recomendado: A-Z para prateleiras, 1-N para níveis',
+                    'Para depósitos grandes: A1-A5 (corredor A), B1-B5 (corredor B)',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyLocationCard,
+                  title: 'Card de Localização',
+                  description: 'Cada card representa um nível específico de uma prateleira. A barra lateral colorida com letra grande é o identificador visual. Mostra nome (se houver), nível, capacidade em itens, data de criação e status "Ativo". O botão lixeira desativa.',
+                  icon: Icons.location_on_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🗑️ Desativar não exclui — apenas oculta para novos lotes',
+                    'Lotes existentes na localização continuam ali',
+                    'Você pode reativar a qualquer momento via banco de dados',
+                    'A capacidade ajuda alertas de "prateleira cheia"',
                   ],
                 ),
                 TutorialStep(
                   key: _keyLocationFAB,
-                  title: 'Nova Localização',
-                  description:
-                      'Cadastre uma prateleira/armário e o nível específico para organizar onde os produtos ficam guardados.',
+                  title: 'Cadastrar Nova Localização',
+                  description: 'Toque no FAB azul "Nova Localização" para abrir o assistente de criação. Você escolhe a prateleira (A-H ou nome customizado), o nível (1-20), opcionalmente um nome amigável (ex: "Armário Frio") e a capacidade em itens.',
                   icon: Icons.add_location_alt_rounded,
                   align: ContentAlign.top,
                   hints: const [
-                    'Escolha a prateleira (A, B, C...) e o nível (1, 2, 3...)',
-                    'Defina quantos itens cabem por nível',
-                    'Crie quantas localizações precisar',
+                    'Crie todas as prateleiras de uma vez na primeira configuração',
+                    'Padronize com a equipe: A1, A2... B1, B2...',
+                    'Use nomes para áreas especiais (geladeira, freezer, alto)',
+                    'Capacidade é opcional, mas ajuda no controle visual',
                   ],
                 ),
               ],
@@ -144,25 +172,36 @@ class _LocationsList extends StatelessWidget {
     }
     final groups = grouped.keys.toList()..sort();
 
+    var firstCard = true;
     return ListView(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
       children: [
         // ── Banner depósito ──
-        _DepositBanner(total: items.length, groups: groups.length),
+        KeyedSubtree(
+          key: _keyLocationBanner,
+          child: _DepositBanner(total: items.length, groups: groups.length),
+        ),
         const SizedBox(height: AppSpacing.xl),
 
         for (final group in groups) ...[
           _GroupHeader(groupKey: group, count: grouped[group]!.length, isDark: isDark),
           const SizedBox(height: AppSpacing.sm),
-          ...grouped[group]!.map((loc) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _LocationCard(
-                  location: loc,
-                  onDeactivate: () => onDeactivate(loc),
-                  isDark: isDark,
-                ),
-              )),
+          ...grouped[group]!.map((loc) {
+            final card = Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _LocationCard(
+                location: loc,
+                onDeactivate: () => onDeactivate(loc),
+                isDark: isDark,
+              ),
+            );
+            if (firstCard) {
+              firstCard = false;
+              return KeyedSubtree(key: _keyLocationCard, child: card);
+            }
+            return card;
+          }),
           const SizedBox(height: AppSpacing.md),
         ],
       ],
