@@ -307,7 +307,8 @@ class _MovementPageState extends ConsumerState<MovementPage> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Distribuição',
         subtitle: 'Produtos avulsos ou por receita',
         showBackButton: true,
@@ -398,40 +399,8 @@ class _MovementPageState extends ConsumerState<MovementPage> {
           ),
         ],
       ),
-      floatingActionButton: _mode == _OutputMode.products
-          ? KeyedSubtree(
-              key: _keyConfirmFab,
-              child: _ConfirmFabWithSummary(
-                isLoading: _isLoading,
-                selectedCount: _selectedQtyByProduct.values
-                    .where((v) => v > 0)
-                    .length,
-                totalUnits: _selectedQtyByProduct.values
-                    .fold(0, (s, v) => s + v),
-                label: 'Confirmar Distribuição',
-                icon: Icons.outbound_rounded,
-                onPressed: () => _openSummary(productsAsync.valueOrNull ?? []),
-              ),
-            )
-          : recipesAsync.valueOrNull?.any((r) => r.id == _selectedRecipeId) == true
-              ? KeyedSubtree(
-                  key: _keyConfirmFab,
-                  child: _ConfirmFabWithSummary(
-                    isLoading: _isLoading,
-                    selectedCount: 1,
-                    totalUnits: 0,
-                    label: 'Executar Receita',
-                    icon: Icons.play_arrow_rounded,
-                    onPressed: () {
-                      final recipe = recipesAsync.valueOrNull!
-                          .firstWhere((r) => r.id == _selectedRecipeId);
-                      _submitRecipe(recipe);
-                    },
-                  ),
-                )
-              : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      body: SafeArea(
+      Expanded(child: SafeArea(
+        top: false,
         child: batchesAsync.when(
           data: (batches) => productsAsync.when(
             data: (products) {
@@ -739,7 +708,41 @@ class _MovementPageState extends ConsumerState<MovementPage> {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Erro: $e')),
         ),
-      ),
+      )),
+      ]),
+      floatingActionButton: _mode == _OutputMode.products
+          ? KeyedSubtree(
+              key: _keyConfirmFab,
+              child: _ConfirmFabWithSummary(
+                isLoading: _isLoading,
+                selectedCount: _selectedQtyByProduct.values
+                    .where((v) => v > 0)
+                    .length,
+                totalUnits: _selectedQtyByProduct.values
+                    .fold(0, (s, v) => s + v),
+                label: 'Confirmar Distribuição',
+                icon: Icons.outbound_rounded,
+                onPressed: () => _openSummary(productsAsync.valueOrNull ?? []),
+              ),
+            )
+          : recipesAsync.valueOrNull?.any((r) => r.id == _selectedRecipeId) == true
+              ? KeyedSubtree(
+                  key: _keyConfirmFab,
+                  child: _ConfirmFabWithSummary(
+                    isLoading: _isLoading,
+                    selectedCount: 1,
+                    totalUnits: 0,
+                    label: 'Executar Receita',
+                    icon: Icons.play_arrow_rounded,
+                    onPressed: () {
+                      final recipe = recipesAsync.valueOrNull!
+                          .firstWhere((r) => r.id == _selectedRecipeId);
+                      _submitRecipe(recipe);
+                    },
+                  ),
+                )
+              : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
