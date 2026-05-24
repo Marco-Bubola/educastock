@@ -16,6 +16,18 @@ import 'output_view_page.dart';
 
 enum _OutputMode { products, recipes }
 
+// Mesmo mapeamento usado na página Estoque, para manter o estilo visual
+// consistente entre as duas telas.
+IconData _categoryIcon(ProductCategory cat) => switch (cat) {
+      ProductCategory.alimento => Icons.restaurant_rounded,
+      ProductCategory.bebida => Icons.local_drink_rounded,
+      ProductCategory.limpeza => Icons.cleaning_services_rounded,
+      ProductCategory.higienePessoal => Icons.soap_rounded,
+      ProductCategory.escolar => Icons.auto_stories_rounded,
+      ProductCategory.roupas => Icons.checkroom_rounded,
+      ProductCategory.outro => Icons.category_rounded,
+    };
+
 final stockDatasourceProvider = Provider<StockRemoteDatasource>(
   (_) => StockRemoteDatasource(),
 );
@@ -425,6 +437,9 @@ class _MovementPageState extends ConsumerState<MovementPage> {
             data: (products) {
               final categories = products.map((e) => e.category.name).toSet().toList()..sort();
               final filteredProducts = products.where((p) {
+                // Saída só lista produtos com estoque disponível
+                final hasStock = _availableForProduct(p.id, batches) > 0;
+                if (!hasStock) return false;
                 final q = _search.trim().toLowerCase();
                 final searchOk = q.isEmpty ||
                     p.name.toLowerCase().contains(q) ||
@@ -1088,16 +1103,17 @@ class _ProductOutputCard extends StatelessWidget {
                               fit: BoxFit.cover),
                         )
                       : Container(
-                          width: 32,
-                          height: 32,
+                          width: 34,
+                          height: 34,
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.white.withValues(alpha: 0.20),
+                            borderRadius: BorderRadius.circular(9),
                             border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.25)),
+                                color: Colors.white.withValues(alpha: 0.30),
+                                width: 1.2),
                           ),
-                          child: const Icon(Icons.inventory_2_rounded,
-                              color: Colors.white, size: 16),
+                          child: Icon(_categoryIcon(product.category),
+                              color: Colors.white, size: 17),
                         ),
                 ),
               ],
