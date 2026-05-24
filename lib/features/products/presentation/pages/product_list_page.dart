@@ -236,71 +236,73 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
-        title: 'Estoque',
-        subtitle: 'Catálogo de produtos',
-        profileName: user?.name,
-        onProfileTap: () => context.push(AppRoutes.settings),
-        actions: [
-          buildHelpButton(
-            context: context,
-            onPressed: () => showCasaTutorial(
-              context: context,
-              steps: [
-                TutorialStep(
-                  key: _keySearch,
-                  title: 'Busca de Produtos',
-                  description: 'Digite o nome ou parte do nome do produto para encontrá-lo instantaneamente no catálogo. A busca é feita em tempo real enquanto você digita.',
-                  icon: Icons.search_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Busca por nome parcial: "feij" encontra "Feijão Carioca"',
-                    'Combine busca com filtros para resultados precisos',
-                    'A busca ignora maiúsculas e minúsculas',
+      body: Column(
+        children: [
+          ModernProfileAppBar(
+            title: 'Estoque',
+            subtitle: 'Catálogo de produtos',
+            profileName: user?.name,
+            onProfileTap: () => context.push(AppRoutes.settings),
+            actions: [
+              buildHelpButton(
+                context: context,
+                onPressed: () => showCasaTutorial(
+                  context: context,
+                  steps: [
+                    TutorialStep(
+                      key: _keySearch,
+                      title: 'Busca de Produtos',
+                      description: 'Digite o nome ou parte do nome do produto para encontrá-lo instantaneamente no catálogo. A busca é feita em tempo real enquanto você digita.',
+                      icon: Icons.search_rounded,
+                      align: ContentAlign.bottom,
+                      hints: const [
+                        'Busca por nome parcial: "feij" encontra "Feijão Carioca"',
+                        'Combine busca com filtros para resultados precisos',
+                        'A busca ignora maiúsculas e minúsculas',
+                      ],
+                    ),
+                    TutorialStep(
+                      key: _keyFilterBtn,
+                      title: 'Filtros Avançados',
+                      description: 'Filtre os produtos por categoria (Alimento, Higiene, etc.), perecibilidade ou ordene por nome. O badge azul indica quantos filtros estão ativos.',
+                      icon: Icons.tune_rounded,
+                      align: ContentAlign.bottom,
+                      hints: const [
+                        'Filtre por "Perecíveis" para ver produtos com validade',
+                        'Ordene A→Z para localizar rapidamente no estoque físico',
+                        'Combine filtros para relatórios específicos de auditoria',
+                      ],
+                    ),
+                    TutorialStep(
+                      key: _keyProductCard,
+                      title: 'Cartão de Produto',
+                      description: 'Cada cartão mostra o produto com sua quantidade total em estoque, categoria e status de validade. A borda colorida indica a situação do produto.',
+                      icon: Icons.inventory_2_rounded,
+                      align: ContentAlign.bottom,
+                      hints: const [
+                        '🟢 Verde = produto com validade segura (>30 dias)',
+                        '🟡 Amarelo = atenção! Vence em até 30 dias',
+                        '🔴 Vermelho = crítico! Vence em até 7 dias ou já venceu',
+                        'Toque no cartão para ver todos os lotes e detalhes completos',
+                      ],
+                    ),
                   ],
                 ),
-                TutorialStep(
-                  key: _keyFilterBtn,
-                  title: 'Filtros Avançados',
-                  description: 'Filtre os produtos por categoria (Alimento, Higiene, etc.), perecibilidade ou ordene por nome. O badge azul indica quantos filtros estão ativos.',
-                  icon: Icons.tune_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Filtre por "Perecíveis" para ver produtos com validade',
-                    'Ordene A→Z para localizar rapidamente no estoque físico',
-                    'Combine filtros para relatórios específicos de auditoria',
-                  ],
-                ),
-                TutorialStep(
-                  key: _keyProductCard,
-                  title: 'Cartão de Produto',
-                  description: 'Cada cartão mostra o produto com sua quantidade total em estoque, categoria e status de validade. A borda colorida indica a situação do produto.',
-                  icon: Icons.inventory_2_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    '🟢 Verde = produto com validade segura (>30 dias)',
-                    '🟡 Amarelo = atenção! Vence em até 30 dias',
-                    '🔴 Vermelho = crítico! Vence em até 7 dias ou já venceu',
-                    'Toque no cartão para ver todos os lotes e detalhes completos',
-                  ],
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.outbound_rounded, color: Colors.white),
+                onPressed: () => context.push('${AppRoutes.movement}?batchId='),
+                tooltip: 'Registrar saída',
+              ),
+              IconButton(
+                icon: const Icon(Icons.upload_file_rounded, color: Colors.white),
+                onPressed: () => _showCsvImportSheet(context),
+                tooltip: 'Importar CSV',
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.outbound_rounded),
-            onPressed: () => context.push('${AppRoutes.movement}?batchId='),
-            tooltip: 'Registrar saída',
-          ),
-          IconButton(
-            icon: const Icon(Icons.upload_file_rounded),
-            onPressed: () => _showCsvImportSheet(context),
-            tooltip: 'Importar CSV',
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
+          Expanded(
+            child: Column(
           children: [
             // ─── Barra de busca e filtro
             Padding(
@@ -414,6 +416,8 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
             ),
           ],
         ),
+          ),
+        ],
       ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
