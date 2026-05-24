@@ -20,13 +20,14 @@ class _ForecastPageState extends ConsumerState<ForecastPage> {
 
   @override
   Widget build(BuildContext context) {
-    final forecastsAsync = ref.watch(consumptionForecastsProvider);
+    final forecastsAsync = ref.watch(liveForecastsProvider);
     final replenishmentCount = ref.watch(replenishmentCountProvider);
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: cs.surface,
-      appBar: ModernProfileAppBar(
+      body: Column(children: [
+      ModernProfileAppBar(
         title: 'Previsão de Consumo',
         subtitle: 'Modelo Prophet (séries temporais)',
         showBackButton: true,
@@ -67,8 +68,7 @@ class _ForecastPageState extends ConsumerState<ForecastPage> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: forecastsAsync.when(
+      Expanded(child: forecastsAsync.when(
           loading: () => _LoadingState(),
           error: (e, _) => _ErrorState(error: e.toString()),
           data: (forecasts) {
@@ -86,6 +86,7 @@ class _ForecastPageState extends ConsumerState<ForecastPage> {
           },
         ),
       ),
+      ]),
     );
   }
 
