@@ -131,12 +131,9 @@ Future<void> _exportPdf({
 
 // ─── Custom AppBar with TabBar ────────────────────────────────────────────
 
-class _ReportsAppBar extends ConsumerWidget implements PreferredSizeWidget {
+class _ReportsAppBar extends ConsumerWidget {
   final List<Widget>? actions;
   const _ReportsAppBar({this.actions});
-
-  @override
-  Size get preferredSize => const Size.fromHeight(116);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -290,52 +287,53 @@ class ReportsPage extends ConsumerWidget {
         valueListenable: tutorialActiveNotifier,
         builder: (ctx, tutActive, _) => Scaffold(
           backgroundColor: cs.surface,
-          appBar: tutActive
-              ? null
-              : _ReportsAppBar(
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.event_repeat_rounded,
-                          color: Colors.white, size: 20),
-                      tooltip: 'Agendar relatório semanal',
-                      onPressed: () => _showScheduleSheet(context),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.picture_as_pdf_outlined,
-                          color: Colors.white, size: 20),
-                      tooltip: 'Exportar PDF',
-                      onPressed: () async {
-                        await _exportPdf(
-                            allBatches: allList,
-                            expiring7: exp7List,
-                            expiring30: exp30List);
-                        await ref.read(analyticsServiceProvider).logReportExport(
-                            format: 'pdf', reportType: 'inventory_overview');
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.table_view_outlined,
-                          color: Colors.white, size: 20),
-                      tooltip: 'Exportar CSV',
-                      onPressed: () async {
-                        await _exportCsv(
-                            context: context,
-                            allBatches: allList,
-                            expiring30: exp30List);
-                        await ref.read(analyticsServiceProvider).logReportExport(
-                            format: 'csv', reportType: 'inventory_overview');
-                      },
-                    ),
-                  ],
-                ),
-          body: const TabBarView(
-            children: [
-              _ChartsTab(),
-              _MlRiskTab(),
-              _MovementsTab(),
-              _ForecastReportTab(),
-            ],
-          ),
+          body: Column(children: [
+            if (!tutActive)
+              _ReportsAppBar(
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.event_repeat_rounded,
+                        color: Colors.white, size: 20),
+                    tooltip: 'Agendar relatório semanal',
+                    onPressed: () => _showScheduleSheet(context),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.picture_as_pdf_outlined,
+                        color: Colors.white, size: 20),
+                    tooltip: 'Exportar PDF',
+                    onPressed: () async {
+                      await _exportPdf(
+                          allBatches: allList,
+                          expiring7: exp7List,
+                          expiring30: exp30List);
+                      await ref.read(analyticsServiceProvider).logReportExport(
+                          format: 'pdf', reportType: 'inventory_overview');
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.table_view_outlined,
+                        color: Colors.white, size: 20),
+                    tooltip: 'Exportar CSV',
+                    onPressed: () async {
+                      await _exportCsv(
+                          context: context,
+                          allBatches: allList,
+                          expiring30: exp30List);
+                      await ref.read(analyticsServiceProvider).logReportExport(
+                          format: 'csv', reportType: 'inventory_overview');
+                    },
+                  ),
+                ],
+              ),
+            const Expanded(child: TabBarView(
+              children: [
+                _ChartsTab(),
+                _MlRiskTab(),
+                _MovementsTab(),
+                _ForecastReportTab(),
+              ],
+            )),
+          ]),
         ),
       ),
     );
@@ -4699,7 +4697,7 @@ class _ForecastReportTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final forecastsAsync = ref.watch(consumptionForecastsProvider);
+    final forecastsAsync = ref.watch(liveForecastsProvider);
     final replenishCount = ref.watch(replenishmentCountProvider);
     final hasForecast = ref.watch(hasForecastDataProvider);
 
