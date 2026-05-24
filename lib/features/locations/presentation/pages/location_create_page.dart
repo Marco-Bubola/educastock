@@ -91,7 +91,77 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
     return Scaffold(
       backgroundColor:
           isDark ? const Color(0xFF0F1520) : const Color(0xFFF5F7FB),
-      appBar: _buildAppBar(isDark, accent),
+      appBar: ModernProfileAppBar(
+        title: 'Nova Localização',
+        subtitle: 'Depósito · Prateleira · Nível',
+        showBackButton: true,
+        actions: [
+          buildHelpButton(
+            context: context,
+            onPressed: () => showCasaHelpModal(
+              context: context,
+              pageTitle: 'Cadastrar localização',
+              pageDescription:
+                  'Organize seu depósito em prateleiras e níveis para encontrar produtos rapidamente.',
+              accentColor: accent,
+              headerIcon: Icons.shelves,
+              tips: const [
+                HelpTip(
+                  icon: Icons.shelves,
+                  title: 'Escolha a prateleira',
+                  description:
+                      'Use letras (A, B, C...) ou um nome personalizado como "Armário Frio" para identificar.',
+                ),
+                HelpTip(
+                  icon: Icons.layers_rounded,
+                  title: 'Defina o nível',
+                  description:
+                      'Conte de baixo para cima — nível 1 é o primeiro andar da prateleira.',
+                ),
+                HelpTip(
+                  icon: Icons.inventory_2_rounded,
+                  title: 'Capacidade (opcional)',
+                  description:
+                      'Informe quantos itens cabem por nível para alertas de ocupação.',
+                ),
+              ],
+            ),
+          ),
+          if (_isValid)
+            Padding(
+              padding: const EdgeInsets.only(left: 6, right: 4),
+              child: _saving
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2.5),
+                    )
+                  : GestureDetector(
+                      onTap: _save,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.35),
+                              width: 1.2),
+                        ),
+                        child: const Text(
+                          'Salvar',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
@@ -178,107 +248,6 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
     );
   }
 
-  AppBar _buildAppBar(bool isDark, Color accent) {
-    return AppBar(
-      backgroundColor: isDark ? const Color(0xFF141B2D) : Colors.white,
-      elevation: 0,
-      scrolledUnderElevation: 1,
-      leading: IconButton(
-        icon: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: isDark ? 0.15 : 0.08),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child:
-              Icon(Icons.arrow_back_ios_new_rounded, color: accent, size: 16),
-        ),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [accent, accent.withValues(alpha: 0.7)],
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.shelves, color: Colors.white, size: 17),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Nova Localização',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : const Color(0xFF111827),
-                  fontFamily: 'Poppins',
-                ),
-              ),
-              Text(
-                'Depósito · Prateleira · Nível',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark
-                      ? const Color(0xFFADB5BD)
-                      : const Color(0xFF6B7280),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      actions: [
-        if (_isValid)
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: _saving
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        color: accent, strokeWidth: 2.5),
-                  )
-                : GestureDetector(
-                    onTap: _save,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [accent, accent.withValues(alpha: 0.8)],
-                        ),
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: [
-                          BoxShadow(
-                            color: accent.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: const Text(
-                        'Salvar',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-          ),
-      ],
-    );
-  }
 }
 
 // ─── Preview Card ──────────────────────────────────────────────────────────────
