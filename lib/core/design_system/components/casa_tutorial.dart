@@ -9,14 +9,14 @@ export 'package:tutorial_coach_mark/tutorial_coach_mark.dart'
 /// AppBars and TabBars watch this to hide themselves during tutorials.
 final ValueNotifier<bool> tutorialActiveNotifier = ValueNotifier<bool>(false);
 
-// Design constants — fully explicit, no theme/MediaQuery dependency
-const _kBorder = Color(0xFF1D5FA8);
+// ─── Design tokens ──────────────────────────────────────────────────────────
 const _kSkyBlue = Color(0xFF38BDF8);
 const _kSkyBlueSoft = Color(0xFF7DD3FC);
+const _kPurple = Color(0xFFA78BFA);
+const _kGold = Color(0xFFFBBF24);
 const _kTextHigh = Colors.white;
-const _kTextMid = Color(0xCCFFFFFF);   // 80% white
-const _kTextLow = Color(0x80FFFFFF);   // 50% white
-const _kCardRadius = 20.0;
+const _kTextMid = Color(0xE6FFFFFF); // 90% white
+const _kTextLow = Color(0x99FFFFFF); // 60% white
 
 class TutorialStep {
   final GlobalKey key;
@@ -27,7 +27,6 @@ class TutorialStep {
   final ContentAlign align;
   final double verticalOffset;
   final double paddingFocus;
-  /// Optional bullet-point hints shown below the main description
   final List<String> hints;
 
   const TutorialStep({
@@ -43,6 +42,29 @@ class TutorialStep {
   });
 }
 
+// ─── Estado da barra inferior (compartilhado com OverlayEntry) ──────────────
+class _BarState {
+  final int stepIndex;
+  final int totalSteps;
+  final IconData stepIcon;
+  final VoidCallback? onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onSkip;
+  final bool isLast;
+
+  const _BarState({
+    required this.stepIndex,
+    required this.totalSteps,
+    required this.stepIcon,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onSkip,
+    required this.isLast,
+  });
+}
+
+final ValueNotifier<_BarState?> _barStateNotifier = ValueNotifier<_BarState?>(null);
+
 void showCasaTutorial({
   required BuildContext context,
   required List<TutorialStep> steps,
@@ -52,9 +74,6 @@ void showCasaTutorial({
   if (steps.isEmpty) return;
   tutorialActiveNotifier.value = true;
 
-  // Scroll to a step's target widget before showing it.
-  // Uses `alignmentPolicy: explicit` so it ALWAYS repositions to the top
-  // even if the element is already partially visible.
   Future<void> scrollTo(int index) async {
     if (index < 0 || index >= steps.length) return;
     final ctx = steps[index].key.currentContext;
@@ -64,11 +83,10 @@ void showCasaTutorial({
         ctx,
         duration: const Duration(milliseconds: 420),
         curve: Curves.easeInOut,
-        alignment: 0.05,
+        alignment: 0.20, // posiciona o alvo na parte superior da tela
         alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
       );
-      // Extra buffer so the scroll settles before coach mark repositions
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 140));
     } catch (_) {}
   }
 
@@ -90,6 +108,15 @@ void showCasaTutorial({
     ctrl.previous();
   }
 
+  // OverlayEntry reference (assinado depois)
+  OverlayEntry? bottomBarEntry;
+
+  void cleanupOverlay() {
+    bottomBarEntry?.remove();
+    bottomBarEntry = null;
+    _barStateNotifier.value = null;
+  }
+
   final targets = steps.asMap().entries.map((entry) {
     final i = entry.key;
     final step = entry.value;
@@ -102,33 +129,36 @@ void showCasaTutorial({
       contents: [
         TargetContent(
           align: step.align,
-          // Wrap in Material+Directionality so no ancestor is needed
-          builder: (ctx, controller) => Material(
-            type: MaterialType.transparency,
-            child: Directionality(
-              textDirection: TextDirection.ltr,
-              child: Transform.translate(
-                offset: Offset(0, step.verticalOffset),
-                child: _TutorialCard(
-                  step: step,
-                  stepIndex: i,
-                  totalSteps: steps.length,
-                  onNext: () {
-                    handleNext(controller, i + 1);
-                  },
-                  onPrevious: i > 0
-                      ? () {
-                          handlePrevious(controller, i - 1);
-                        }
-                      : null,
-                  onSkip: () {
-                    controller.skip();
-                    onSkip?.call();
-                  },
+          builder: (ctx, controller) {
+            // Sincroniza o estado dos botões com o step atual
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _barStateNotifier.value = _BarState(
+                stepIndex: i,
+                totalSteps: steps.length,
+                stepIcon: step.icon,
+                onPrevious: i > 0
+                    ? () => handlePrevious(controller, i - 1)
+                    : null,
+                onNext: () => handleNext(controller, i + 1),
+                onSkip: () {
+                  cleanupOverlay();
+                  controller.skip();
+                  onSkip?.call();
+                },
+                isLast: i == steps.length - 1,
+              );
+            });
+            return Material(
+              type: MaterialType.transparency,
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Transform.translate(
+                  offset: Offset(0, step.verticalOffset),
+                  child: _TutorialContent(step: step),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ],
     );
@@ -136,456 +166,661 @@ void showCasaTutorial({
 
   final coachMark = TutorialCoachMark(
     targets: targets,
-    colorShadow: const Color(0xFF050D1A),
-    opacityShadow: 0.92,
+    colorShadow: const Color(0xFF050B17),
+    opacityShadow: 0.94,
     hideSkip: true,
-    focusAnimationDuration: const Duration(milliseconds: 350),
-    unFocusAnimationDuration: const Duration(milliseconds: 220),
+    focusAnimationDuration: const Duration(milliseconds: 380),
+    unFocusAnimationDuration: const Duration(milliseconds: 240),
     pulseAnimationDuration: const Duration(milliseconds: 900),
     pulseEnable: true,
     onFinish: () {
+      cleanupOverlay();
       tutorialActiveNotifier.value = false;
       onFinish?.call();
     },
     onSkip: () {
+      cleanupOverlay();
       tutorialActiveNotifier.value = false;
-      onSkip?.call();
       return true;
     },
   );
 
-  // Scroll to step 0 first, then show the tutorial
-  scrollTo(0).then((_) => coachMark.show(context: context));
+  // Scroll para o primeiro alvo, depois mostra o tutorial e insere a barra fixa
+  scrollTo(0).then((_) {
+    if (!context.mounted) return;
+    coachMark.show(context: context);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      bottomBarEntry = OverlayEntry(
+        builder: (_) => const _FixedBottomBar(),
+      );
+      Overlay.of(context, rootOverlay: true).insert(bottomBarEntry!);
+    });
+  });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Card widget – fully self-contained, zero external dependencies
-// ─────────────────────────────────────────────────────────────────────────────
-class _TutorialCard extends StatelessWidget {
+// ═══════════════════════════════════════════════════════════════════════════
+// Conteúdo flutuante por step — SEM CARD, elementos "voando"
+// ═══════════════════════════════════════════════════════════════════════════
+class _TutorialContent extends StatefulWidget {
   final TutorialStep step;
-  final int stepIndex;
-  final int totalSteps;
-  final VoidCallback onNext;
-  final VoidCallback? onPrevious;
-  final VoidCallback onSkip;
+  const _TutorialContent({required this.step});
 
-  const _TutorialCard({
-    required this.step,
-    required this.stepIndex,
-    required this.totalSteps,
-    required this.onNext,
-    required this.onPrevious,
-    required this.onSkip,
-  });
+  @override
+  State<_TutorialContent> createState() => _TutorialContentState();
+}
+
+class _TutorialContentState extends State<_TutorialContent>
+    with TickerProviderStateMixin {
+  late final AnimationController _entryAnim;
+  late final AnimationController _iconPulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _entryAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+    _iconPulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _entryAnim.dispose();
+    _iconPulse.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isLast = stepIndex == totalSteps - 1;
     final screenWidth = MediaQuery.of(context).size.width;
-    final cardWidth = (screenWidth - 20).clamp(280.0, 480.0);
+    final maxWidth = (screenWidth - 24).clamp(280.0, 460.0);
 
     return SizedBox(
-      width: cardWidth,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF060D1A), Color(0xFF091525), Color(0xFF0C1E38)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(_kCardRadius),
-          boxShadow: [
-            BoxShadow(
-              color: _kSkyBlue.withValues(alpha: 0.18),
-              blurRadius: 40,
-              spreadRadius: 0,
-              offset: const Offset(0, 12),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.70),
-              blurRadius: 24,
-              spreadRadius: 4,
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(_kCardRadius),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ── Cabeçalho imersivo ─────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF1A4A8A).withValues(alpha: 0.90),
-                      const Color(0xFF0D2B5C).withValues(alpha: 0.80),
-                    ],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Ícone com glow
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                _kSkyBlue.withValues(alpha: 0.25),
-                                _kSkyBlue.withValues(alpha: 0.08),
-                              ],
-                            ),
-                            border: Border.all(
-                              color: _kSkyBlue.withValues(alpha: 0.50),
-                              width: 1.5,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _kSkyBlue.withValues(alpha: 0.30),
-                                blurRadius: 12,
-                                spreadRadius: 0,
-                              ),
-                            ],
-                          ),
-                          child: Icon(step.icon, color: _kSkyBlue, size: 22),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            step.title,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              color: _kTextHigh,
-                              height: 1.15,
-                              letterSpacing: -0.3,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        // Contador + fechar
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 9, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.10),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: _kSkyBlue.withValues(alpha: 0.30),
-                                ),
-                              ),
-                              child: Text(
-                                '${stepIndex + 1} / $totalSteps',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: _kSkyBlue.withValues(alpha: 0.95),
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            GestureDetector(
-                              onTap: onSkip,
-                              behavior: HitTestBehavior.opaque,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.close_rounded,
-                                        size: 11, color: _kTextLow),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Pular',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: _kTextLow,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Barra de progresso segmentada
-                    Row(
-                      children: List.generate(totalSteps, (i) {
-                        final done = i <= stepIndex;
-                        return Expanded(
-                          child: Container(
-                            margin: EdgeInsets.only(right: i < totalSteps - 1 ? 4 : 0),
-                            height: 3,
-                            decoration: BoxDecoration(
-                              gradient: done
-                                  ? const LinearGradient(
-                                      colors: [_kSkyBlue, _kSkyBlueSoft],
-                                    )
-                                  : null,
-                              color: done
-                                  ? null
-                                  : Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                              boxShadow: done
-                                  ? [
-                                      BoxShadow(
-                                        color: _kSkyBlue.withValues(alpha: 0.40),
-                                        blurRadius: 6,
-                                      ),
-                                    ]
-                                  : [],
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Corpo do conteúdo ──────────────────────────────────────────
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 240),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Label seção
-                      Row(
-                        children: [
-                          Container(
-                            width: 3,
-                            height: 14,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [_kSkyBlue, _kSkyBlueSoft],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'COMO USAR',
-                            style: TextStyle(
-                              fontSize: 10,
-                              letterSpacing: 1.2,
-                              color: _kSkyBlue.withValues(alpha: 0.80),
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
+      width: maxWidth,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Ícone flutuante com pulse + glow ─────────────────────────
+          AnimatedBuilder(
+            animation: _iconPulse,
+            builder: (_, __) {
+              final t = _iconPulse.value;
+              final pulseScale = 1.0 + t * 0.08;
+              return Center(
+                child: _FloatingEntry(
+                  anim: _entryAnim,
+                  delay: 0,
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          _kSkyBlue.withValues(alpha: 0.35),
+                          _kSkyBlue.withValues(alpha: 0.05),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        step.description,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          color: _kTextMid,
-                          height: 1.55,
-                          fontWeight: FontWeight.w400,
-                        ),
+                      border: Border.all(
+                        color: _kSkyBlue.withValues(alpha: 0.70),
+                        width: 2,
                       ),
-                      if (step.hints.isNotEmpty) ...[
-                        const SizedBox(height: 14),
-                        // Separador com gradiente
-                        Container(
-                          height: 1,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.transparent,
-                                _kSkyBlue.withValues(alpha: 0.30),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Container(
-                              width: 3,
-                              height: 14,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF818CF8),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'DICAS RÁPIDAS',
-                              style: TextStyle(
-                                fontSize: 10,
-                                letterSpacing: 1.2,
-                                color: const Color(0xFF818CF8).withValues(alpha: 0.90),
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        ...step.hints.map(
-                          (h) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  margin: const EdgeInsets.only(top: 6, right: 10),
-                                  width: 5,
-                                  height: 5,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: _kSkyBlue.withValues(alpha: 0.80),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: _kSkyBlue.withValues(alpha: 0.50),
-                                        blurRadius: 4,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    h,
-                                    style: const TextStyle(
-                                      fontSize: 12.5,
-                                      color: _kTextMid,
-                                      height: 1.50,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _kSkyBlue.withValues(alpha: 0.40 + 0.15 * t),
+                          blurRadius: 20 + 10 * t,
+                          spreadRadius: 2,
                         ),
                       ],
-                    ],
+                    ),
+                    child: Transform.scale(
+                      scale: pulseScale,
+                      child: Icon(widget.step.icon, color: _kSkyBlueSoft, size: 30),
+                    ),
                   ),
                 ),
-              ),
-
-              // ── Navegação ──────────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-                child: Row(
-                  children: [
-                    if (onPrevious != null)
-                      _NavBtn(
-                        label: 'Anterior',
-                        icon: Icons.arrow_back_ios_new_rounded,
-                        isPrimary: false,
-                        onTap: onPrevious!,
-                      )
-                    else
-                      const SizedBox.shrink(),
-                    const Spacer(),
-                    _NavBtn(
-                      label: isLast ? '✓ Concluir' : 'Próximo',
-                      icon: isLast ? null : Icons.arrow_forward_ios_rounded,
-                      isPrimary: true,
-                      onTap: onNext,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              );
+            },
           ),
-        ),
+
+          const SizedBox(height: 14),
+
+          // ── Título grande, sem fundo ─────────────────────────────────
+          _FloatingEntry(
+            anim: _entryAnim,
+            delay: 0.08,
+            child: Text(
+              widget.step.title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: _kTextHigh,
+                height: 1.15,
+                letterSpacing: -0.5,
+                shadows: [
+                  Shadow(
+                    color: Color(0xCC000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Descrição com label "COMO USAR" ─────────────────────────
+          _FloatingEntry(
+            anim: _entryAnim,
+            delay: 0.16,
+            child: _SectionLabel(
+              label: 'COMO USAR',
+              color: _kSkyBlue,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _FloatingEntry(
+            anim: _entryAnim,
+            delay: 0.20,
+            child: Text(
+              widget.step.description,
+              style: const TextStyle(
+                fontSize: 14,
+                color: _kTextMid,
+                height: 1.55,
+                fontWeight: FontWeight.w400,
+                shadows: [
+                  Shadow(
+                    color: Color(0x99000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Dicas flutuantes com mini ícones ────────────────────────
+          if (widget.step.hints.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            _FloatingEntry(
+              anim: _entryAnim,
+              delay: 0.28,
+              child: _SectionLabel(
+                label: 'DICAS RÁPIDAS',
+                color: _kPurple,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ...widget.step.hints.asMap().entries.map((e) {
+              final idx = e.key;
+              final hint = e.value;
+              return _FloatingEntry(
+                anim: _entryAnim,
+                delay: 0.34 + idx * 0.06,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _HintPill(text: hint),
+                ),
+              );
+            }),
+          ],
+
+          // Espaço pra não colidir com a barra de botões fixa
+          const SizedBox(height: 100),
+        ],
       ),
     );
   }
 }
 
-class _NavBtn extends StatelessWidget {
+// ═══════════════════════════════════════════════════════════════════════════
+// Mini-widgets — section labels, hints, animação de entrada
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _FloatingEntry extends StatelessWidget {
+  final AnimationController anim;
+  final double delay;
+  final Widget child;
+
+  const _FloatingEntry({
+    required this.anim,
+    required this.delay,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: anim,
+      builder: (_, c) {
+        final raw = (anim.value - delay).clamp(0.0, 1.0);
+        final t = Curves.easeOutCubic.transform(raw);
+        return Opacity(
+          opacity: t,
+          child: Transform.translate(
+            offset: Offset(0, (1 - t) * 14),
+            child: c,
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
   final String label;
-  final IconData? icon;
+  final Color color;
+  const _SectionLabel({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 4,
+          height: 16,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [color, color.withValues(alpha: 0.4)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(2),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.6),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 1.4,
+            color: color,
+            fontWeight: FontWeight.w800,
+            shadows: [
+              Shadow(
+                color: color.withValues(alpha: 0.5),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HintPill extends StatelessWidget {
+  final String text;
+  const _HintPill({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    // Detecta se o texto começa com emoji (heurística: primeiro char fora do ASCII básico)
+    final hasEmoji = text.isNotEmpty && text.runes.first > 0x2300;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 9, 14, 9),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.05),
+            Colors.white.withValues(alpha: 0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _kPurple.withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!hasEmoji) ...[
+            Container(
+              margin: const EdgeInsets.only(top: 5),
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _kPurple,
+                boxShadow: [
+                  BoxShadow(
+                    color: _kPurple.withValues(alpha: 0.7),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 13,
+                color: _kTextHigh,
+                height: 1.45,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Barra fixa no rodapé — sempre visível, sobre o backdrop do coach mark
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _FixedBottomBar extends StatelessWidget {
+  const _FixedBottomBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: ValueListenableBuilder<_BarState?>(
+        valueListenable: _barStateNotifier,
+        builder: (_, state, __) {
+          if (state == null) return const SizedBox.shrink();
+          return Material(
+            type: MaterialType.transparency,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                  child: _BottomBarContent(state: state),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BottomBarContent extends StatelessWidget {
+  final _BarState state;
+  const _BottomBarContent({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xE60A1428),
+            Color(0xE60D1F3D),
+            Color(0xE60F2B52),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: _kSkyBlue.withValues(alpha: 0.35),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _kSkyBlue.withValues(alpha: 0.20),
+            blurRadius: 24,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.65),
+            blurRadius: 16,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Barra superior: contador + dots de progresso + pular ──
+          Row(
+            children: [
+              // Contador estilo "level X / Y"
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      _kSkyBlue.withValues(alpha: 0.20),
+                      _kSkyBlue.withValues(alpha: 0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _kSkyBlue.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(state.stepIcon, size: 12, color: _kSkyBlueSoft),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${state.stepIndex + 1} / ${state.totalSteps}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: _kTextHigh,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Dots de progresso
+              Expanded(
+                child: Row(
+                  children: List.generate(state.totalSteps, (i) {
+                    final done = i <= state.stepIndex;
+                    final current = i == state.stepIndex;
+                    return Expanded(
+                      child: Container(
+                        margin: EdgeInsets.only(
+                            right: i < state.totalSteps - 1 ? 4 : 0),
+                        height: 4,
+                        decoration: BoxDecoration(
+                          gradient: done
+                              ? const LinearGradient(
+                                  colors: [_kSkyBlue, _kSkyBlueSoft])
+                              : null,
+                          color: done
+                              ? null
+                              : Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: current
+                              ? [
+                                  BoxShadow(
+                                    color: _kSkyBlue.withValues(alpha: 0.7),
+                                    blurRadius: 8,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Botão Pular
+              GestureDetector(
+                onTap: state.onSkip,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.close_rounded, size: 12, color: _kTextLow),
+                      SizedBox(width: 4),
+                      Text(
+                        'Fechar',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _kTextLow,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // ── Barra inferior: Anterior + Próximo ─────────────────────
+          Row(
+            children: [
+              if (state.onPrevious != null)
+                Expanded(
+                  child: _ActionBtn(
+                    label: 'Anterior',
+                    icon: Icons.arrow_back_ios_new_rounded,
+                    isPrimary: false,
+                    onTap: state.onPrevious!,
+                  ),
+                )
+              else
+                const Spacer(),
+              if (state.onPrevious != null) const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: _ActionBtn(
+                  label: state.isLast ? 'Concluir' : 'Próximo',
+                  icon: state.isLast
+                      ? Icons.check_rounded
+                      : Icons.arrow_forward_ios_rounded,
+                  isPrimary: true,
+                  iconRight: !state.isLast,
+                  onTap: state.onNext,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
   final bool isPrimary;
+  final bool iconRight;
   final VoidCallback onTap;
 
-  const _NavBtn({
+  const _ActionBtn({
     required this.label,
+    required this.icon,
     required this.isPrimary,
     required this.onTap,
-    this.icon,
+    this.iconRight = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           gradient: isPrimary
               ? const LinearGradient(
-                  colors: [Color(0xFF1D5FA8), Color(0xFF38BDF8)],
+                  colors: [Color(0xFF1D5FA8), _kSkyBlue, _kGold],
+                  stops: [0.0, 0.6, 1.0],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 )
               : null,
-          color: isPrimary ? null : Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
+          color: isPrimary ? null : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isPrimary
-                ? Colors.transparent
-                : _kBorder.withValues(alpha: 0.55),
+                ? Colors.white.withValues(alpha: 0.20)
+                : _kSkyBlue.withValues(alpha: 0.45),
+            width: 1.2,
           ),
           boxShadow: isPrimary
               ? [
                   BoxShadow(
-                    color: _kSkyBlue.withValues(alpha: 0.25),
-                    blurRadius: 12,
+                    color: _kSkyBlue.withValues(alpha: 0.45),
+                    blurRadius: 14,
                     offset: const Offset(0, 4),
                   ),
                 ]
               : [],
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (!isPrimary && icon != null)
+            if (!iconRight)
               Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Icon(icon, size: 12, color: _kSkyBlue),
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(
+                  icon,
+                  size: 14,
+                  color: isPrimary ? _kTextHigh : _kSkyBlueSoft,
+                ),
               ),
             Text(
               label,
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: isPrimary ? _kTextHigh : _kSkyBlue,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: isPrimary ? _kTextHigh : _kSkyBlueSoft,
+                letterSpacing: 0.2,
               ),
             ),
-            if (isPrimary && icon != null)
+            if (iconRight)
               Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: Icon(icon, size: 12, color: _kTextHigh),
+                padding: const EdgeInsets.only(left: 8),
+                child: Icon(
+                  icon,
+                  size: 14,
+                  color: isPrimary ? _kTextHigh : _kSkyBlueSoft,
+                ),
               ),
           ],
         ),
