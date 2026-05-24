@@ -7,6 +7,8 @@ import '../../domain/entities/risk_prediction.dart';
 
 final _keyCriticalSection = GlobalKey();
 final _keyLegend = GlobalKey();
+final _keyMlSource = GlobalKey();
+final _keyRiskBadges = GlobalKey();
 
 class MlInsightsPage extends ConsumerWidget {
   const MlInsightsPage({super.key});
@@ -33,28 +35,55 @@ class MlInsightsPage extends ConsumerWidget {
               context: context,
               steps: [
                 TutorialStep(
+                  key: _keyMlSource,
+                  title: 'Origem da Classificação',
+                  description: 'O ícone no canto superior direito indica como a IA está classificando os riscos: chip "TFLite" significa modelo neural treinado rodando no celular (alta precisão); chip "Regras" significa fallback heurístico baseado em regras simples (sempre disponível).',
+                  icon: Icons.memory_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🧠 TFLite: modelo neural ML on-device — preferido',
+                    '📏 Regras: fallback heurístico (sem ML)',
+                    'O modelo TFLite é mais preciso mas precisa download',
+                    'Trocar entre modos em Configurações → ML',
+                  ],
+                ),
+                TutorialStep(
+                  key: _keyRiskBadges,
+                  title: 'Contadores por Nível de Risco',
+                  description: 'Os 3 badges coloridos mostram quantos lotes estão em cada faixa de risco no momento. Toque em um badge para filtrar a lista abaixo apenas com lotes daquele nível. Essencial para priorizar ações do dia.',
+                  icon: Icons.label_important_rounded,
+                  align: ContentAlign.bottom,
+                  hints: const [
+                    '🔴 Alto = quantos lotes em risco urgente',
+                    '🟡 Médio = quantos lotes em atenção',
+                    '🟢 Baixo = quantos lotes em situação normal',
+                    'Soma dos 3 = total de lotes ativos analisados',
+                  ],
+                ),
+                TutorialStep(
                   key: _keyCriticalSection,
-                  title: 'Análise de Risco com IA',
-                  description: 'O sistema de inteligência artificial analisa os lotes do estoque e classifica o risco de vencimento de cada produto. Priorize a distribuição dos itens de maior risco.',
+                  title: 'Lotes Críticos da IA',
+                  description: 'Lista de lotes que a IA classificou como ALTO risco — provavelmente vão vencer antes de serem distribuídos no ritmo atual de consumo. Cada card mostra produto, lote, quantidade, probabilidade de desperdício e ação recomendada.',
                   icon: Icons.psychology_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    '🔴 Risco Alto: distribuição urgente necessária',
-                    '🟡 Risco Médio: atenção nos próximos dias',
-                    '🟢 Risco Baixo: situação controlada',
-                    'A IA aprende com o histórico de movimentações',
+                    'Probabilidade é em % (90% = quase certeza de desperdício)',
+                    'Toque no card para ver detalhes e histórico do lote',
+                    'Distribua URGENTE ou registre descarte preventivo',
+                    'A IA aprende com cada saída registrada',
                   ],
                 ),
                 TutorialStep(
                   key: _keyLegend,
-                  title: 'Legenda de Risco',
-                  description: 'A legenda explica os critérios de classificação de risco utilizados pelo modelo de IA. Clique em cada categoria para filtrar os produtos por nível de risco.',
+                  title: 'Critérios da Classificação',
+                  description: 'A legenda explica COMO a IA decide cada nível. Os critérios consideram dias até vencimento, velocidade média de consumo do produto, quantidade restante no lote e sazonalidade do histórico.',
                   icon: Icons.legend_toggle_rounded,
                   align: ContentAlign.top,
                   hints: const [
-                    'O modelo usa dias para vencer, velocidade de consumo e histórico',
-                    'Atualize regularmente para manter as previsões precisas',
-                    'Use junto com os Relatórios para tomada de decisão',
+                    'Modelo treinado com seu histórico real de saídas',
+                    'Quanto mais dados de movimentação, mais preciso',
+                    'Combine com Previsão Prophet para visão completa',
+                    'Re-treine mensalmente para manter precisão',
                   ],
                 ),
               ],
@@ -66,6 +95,7 @@ class MlInsightsPage extends ConsumerWidget {
                   ? 'Modelo TFLite on-device'
                   : 'Classificação por regras',
               child: Padding(
+                key: _keyMlSource,
                 padding: const EdgeInsets.only(right: AppSpacing.md),
                 child: Icon(
                   src == 'tflite' ? Icons.memory_rounded : Icons.rule_rounded,
@@ -146,10 +176,13 @@ class MlInsightsPage extends ConsumerWidget {
             const SizedBox(height: AppSpacing.sm),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: countsAsync.when(
-                data: (counts) => RiskSummaryRow(counts: counts),
-                loading: () => const _ThreeSkeletons(),
-                error: (_, __) => const SizedBox.shrink(),
+              child: KeyedSubtree(
+                key: _keyRiskBadges,
+                child: countsAsync.when(
+                  data: (counts) => RiskSummaryRow(counts: counts),
+                  loading: () => const _ThreeSkeletons(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
               ),
             ),
 
