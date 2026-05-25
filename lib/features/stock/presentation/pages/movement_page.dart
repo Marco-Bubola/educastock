@@ -339,10 +339,10 @@ class _MovementPageState extends ConsumerState<MovementPage> {
         extraContent: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Tabs de modo (dark style)
+            // ── Tabs de modo (dark style, compactas)
             Container(
               key: _keyModeTabs,
-              padding: const EdgeInsets.all(3),
+              padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(AppRadius.input),
@@ -369,14 +369,14 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 10),
-            // ── Search + filter (dark style)
+            const SizedBox(height: 6),
+            // ── Search + filter (dark style, compacto)
             Row(
               key: _keySearchBar,
               children: [
                 Expanded(
                   child: Container(
-                    height: 42,
+                    height: 38,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(AppRadius.input),
@@ -980,7 +980,7 @@ class _HeaderModeTab extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
             gradient: selected
                 ? const LinearGradient(colors: [
@@ -1003,7 +1003,7 @@ class _HeaderModeTab extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon,
-                  size: 15,
+                  size: 14,
                   color: selected
                       ? Colors.white
                       : Colors.white.withValues(alpha: 0.65)),
