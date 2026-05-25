@@ -413,14 +413,14 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               key: _keyHistoryHeader,
               child: _buildHeaderStats(movementsAsync),
             ),
-            const SizedBox(height: 10),
-            // ── Search + Filter no header (estilo dark) ──
+            const SizedBox(height: 6),
+            // ── Search + Filter no header (estilo dark, compacto) ──
             Row(
               key: _keyFilterRow,
               children: [
                 Expanded(
                   child: Container(
-                    height: 42,
+                    height: 38,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(AppRadius.input),
@@ -794,7 +794,7 @@ class _StatBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+        padding: const EdgeInsets.fromLTRB(9, 5, 9, 5),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
@@ -804,24 +804,24 @@ class _StatBadge extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: accent.withValues(alpha: 0.45),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: accent.withValues(alpha: 0.25),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: accent.withValues(alpha: 0.20),
+              blurRadius: 6,
+              offset: const Offset(0, 1),
             ),
           ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Colors.white, size: 14),
-            const SizedBox(width: 6),
+            Icon(icon, color: Colors.white, size: 13),
+            const SizedBox(width: 5),
             Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -831,7 +831,7 @@ class _StatBadge extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
-                    fontSize: 14,
+                    fontSize: 13,
                     height: 1,
                   ),
                 ),
@@ -840,7 +840,7 @@ class _StatBadge extends StatelessWidget {
                   label,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.80),
-                    fontSize: 9,
+                    fontSize: 8.5,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.2,
                   ),
