@@ -74,19 +74,48 @@ void showCasaTutorial({
   if (steps.isEmpty) return;
   tutorialActiveNotifier.value = true;
 
+  /// Espera o widget alvo aparecer no tree (até `maxTries` × 60ms).
+  /// Necessário porque o tutorial_coach_mark pode trocar de step antes
+  /// do widget ser renderizado, especialmente quando há listas longas.
+  Future<BuildContext?> waitForKey(GlobalKey key,
+      {int maxTries = 12}) async {
+    for (int i = 0; i < maxTries; i++) {
+      final ctx = key.currentContext;
+      if (ctx != null && ctx.mounted) return ctx;
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+    }
+    return key.currentContext;
+  }
+
   Future<void> scrollTo(int index) async {
     if (index < 0 || index >= steps.length) return;
-    final ctx = steps[index].key.currentContext;
+    final key = steps[index].key;
+    // Tentativa 1: contexto imediato
+    var ctx = key.currentContext;
+    // Tentativa 2: se null, aguarda render
+    ctx ??= await waitForKey(key);
     if (ctx == null) return;
+
     try {
-      await Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 420),
-        curve: Curves.easeInOut,
-        alignment: 0.20, // posiciona o alvo na parte superior da tela
-        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 140));
+      // Faz scroll de forma robusta — tenta múltiplas vezes pois alguns
+      // widgets só ficam visíveis após scroll parcial (KeyedSubtree em
+      // SliverList, por exemplo).
+      for (int attempt = 0; attempt < 2; attempt++) {
+        final currentCtx = key.currentContext;
+        if (currentCtx == null || !currentCtx.mounted) break;
+        await Scrollable.ensureVisible(
+          currentCtx,
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeInOut,
+          // 0.30 deixa espaço pro botão fixo no topo (Próximo/Anterior)
+          alignment: 0.30,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+        );
+        // Pequeno gap para o tree estabilizar entre tentativas
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      }
+      // Buffer extra para o coach mark reposicionar
+      await Future<void>.delayed(const Duration(milliseconds: 180));
     } catch (_) {}
   }
 
@@ -243,11 +272,11 @@ class _TutorialContentState extends State<_TutorialContent>
     final maxWidth = (screenWidth - 24).clamp(280.0, 460.0);
 
     // Reservas:
-    //  - 64 status/notch + safe area top
+    //  - safe area top + bottom (notch, gestureBar)
+    //  - ~170 barra de navegação fixa no TOPO (contador + dots + botões)
     //  - ~120 spotlight do tutorial_coach_mark
-    //  - ~180 barra inferior fixa (contador + dots + botões + safe area)
-    //  - ~24 padding extra
-    final reservedSpace = mq.padding.top + mq.padding.bottom + 64 + 120 + 180 + 24;
+    //  - ~24 padding extra de respiro
+    final reservedSpace = mq.padding.top + mq.padding.bottom + 170 + 120 + 24;
     final maxHeight = (screenHeight - reservedSpace).clamp(220.0, 480.0);
 
     return ConstrainedBox(
@@ -634,7 +663,7 @@ class _FixedBottomBar extends StatelessWidget {
     return Positioned(
       left: 0,
       right: 0,
-      bottom: 0,
+      top: 0,
       child: ValueListenableBuilder<_BarState?>(
         valueListenable: _barStateNotifier,
         builder: (_, state, __) {
@@ -644,9 +673,9 @@ class _FixedBottomBar extends StatelessWidget {
             child: Directionality(
               textDirection: TextDirection.ltr,
               child: SafeArea(
-                top: false,
+                bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                   child: _BottomBarContent(state: state),
                 ),
               ),
