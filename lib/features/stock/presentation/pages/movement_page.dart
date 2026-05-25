@@ -34,7 +34,15 @@ final stockDatasourceProvider = Provider<StockRemoteDatasource>(
 
 class MovementPage extends ConsumerStatefulWidget {
   final String batchId;
-  const MovementPage({super.key, required this.batchId});
+  final String? prefillProductId;
+  final String? prefillReason; // 'uso' | 'validade' | 'avaria' | 'outro'
+
+  const MovementPage({
+    super.key,
+    required this.batchId,
+    this.prefillProductId,
+    this.prefillReason,
+  });
 
   @override
   ConsumerState<MovementPage> createState() => _MovementPageState();
@@ -62,6 +70,22 @@ class _MovementPageState extends ConsumerState<MovementPage> {
     'avaria': 'Avaria/Perda',
     'outro': 'Outro',
   };
+
+  @override
+  void initState() {
+    super.initState();
+    // Pré-seleciona produto vindo de URL (ex.: vindo de um alerta crítico)
+    final pid = widget.prefillProductId;
+    if (pid != null && pid.isNotEmpty) {
+      _selectedQtyByProduct[pid] = 1;
+    }
+    if (widget.prefillReason != null && widget.prefillReason!.isNotEmpty) {
+      final valid = MovementReasonCode.values
+          .firstWhere((r) => r.name == widget.prefillReason,
+              orElse: () => MovementReasonCode.uso);
+      _reasonCode = valid.name;
+    }
+  }
 
   @override
   void dispose() {
@@ -302,8 +326,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
     final batchesAsync = ref.watch(allAvailableBatchesProvider);
     final recipesAsync = ref.watch(recipesProvider);
     final categoryLabelMap = ref.watch(categoryLabelMapProvider);
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -312,6 +334,114 @@ class _MovementPageState extends ConsumerState<MovementPage> {
         title: 'Distribuição',
         subtitle: 'Produtos avulsos ou por receita',
         showBackButton: true,
+        extraContent: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Tabs de modo (dark style)
+            Container(
+              key: _keyModeTabs,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(AppRadius.input),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.20),
+                ),
+              ),
+              child: Row(
+                children: [
+                  _HeaderModeTab(
+                    label: 'Avulso',
+                    icon: Icons.inventory_2_rounded,
+                    selected: _mode == _OutputMode.products,
+                    onTap: () =>
+                        setState(() => _mode = _OutputMode.products),
+                  ),
+                  _HeaderModeTab(
+                    label: 'Receita',
+                    icon: Icons.menu_book_rounded,
+                    selected: _mode == _OutputMode.recipes,
+                    onTap: () =>
+                        setState(() => _mode = _OutputMode.recipes),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            // ── Search + filter (dark style)
+            Row(
+              key: _keySearchBar,
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.input),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (v) => setState(() => _search = v),
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Buscar produto ou receita…',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontSize: 13,
+                        ),
+                        prefixIcon: Icon(Icons.search_rounded,
+                            size: 18,
+                            color: Colors.white.withValues(alpha: 0.8)),
+                        border: InputBorder.none,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Builder(builder: (ctx) {
+                  final categories = productsAsync.valueOrNull
+                          ?.map((e) => e.category.name)
+                          .toSet()
+                          .toList() ??
+                      [];
+                  categories.sort();
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [
+                        Color(0xFF1D5FA8),
+                        Color(0xFF38BDF8),
+                      ]),
+                      borderRadius: BorderRadius.circular(AppRadius.input),
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: IconButton(
+                      onPressed: () => _openFilterModal(
+                        categoryKeys: categories,
+                        categoryLabelMap: categoryLabelMap,
+                      ),
+                      icon: const Icon(Icons.tune_rounded,
+                          color: Colors.white, size: 18),
+                      tooltip: 'Filtros',
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ],
+        ),
         actions: [
           buildHelpButton(
             context: context,
@@ -402,7 +532,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
         child: batchesAsync.when(
           data: (batches) => productsAsync.when(
             data: (products) {
-              final categories = products.map((e) => e.category.name).toSet().toList()..sort();
               final filteredProducts = products.where((p) {
                 // Saída só lista produtos com estoque disponível
                 final hasStock = _availableForProduct(p.id, batches) > 0;
@@ -421,95 +550,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                 padding: const EdgeInsets.fromLTRB(
                     AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
                 children: [
-                  // ─── Tab selector moderno ─────────────────────────
-                  Container(
-                    key: _keyModeTabs,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainer,
-                      borderRadius: BorderRadius.circular(AppRadius.input),
-                    ),
-                    child: Row(
-                      children: [
-                        _ModeTab(
-                          label: 'Produto Avulso',
-                          icon: Icons.inventory_2_rounded,
-                          selected: _mode == _OutputMode.products,
-                          onTap: () =>
-                              setState(() => _mode = _OutputMode.products),
-                        ),
-                        _ModeTab(
-                          label: 'Receita Ativa',
-                          icon: Icons.menu_book_rounded,
-                          selected: _mode == _OutputMode.recipes,
-                          onTap: () =>
-                              setState(() => _mode = _OutputMode.recipes),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  // ─── Busca + filtro ───────────────────────────────
-                  Row(
-                    key: _keySearchBar,
-                    children: [
-                      Expanded(
-                        child: Container(
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainer,
-                            borderRadius:
-                                BorderRadius.circular(AppRadius.input),
-                            border: Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outlineVariant
-                                    .withValues(alpha: 0.4)),
-                          ),
-                          child: TextField(
-                            controller: _searchController,
-                            onChanged: (v) => setState(() => _search = v),
-                            style: AppTypography.bodyMedium
-                                .copyWith(color: onSurface),
-                            decoration: InputDecoration(
-                              hintText: 'Buscar produto ou receita...',
-                              hintStyle: AppTypography.bodySmall
-                                  .copyWith(color: onSurfaceVariant),
-                              prefixIcon: const Icon(
-                                  Icons.search_rounded,
-                                  size: 18,
-                                  color: AppColors.neutral500),
-                              border: InputBorder.none,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [
-                            AppColors.brandPrimary600,
-                            AppColors.secondaryBlue600
-                          ]),
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.input),
-                        ),
-                        child: IconButton(
-                          onPressed: () => _openFilterModal(
-                            categoryKeys: categories,
-                            categoryLabelMap: categoryLabelMap,
-                          ),
-                          icon: const Icon(Icons.tune_rounded,
-                              color: Colors.white, size: 18),
-                          tooltip: 'Filtros',
-                        ),
-                      ),
-                    ],
-                  ),
                   // Chips de filtros ativos
                   if (_categoryKey != null || _reasonCode != MovementReasonCode.uso.name)
                     Wrap(
@@ -918,16 +958,18 @@ class _ConfirmFabWithSummary extends StatelessWidget {
 
 // ─── Tab selector moderno ─────────────────────────────────────────────────
 
-class _ModeTab extends StatelessWidget {
+/// Variante do _ModeTab para uso dentro do header (fundo gradiente escuro)
+class _HeaderModeTab extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool selected;
   final VoidCallback onTap;
-  const _ModeTab(
-      {required this.label,
-      required this.icon,
-      required this.selected,
-      required this.onTap});
+  const _HeaderModeTab({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -936,26 +978,34 @@ class _ModeTab extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             gradient: selected
                 ? const LinearGradient(colors: [
-                    AppColors.brandPrimary600,
-                    AppColors.secondaryBlue600
+                    Color(0xFF1D5FA8),
+                    Color(0xFF38BDF8),
                   ])
                 : null,
-            color: selected ? null : Colors.transparent,
             borderRadius: BorderRadius.circular(AppRadius.small),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon,
-                  size: 16,
+                  size: 15,
                   color: selected
                       ? Colors.white
-                      : Theme.of(context).colorScheme.onSurfaceVariant),
-              const SizedBox(width: 5),
+                      : Colors.white.withValues(alpha: 0.65)),
+              const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
@@ -963,7 +1013,7 @@ class _ModeTab extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: selected
                       ? Colors.white
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                      : Colors.white.withValues(alpha: 0.75),
                 ),
               ),
             ],
