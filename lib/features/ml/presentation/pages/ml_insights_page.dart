@@ -8,12 +8,9 @@ import '../../../../core/router/app_router.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../controllers/risk_classifier_provider.dart';
-import '../widgets/risk_widgets.dart';
 import '../../domain/entities/risk_prediction.dart';
 
 final _keyCriticalSection = GlobalKey();
-final _keyLegend = GlobalKey();
-final _keyMlSource = GlobalKey();
 final _keyRiskChart = GlobalKey();
 
 enum _RiskFilter { todos, vermelho, amarelo, verde }
@@ -32,7 +29,6 @@ class _MlInsightsPageState extends ConsumerState<MlInsightsPage> {
   Widget build(BuildContext context) {
     final predictionsAsync = ref.watch(batchRiskPredictionsProvider);
     final countsAsync = ref.watch(riskCountsProvider);
-    final sourceAsync = ref.watch(classifierSourceProvider);
     final allBatches =
         ref.watch(allAvailableBatchesProvider).valueOrNull ?? const [];
     final batchesMap = <String, Batch>{for (final b in allBatches) b.id: b};
@@ -42,8 +38,10 @@ class _MlInsightsPageState extends ConsumerState<MlInsightsPage> {
       backgroundColor: cs.surface,
       body: Column(children: [
         ModernProfileAppBar(
-          title: 'Análise de Risco ML',
-          subtitle: 'Classificação inteligente de lotes',
+          title: 'Análise de Risco',
+          subtitle: 'Classificação ML de lotes',
+          pageIcon: Icons.psychology_rounded,
+          iconColor: const Color(0xFFEC4899),
           showBackButton: true,
           actions: [
             buildHelpButton(
@@ -51,19 +49,6 @@ class _MlInsightsPageState extends ConsumerState<MlInsightsPage> {
               onPressed: () => showCasaTutorial(
                 context: context,
                 steps: [
-                  TutorialStep(
-                    key: _keyMlSource,
-                    title: 'Origem da Classificação',
-                    description:
-                        'O ícone no canto superior direito indica como a IA está classificando os riscos: chip "TFLite" significa modelo neural treinado rodando no celular (alta precisão); chip "Regras" significa fallback heurístico (sempre disponível).',
-                    icon: Icons.memory_rounded,
-                    align: ContentAlign.bottom,
-                    hints: const [
-                      '🧠 TFLite: modelo neural ML on-device — preferido',
-                      '📏 Regras: fallback heurístico (sem ML)',
-                      'Trocar entre modos em Configurações → ML',
-                    ],
-                  ),
                   TutorialStep(
                     key: _keyRiskChart,
                     title: 'Distribuição por Risco',
@@ -76,39 +61,12 @@ class _MlInsightsPageState extends ConsumerState<MlInsightsPage> {
                     key: _keyCriticalSection,
                     title: 'Cards de Lote com Ações',
                     description:
-                        'Cada card mostra o lote, produto, quantidade e probabilidade de desperdício. Toque em "Distribuir" para registrar saída ou "Detalhes" para abrir o produto.',
+                        'Cada card mostra o lote, produto, quantidade e probabilidade de desperdício. Toque em "Saída" para registrar saída ou no "…" para mais opções.',
                     icon: Icons.psychology_rounded,
-                    align: ContentAlign.top,
-                  ),
-                  TutorialStep(
-                    key: _keyLegend,
-                    title: 'Critérios da Classificação',
-                    description:
-                        'A legenda explica como a IA decide cada nível, considerando dias até vencimento, velocidade de consumo e quantidade restante.',
-                    icon: Icons.legend_toggle_rounded,
                     align: ContentAlign.top,
                   ),
                 ],
               ),
-            ),
-            sourceAsync.maybeWhen(
-              data: (src) => Tooltip(
-                message: src == 'tflite'
-                    ? 'Modelo TFLite on-device'
-                    : 'Classificação por regras',
-                child: Padding(
-                  key: _keyMlSource,
-                  padding: const EdgeInsets.only(right: AppSpacing.md),
-                  child: Icon(
-                    src == 'tflite' ? Icons.memory_rounded : Icons.rule_rounded,
-                    color: src == 'tflite'
-                        ? AppColors.brandPrimary600
-                        : AppColors.neutral500,
-                    size: 20,
-                  ),
-                ),
-              ),
-              orElse: () => const SizedBox.shrink(),
             ),
           ],
         ),
@@ -121,16 +79,6 @@ class _MlInsightsPageState extends ConsumerState<MlInsightsPage> {
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
               children: [
-                // ─── Source badge ──────────────────────────────────────────
-                sourceAsync.maybeWhen(
-                  data: (src) => Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
-                    child: _SourceBanner(source: src),
-                  ),
-                  orElse: () => const SizedBox.shrink(),
-                ),
-
                 // ─── Donut chart ───────────────────────────────────────────
                 Padding(
                   padding:
@@ -204,13 +152,6 @@ class _MlInsightsPageState extends ConsumerState<MlInsightsPage> {
                   ),
                 ),
 
-                const SizedBox(height: AppSpacing.xl),
-
-                // ─── Legenda ───────────────────────────────────────────────
-                KeyedSubtree(
-                  key: _keyLegend,
-                  child: const _Legend(),
-                ),
                 const SizedBox(height: AppSpacing.xxxl),
               ],
             ),
@@ -251,70 +192,6 @@ extension on _RiskFilter {
         _RiskFilter.amarelo => 'Atenção',
         _RiskFilter.verde => 'Seguro',
       };
-}
-
-// ---------------------------------------------------------------------------
-// SourceBanner — TFLite vs Regras
-// ---------------------------------------------------------------------------
-
-class _SourceBanner extends StatelessWidget {
-  final String source;
-  const _SourceBanner({required this.source});
-
-  @override
-  Widget build(BuildContext context) {
-    final isTflite = source == 'tflite';
-    final color = isTflite ? AppColors.brandPrimary600 : AppColors.neutral500;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            color.withValues(alpha: 0.12),
-            color.withValues(alpha: 0.04),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          Icon(isTflite ? Icons.memory_rounded : Icons.rule_rounded,
-              color: color, size: 18),
-          const SizedBox(width: AppSpacing.sm),
-          Text(isTflite ? 'Modelo TFLite' : 'Regras heurísticas',
-              style: AppTypography.labelMedium
-                  .copyWith(color: color, fontWeight: FontWeight.w700)),
-          const SizedBox(width: AppSpacing.xs),
-          Expanded(
-            child: Text(
-              isTflite ? '— inferência neural on-device' : '— fallback ativo',
-              style: AppTypography.bodySmall
-                  .copyWith(color: color.withValues(alpha: 0.7), fontSize: 11),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.success600.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-            ),
-            child: Text(
-              isTflite ? 'On-device' : 'Ativo',
-              style: AppTypography.labelSmall.copyWith(
-                color: AppColors.success600,
-                fontWeight: FontWeight.w700,
-                fontSize: 10,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -645,10 +522,10 @@ class _RiskCardGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cross = constraints.maxWidth >= 900
-            ? 4
+            ? 5
             : constraints.maxWidth >= 620
-                ? 3
-                : 2;
+                ? 4
+                : 3;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
           child: GridView.builder(
@@ -656,9 +533,9 @@ class _RiskCardGrid extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: cross,
-              mainAxisSpacing: AppSpacing.sm,
-              crossAxisSpacing: AppSpacing.sm,
-              childAspectRatio: 0.74,
+              mainAxisSpacing: AppSpacing.xs,
+              crossAxisSpacing: AppSpacing.xs,
+              childAspectRatio: 0.78,
             ),
             itemCount: predictions.length,
             itemBuilder: (_, i) {
@@ -686,12 +563,12 @@ class _GridSkeleton extends StatelessWidget {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: AppSpacing.sm,
-          crossAxisSpacing: AppSpacing.sm,
-          childAspectRatio: 0.74,
+          crossAxisCount: 3,
+          mainAxisSpacing: AppSpacing.xs,
+          crossAxisSpacing: AppSpacing.xs,
+          childAspectRatio: 0.78,
         ),
-        itemCount: 4,
+        itemCount: 6,
         itemBuilder: (_, __) => const CasaCardSkeleton(),
       ),
     );
@@ -791,11 +668,11 @@ class _RiskGridCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Header ──────────────────────────────────────────────
+              // ── Header compacto ─────────────────────────────────────
               Stack(
                 children: [
                   Container(
-                    height: 62,
+                    height: 42,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [accent, accentDark],
@@ -808,11 +685,11 @@ class _RiskGridCard extends StatelessWidget {
                     child: Stack(
                       children: [
                         Positioned(
-                          right: -10,
-                          top: -10,
+                          right: -8,
+                          top: -8,
                           child: Container(
-                            width: 44,
-                            height: 44,
+                            width: 32,
+                            height: 32,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: Colors.white.withValues(alpha: 0.08),
@@ -820,71 +697,32 @@ class _RiskGridCard extends StatelessWidget {
                           ),
                         ),
                         Center(
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(9),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.30),
-                                width: 1.2,
-                              ),
-                            ),
-                            child: Icon(
-                              _iconForLevel(prediction.level),
-                              color: Colors.white,
-                              size: 20,
-                            ),
+                          child: Icon(
+                            _iconForLevel(prediction.level),
+                            color: Colors.white,
+                            size: 18,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  // Badge de confiança
+                  // Badge confiança canto direito
                   Positioned(
-                    top: 5,
-                    right: 5,
+                    top: 4,
+                    right: 4,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                          horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.52),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.30),
-                          width: 0.6,
-                        ),
+                        borderRadius: BorderRadius.circular(5),
                       ),
                       child: Text(
                         '$pct%',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
-                          fontSize: 9,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Badge nível (canto esquerdo)
-                  Positioned(
-                    top: 5,
-                    left: 5,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        prediction.level.label.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 8,
-                          letterSpacing: 0.4,
+                          fontSize: 8.5,
                         ),
                       ),
                     ),
@@ -892,85 +730,76 @@ class _RiskGridCard extends StatelessWidget {
                 ],
               ),
 
-              // ── Corpo ───────────────────────────────────────────────
+              // ── Corpo compacto ──────────────────────────────────────
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+                  padding: const EdgeInsets.fromLTRB(6, 5, 6, 5),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         prediction.productName,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTypography.labelLarge.copyWith(
+                        style: AppTypography.labelMedium.copyWith(
                           color: cs.onSurface,
                           fontWeight: FontWeight.w800,
-                          fontSize: 12.5,
-                          height: 1.15,
+                          fontSize: 10.5,
+                          height: 1.1,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Row(
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.inventory_2_rounded,
-                              size: 11, color: cs.onSurfaceVariant),
-                          const SizedBox(width: 3),
-                          Text(
-                            '$qty un.',
-                            style: AppTypography.labelSmall.copyWith(
-                              color: cs.onSurfaceVariant,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(Icons.event_rounded,
-                              size: 11, color: accent),
-                          const SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              expLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTypography.labelSmall.copyWith(
-                                color: accent,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
+                          Row(
+                            children: [
+                              Icon(Icons.inventory_2_rounded,
+                                  size: 9, color: cs.onSurfaceVariant),
+                              const SizedBox(width: 2),
+                              Text(
+                                '$qty',
+                                style: AppTypography.labelSmall.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.event_rounded, size: 9, color: accent),
+                              const SizedBox(width: 2),
+                              Flexible(
+                                child: Text(
+                                  expLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.labelSmall.copyWith(
+                                    color: accent,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      // Barra de confiança
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: prediction.confidence.clamp(0.0, 1.0),
-                          minHeight: 3,
-                          backgroundColor:
-                              accent.withValues(alpha: isDark ? 0.18 : 0.10),
-                          valueColor: AlwaysStoppedAnimation<Color>(accent),
-                        ),
-                      ),
-                      const Spacer(),
-                      // Ações rápidas
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _MiniActionButton(
-                              icon: Icons.outbound_rounded,
-                              label: 'Saída',
-                              color: accent,
-                              onTap: () => _openMovement(context),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          _MiniIconButton(
-                            icon: Icons.more_horiz_rounded,
-                            color: cs.onSurfaceVariant,
-                            onTap: () => _openActionsSheet(context),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _MiniActionButton(
+                                  icon: Icons.outbound_rounded,
+                                  label: 'Saída',
+                                  color: accent,
+                                  onTap: () => _openMovement(context),
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              _MiniIconButton(
+                                icon: Icons.more_horiz_rounded,
+                                color: cs.onSurfaceVariant,
+                                onTap: () => _openActionsSheet(context),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -991,7 +820,7 @@ class _RiskGridCard extends StatelessWidget {
     context.push('/products/${b.productId}');
   }
 
-  void _openMovement(BuildContext context) {
+  void _openMovement(BuildContext context, {String? reason}) {
     final b = batch;
     if (b == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1001,7 +830,10 @@ class _RiskGridCard extends StatelessWidget {
       );
       return;
     }
-    context.push('${AppRoutes.movement}?batchId=${b.id}');
+    final reasonParam = reason != null ? '&reason=$reason' : '';
+    context.push(
+      '${AppRoutes.movement}?batchId=${b.id}&productId=${b.productId}$reasonParam',
+    );
   }
 
   void _openActionsSheet(BuildContext context) {
@@ -1062,7 +894,7 @@ class _RiskGridCard extends StatelessWidget {
               color: AppColors.danger600,
               onTap: () {
                 Navigator.pop(context);
-                _openMovement(context);
+                _openMovement(context, reason: 'validade');
               },
             ),
             _ActionTile(
@@ -1103,18 +935,19 @@ class _MiniActionButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.small),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 5),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: Colors.white, size: 12),
-              const SizedBox(width: 4),
+              Icon(icon, color: Colors.white, size: 10),
+              const SizedBox(width: 3),
               Text(
                 label,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 10,
+                  fontSize: 9,
                 ),
               ),
             ],
@@ -1145,8 +978,8 @@ class _MiniIconButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.small),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, color: color, size: 14),
+          padding: const EdgeInsets.all(4),
+          child: Icon(icon, color: color, size: 12),
         ),
       ),
     );
@@ -1211,70 +1044,3 @@ class _ActionTile extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Legenda
-// ---------------------------------------------------------------------------
-
-class _Legend extends StatelessWidget {
-  const _Legend();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(
-              color: Theme.of(context)
-                  .colorScheme
-                  .outlineVariant
-                  .withValues(alpha: 0.4)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.legend_toggle_rounded,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-                const SizedBox(width: 6),
-                Text(
-                  'Como funciona a classificação',
-                  style: AppTypography.labelLarge.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            ...RiskLevel.values.map(
-              (l) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RiskBadge(level: l),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        l.description,
-                        style: AppTypography.bodySmall.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
