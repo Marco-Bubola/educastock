@@ -279,8 +279,8 @@ class ModernProfileAppBar extends ConsumerWidget {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.lg, AppSpacing.md, AppSpacing.lg,
-                        AppSpacing.md),
+                        AppSpacing.lg, AppSpacing.sm, AppSpacing.lg,
+                        AppSpacing.sm + 2),
                     child: extraContent!,
                   ),
                 ],
