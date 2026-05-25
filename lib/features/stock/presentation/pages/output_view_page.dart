@@ -238,6 +238,8 @@ class _OutputViewPageState extends State<OutputViewPage>
         ModernProfileAppBar(
           title: 'Relatório de Saída',
           subtitle: 'Detalhes da distribuição',
+          pageIcon: Icons.task_alt_rounded,
+          iconColor: const Color(0xFF22C55E),
           showBackButton: true,
           actions: [
             buildHelpButton(context: context, onPressed: _showTutorial),
@@ -404,6 +406,8 @@ class _LoadingViewState extends State<_LoadingView>
           ModernProfileAppBar(
             title: 'Registrando saída…',
             subtitle: 'Processando movimentação',
+            pageIcon: Icons.hourglass_top_rounded,
+            iconColor: const Color(0xFF38BDF8),
             showBackButton: true,
           ),
           // ── Gradiente superior com spinner ──
