@@ -138,6 +138,14 @@ class _ReportsAppBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
+    final alertCount = ref.watch(allAvailableBatchesProvider).when(
+          data: (list) => list
+              .where((b) =>
+                  !b.noExpiry && (b.isExpired || b.daysToExpiry <= 30))
+              .length,
+          loading: () => 0,
+          error: (_, __) => 0,
+        );
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: Colors.transparent,
@@ -156,17 +164,51 @@ class _ReportsAppBar extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                   child: Row(
                     children: [
+                      // ── Ícone com glow estilo dashboard ──
                       Container(
-                        width: 36,
-                        height: 36,
+                        width: 38,
+                        height: 38,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(AppRadius.small),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.white.withValues(alpha: 0.22),
+                              Colors.white.withValues(alpha: 0.08),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.35),
+                            width: 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.20),
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                            ),
+                          ],
                         ),
                         child: const Icon(Icons.analytics_rounded,
                             color: Colors.white, size: 20),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
+                      const SizedBox(width: 10),
+                      // ── Barra lateral branca + título ──
+                      Container(
+                        width: 3.5,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(2),
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                                  Colors.white.withValues(alpha: 0.6),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -179,28 +221,53 @@ class _ReportsAppBar extends ConsumerWidget {
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -0.3,
+                                shadows: [
+                                  Shadow(
+                                    color: Color(0x66000000),
+                                    blurRadius: 6,
+                                    offset: Offset(0, 1),
+                                  ),
+                                ],
                               ),
                             ),
                             Text(
                               'Análise e tendências do estoque',
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.65),
+                                color: Colors.white.withValues(alpha: 0.70),
                                 fontSize: 11,
-                                fontWeight: FontWeight.w400,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      if (user?.name != null)
+                      // ── Actions extras (export, etc) ──
+                      if (actions != null) ...actions!,
+                      // ── Sino de alertas ──
+                      CasaAlertsBellButton(
+                        alertCount: alertCount,
+                        onDarkBg: true,
+                      ),
+                      // ── Toggle dark/light ──
+                      const Padding(
+                        padding: EdgeInsets.only(left: AppSpacing.xs),
+                        child: CasaThemeToggleButton(),
+                      ),
+                      // ── Avatar de perfil ──
+                      if (user?.name != null) ...[
+                        const SizedBox(width: AppSpacing.xs),
                         GestureDetector(
                           onTap: () => context.push(AppRoutes.settings),
                           child: Container(
-                            width: 32,
-                            height: 32,
+                            width: 36,
+                            height: 36,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
+                              color: Colors.white.withValues(alpha: 0.18),
                               shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.35),
+                                width: 1.5,
+                              ),
                             ),
                             child: Center(
                               child: Text(
@@ -213,8 +280,7 @@ class _ReportsAppBar extends ConsumerWidget {
                             ),
                           ),
                         ),
-                      const SizedBox(width: AppSpacing.xs),
-                      if (actions != null) ...actions!,
+                      ],
                     ],
                   ),
                 ),
