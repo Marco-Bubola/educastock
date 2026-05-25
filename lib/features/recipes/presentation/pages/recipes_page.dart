@@ -58,6 +58,119 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
         title: 'Receitas de Saída',
         subtitle: 'Modelos ativos para baixa rápida',
         showBackButton: true,
+        extraContent: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Card de resumo de receitas
+            KeyedSubtree(
+              key: _keyRecipeHeader,
+              child: recipesAsync.maybeWhen(
+                data: (recipes) => Container(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0.14),
+                        Colors.white.withValues(alpha: 0.06),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF7C3AED), Color(0xFFA78BFA)],
+                          ),
+                          borderRadius: BorderRadius.circular(11),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF7C3AED)
+                                  .withValues(alpha: 0.5),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.menu_book_rounded,
+                            color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${recipes.length} receita${recipes.length == 1 ? '' : 's'} ativa${recipes.length == 1 ? '' : 's'}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                              ),
+                            ),
+                            Text(
+                              'Modelos prontos para distribuição rápida',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                orElse: () => const SizedBox(height: 64),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // ── Busca
+            Container(
+              key: _keyRecipeSearch,
+              height: 42,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.input),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.22),
+                ),
+              ),
+              child: TextField(
+                onChanged: (v) => setState(() => _search = v),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Buscar receita…',
+                  hintStyle: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 13,
+                  ),
+                  prefixIcon: Icon(Icons.search_rounded,
+                      size: 18,
+                      color: Colors.white.withValues(alpha: 0.8)),
+                  suffixIcon: _search.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.close_rounded,
+                              size: 16,
+                              color: Colors.white.withValues(alpha: 0.7)),
+                          onPressed: () => setState(() => _search = ''),
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
           buildHelpButton(
             context: context,
@@ -132,44 +245,7 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
 
           return CustomScrollView(
             slivers: [
-              // Header stats
-              SliverToBoxAdapter(
-                child: KeyedSubtree(
-                  key: _keyRecipeHeader,
-                  child: _buildHeader(isDark, recipes.length, textPrimary, textSub),
-                ),
-              ),
-              // Search bar
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: Container(
-                    key: _keyRecipeSearch,
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: borderColor),
-                    ),
-                    child: TextField(
-                      onChanged: (v) => setState(() => _search = v),
-                      style: TextStyle(color: textPrimary, fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: 'Buscar receita…',
-                        hintStyle: TextStyle(color: textSub, fontSize: 14),
-                        prefixIcon: Icon(Icons.search_rounded, color: textSub, size: 20),
-                        suffixIcon: _search.isNotEmpty
-                            ? IconButton(
-                                icon: Icon(Icons.close_rounded, color: textSub, size: 18),
-                                onPressed: () => setState(() => _search = ''),
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
               if (filtered.isEmpty)
                 SliverFillRemaining(
                   child: Center(
@@ -945,96 +1021,6 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
     );
   }
 
-  Widget _buildHeader(
-    bool isDark,
-    int total,
-    Color textPrimary,
-    Color textSub,
-  ) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF7C3AED), Color(0xFF4F46E5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color:
-                const Color(0xFF7C3AED).withValues(alpha: isDark ? 0.3 : 0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(Icons.menu_book_rounded,
-                color: Colors.white, size: 26),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Receitas de Saída',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 17,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Distribuição rápida por modelo',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.75),
-                      fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  '$total',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 22),
-                ),
-                Text(
-                  'receitas',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.75),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ─── Skeleton de carregamento ───────────────────────────────────────────────
