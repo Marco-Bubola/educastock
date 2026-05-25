@@ -225,7 +225,6 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final productsAsync = ref.watch(productsProvider);
     final stockMap = ref.watch(productAvailableQtyMapProvider);
     final user = ref.watch(currentUserProvider);
@@ -243,6 +242,8 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
           ModernProfileAppBar(
             title: 'Estoque',
             subtitle: 'Catálogo de produtos',
+            pageIcon: Icons.inventory_2_rounded,
+            iconColor: const Color(0xFF38BDF8),
             profileName: user?.name,
             onProfileTap: () => context.push(AppRoutes.settings),
             extraContent: Row(
@@ -389,16 +390,6 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                   ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.outbound_rounded, color: Colors.white),
-                onPressed: () => context.push('${AppRoutes.movement}?batchId='),
-                tooltip: 'Registrar saída',
-              ),
-              IconButton(
-                icon: const Icon(Icons.upload_file_rounded, color: Colors.white),
-                onPressed: () => _showCsvImportSheet(context),
-                tooltip: 'Importar CSV',
-              ),
             ],
           ),
           Expanded(
@@ -507,14 +498,6 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
     );
   }
 
-  void _showCsvImportSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _CsvImportSheet(parentRef: ref),
-    );
-  }
 }
 
 // ─── CSV Import Bottom Sheet ──────────────────────────────────────────────────
@@ -1859,159 +1842,70 @@ class _ProductGridCard extends ConsumerWidget {
     required bool isCritical,
     required bool isWarning,
   }) async {
-    final cs = Theme.of(context).colorScheme;
     final accent = isCritical
-        ? const Color(0xFFDC2626)
+        ? AppColors.danger600
         : isWarning
-            ? const Color(0xFFD97706)
+            ? AppColors.warning600
             : AppColors.brandPrimary600;
+    final isExpired = nearestBatch?.isExpired == true;
     final headerLabel = isCritical
-        ? (nearestBatch?.isExpired == true
-            ? 'Lote vencido — urgente'
-            : 'Vence em até 7 dias')
+        ? (isExpired ? 'Lote vencido — urgente' : 'Vence em até 7 dias')
         : isWarning
             ? 'Vence em até 30 dias'
             : 'Ações do produto';
 
-    await showModalBottomSheet(
+    await showCasaActionSheet(
       context: context,
-      backgroundColor: cs.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle bar
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(top: AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              // Header com identidade do produto
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [
-                          accent.withValues(alpha: 0.95),
-                          accent.withValues(alpha: 0.55),
-                        ]),
-                        borderRadius: BorderRadius.circular(AppRadius.small),
-                        boxShadow: [
-                          BoxShadow(
-                            color: accent.withValues(alpha: 0.35),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        isCritical
-                            ? Icons.warning_amber_rounded
-                            : isWarning
-                                ? Icons.schedule_rounded
-                                : _categoryIcon(product.category),
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            product.name,
-                            style: AppTypography.labelMedium.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: cs.onSurface,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            headerLabel,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: accent,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
-              // Ações
-              _ProductSheetAction(
-                icon: Icons.output_rounded,
-                label: 'Distribuir agora',
-                color: AppColors.brandPrimary600,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.push(
-                      '${AppRoutes.movement}?productId=${product.id}&reason=uso');
-                },
-              ),
-              if (isCritical && nearestBatch?.isExpired == true)
-                _ProductSheetAction(
-                  icon: Icons.delete_sweep_rounded,
-                  label: 'Registrar baixa por vencimento',
-                  color: AppColors.danger600,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    context.push(
-                        '${AppRoutes.movement}?batchId=${nearestBatch!.id}&reason=validade');
-                  },
-                ),
-              _ProductSheetAction(
-                icon: Icons.add_box_rounded,
-                label: 'Adicionar novo lote',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.push(
-                      '${AppRoutes.batchForm}?productId=${product.id}');
-                },
-              ),
-              if (nearestBatch != null)
-                _ProductSheetAction(
-                  icon: Icons.edit_outlined,
-                  label: 'Editar lote mais próximo',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    context.push(
-                        '${AppRoutes.batchForm}?productId=${product.id}&id=${nearestBatch.id}');
-                  },
-                ),
-              _ProductSheetAction(
-                icon: Icons.info_outline_rounded,
-                label: 'Ver detalhes do produto',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.push('/products/${product.id}');
-                },
-              ),
-              const SizedBox(height: AppSpacing.sm),
-            ],
-          ),
-        );
-      },
+      title: product.name,
+      subtitle: headerLabel,
+      headerColor: accent,
+      headerIcon: isCritical
+          ? Icons.warning_amber_rounded
+          : isWarning
+              ? Icons.schedule_rounded
+              : _categoryIcon(product.category),
+      actions: [
+        // Ação principal: distribuir/descartar (já pré-seleciona o produto)
+        CasaSheetItem(
+          icon: Icons.output_rounded,
+          label: isExpired ? 'Registrar descarte' : 'Distribuir agora',
+          subtitle: isExpired
+              ? 'Marcar saída por vencimento'
+              : 'Saída com o produto já selecionado',
+          color: AppColors.brandPrimary600,
+          onTap: () {
+            if (isExpired && nearestBatch != null) {
+              context.push(
+                '${AppRoutes.movement}'
+                '?batchId=${nearestBatch.id}'
+                '&productId=${product.id}'
+                '&reason=validade',
+              );
+            } else {
+              context.push(
+                '${AppRoutes.movement}'
+                '?productId=${product.id}'
+                '&reason=uso',
+              );
+            }
+          },
+        ),
+        // Adicionar lote
+        CasaSheetItem(
+          icon: Icons.add_box_rounded,
+          label: 'Adicionar novo lote',
+          subtitle: 'Cadastrar entrada de estoque',
+          onTap: () =>
+              context.push('${AppRoutes.batchForm}?productId=${product.id}'),
+        ),
+        // Ver detalhes
+        CasaSheetItem(
+          icon: Icons.info_outline_rounded,
+          label: 'Ver detalhes',
+          subtitle: 'Lotes, histórico e edição',
+          onTap: () => context.push('/products/${product.id}'),
+        ),
+      ],
     );
   }
 }
@@ -2057,43 +1951,3 @@ class _QuickActionButton extends StatelessWidget {
   }
 }
 
-// ─── Item de ação no sheet de produto ──────────────────────────────────────
-
-class _ProductSheetAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color? color;
-  final VoidCallback onTap;
-  const _ProductSheetAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final c = color ?? cs.onSurface;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-        child: Row(
-          children: [
-            Icon(icon, color: c, size: 22),
-            const SizedBox(width: AppSpacing.md),
-            Text(
-              label,
-              style: AppTypography.bodyMedium.copyWith(
-                color: c,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
