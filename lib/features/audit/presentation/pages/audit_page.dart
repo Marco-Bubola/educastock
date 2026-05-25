@@ -304,6 +304,8 @@ class _AuditPageState extends ConsumerState<AuditPage> {
       ModernProfileAppBar(
         title: 'Auditoria',
         subtitle: 'Histórico de alterações críticas',
+        pageIcon: Icons.shield_rounded,
+        iconColor: const Color(0xFF22C55E),
         showBackButton: true,
         actions: [
           buildHelpButton(
