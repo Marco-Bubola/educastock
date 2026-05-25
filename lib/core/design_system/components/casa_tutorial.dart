@@ -237,146 +237,238 @@ class _TutorialContentState extends State<_TutorialContent>
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
+    final mq = MediaQuery.of(context);
+    final screenWidth = mq.size.width;
+    final screenHeight = mq.size.height;
     final maxWidth = (screenWidth - 24).clamp(280.0, 460.0);
 
-    return SizedBox(
-      width: maxWidth,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Ícone flutuante com pulse + glow ─────────────────────────
-          AnimatedBuilder(
-            animation: _iconPulse,
-            builder: (_, __) {
-              final t = _iconPulse.value;
-              final pulseScale = 1.0 + t * 0.08;
-              return Center(
-                child: _FloatingEntry(
-                  anim: _entryAnim,
-                  delay: 0,
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          _kSkyBlue.withValues(alpha: 0.35),
-                          _kSkyBlue.withValues(alpha: 0.05),
+    // Reservas:
+    //  - 64 status/notch + safe area top
+    //  - ~120 spotlight do tutorial_coach_mark
+    //  - ~180 barra inferior fixa (contador + dots + botões + safe area)
+    //  - ~24 padding extra
+    final reservedSpace = mq.padding.top + mq.padding.bottom + 64 + 120 + 180 + 24;
+    final maxHeight = (screenHeight - reservedSpace).clamp(220.0, 480.0);
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: maxWidth,
+        maxHeight: maxHeight,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
+          children: [
+            // ── Conteúdo scrollável ──────────────────────────────────
+            Scrollbar(
+              thumbVisibility: true,
+              radius: const Radius.circular(8),
+              thickness: 4,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(2, 10, 8, 28),
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Ícone flutuante com pulse + glow ───────────
+                    AnimatedBuilder(
+                      animation: _iconPulse,
+                      builder: (_, __) {
+                        final t = _iconPulse.value;
+                        final pulseScale = 1.0 + t * 0.08;
+                        return Center(
+                          child: _FloatingEntry(
+                            anim: _entryAnim,
+                            delay: 0,
+                            child: Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    _kSkyBlue.withValues(alpha: 0.35),
+                                    _kSkyBlue.withValues(alpha: 0.05),
+                                  ],
+                                ),
+                                border: Border.all(
+                                  color: _kSkyBlue.withValues(alpha: 0.70),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _kSkyBlue
+                                        .withValues(alpha: 0.40 + 0.15 * t),
+                                    blurRadius: 20 + 10 * t,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: Transform.scale(
+                                scale: pulseScale,
+                                child: Icon(widget.step.icon,
+                                    color: _kSkyBlueSoft, size: 30),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // ── Título ───────────────────────────────────────
+                    _FloatingEntry(
+                      anim: _entryAnim,
+                      delay: 0.08,
+                      child: Center(
+                        child: Text(
+                          widget.step.title,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: _kTextHigh,
+                            height: 1.15,
+                            letterSpacing: -0.5,
+                            shadows: [
+                              Shadow(
+                                color: Color(0xCC000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // ── Descrição com label ──────────────────────────
+                    _FloatingEntry(
+                      anim: _entryAnim,
+                      delay: 0.16,
+                      child: _SectionLabel(
+                        label: 'COMO USAR',
+                        color: _kSkyBlue,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _FloatingEntry(
+                      anim: _entryAnim,
+                      delay: 0.20,
+                      child: Text(
+                        widget.step.description,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: _kTextMid,
+                          height: 1.55,
+                          fontWeight: FontWeight.w400,
+                          shadows: [
+                            Shadow(
+                              color: Color(0x99000000),
+                              blurRadius: 6,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // ── Dicas ────────────────────────────────────────
+                    if (widget.step.hints.isNotEmpty) ...[
+                      const SizedBox(height: 18),
+                      _FloatingEntry(
+                        anim: _entryAnim,
+                        delay: 0.28,
+                        child: _SectionLabel(
+                          label: 'DICAS RÁPIDAS',
+                          color: _kPurple,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ...widget.step.hints.asMap().entries.map((e) {
+                        final idx = e.key;
+                        final hint = e.value;
+                        return _FloatingEntry(
+                          anim: _entryAnim,
+                          delay: 0.34 + idx * 0.06,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _HintPill(text: hint),
+                          ),
+                        );
+                      }),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Fade gradient no topo (indica scroll up) ────────────
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Container(
+                  height: 14,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF050D1A).withValues(alpha: 0.85),
+                        const Color(0xFF050D1A).withValues(alpha: 0),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // ── Fade gradient no fundo (indica scroll down) ─────────
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Container(
+                  height: 22,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF050D1A).withValues(alpha: 0),
+                        const Color(0xFF050D1A).withValues(alpha: 0.85),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                  child: Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 2),
+                      width: 32,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: _kSkyBlue.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _kSkyBlue.withValues(alpha: 0.5),
+                            blurRadius: 6,
+                          ),
                         ],
                       ),
-                      border: Border.all(
-                        color: _kSkyBlue.withValues(alpha: 0.70),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _kSkyBlue.withValues(alpha: 0.40 + 0.15 * t),
-                          blurRadius: 20 + 10 * t,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: Transform.scale(
-                      scale: pulseScale,
-                      child: Icon(widget.step.icon, color: _kSkyBlueSoft, size: 30),
                     ),
                   ),
                 ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 14),
-
-          // ── Título grande, sem fundo ─────────────────────────────────
-          _FloatingEntry(
-            anim: _entryAnim,
-            delay: 0.08,
-            child: Text(
-              widget.step.title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                color: _kTextHigh,
-                height: 1.15,
-                letterSpacing: -0.5,
-                shadows: [
-                  Shadow(
-                    color: Color(0xCC000000),
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
               ),
             ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // ── Descrição com label "COMO USAR" ─────────────────────────
-          _FloatingEntry(
-            anim: _entryAnim,
-            delay: 0.16,
-            child: _SectionLabel(
-              label: 'COMO USAR',
-              color: _kSkyBlue,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _FloatingEntry(
-            anim: _entryAnim,
-            delay: 0.20,
-            child: Text(
-              widget.step.description,
-              style: const TextStyle(
-                fontSize: 14,
-                color: _kTextMid,
-                height: 1.55,
-                fontWeight: FontWeight.w400,
-                shadows: [
-                  Shadow(
-                    color: Color(0x99000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 1),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── Dicas flutuantes com mini ícones ────────────────────────
-          if (widget.step.hints.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            _FloatingEntry(
-              anim: _entryAnim,
-              delay: 0.28,
-              child: _SectionLabel(
-                label: 'DICAS RÁPIDAS',
-                color: _kPurple,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ...widget.step.hints.asMap().entries.map((e) {
-              final idx = e.key;
-              final hint = e.value;
-              return _FloatingEntry(
-                anim: _entryAnim,
-                delay: 0.34 + idx * 0.06,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _HintPill(text: hint),
-                ),
-              );
-            }),
           ],
-
-          // Espaço pra não colidir com a barra de botões fixa
-          const SizedBox(height: 100),
-        ],
+        ),
       ),
     );
   }
