@@ -95,6 +95,8 @@ class _LocationCreatePageState extends ConsumerState<LocationCreatePage> {
       ModernProfileAppBar(
         title: 'Nova Localização',
         subtitle: 'Depósito · Prateleira · Nível',
+        pageIcon: Icons.add_location_alt_rounded,
+        iconColor: const Color(0xFFA78BFA),
         showBackButton: true,
         actions: [
           buildHelpButton(
