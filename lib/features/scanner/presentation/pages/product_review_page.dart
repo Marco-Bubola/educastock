@@ -138,13 +138,41 @@ class _ProductReviewPageState extends ConsumerState<ProductReviewPage>
                   ),
                 ),
               ],
-              title: const Text(
-                'Revisão do Produto',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 17,
-                ),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 3.5,
+                    height: 16,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF38BDF8).withValues(alpha: 0.7),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Text(
+                    'Revisão do Produto',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      letterSpacing: -0.3,
+                      shadows: [
+                        Shadow(
+                          color: Color(0x99000000),
+                          blurRadius: 6,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
               flexibleSpace: FlexibleSpaceBar(
                 collapseMode: CollapseMode.parallax,
@@ -298,78 +326,156 @@ class _HeroSection extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.brandPrimary800, AppColors.secondaryBlue600],
+          colors: [
+            Color(0xFF0F2444),
+            Color(0xFF1A3A6B),
+            Color(0xFF1D5FA8),
+            Color(0xFF38BDF8),
+          ],
+          stops: [0.0, 0.35, 0.7, 1.0],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
       ),
       child: Stack(
         children: [
-          // Círculos decorativos de fundo
+          // ── Círculos decorativos de fundo com glow ──
           Positioned(
-            top: -40,
-            right: -30,
+            top: -50,
+            right: -40,
             child: Container(
-              width: 160,
-              height: 160,
+              width: 180,
+              height: 180,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
+                gradient: RadialGradient(
+                  colors: [
+                    Colors.white.withValues(alpha: 0.08),
+                    Colors.white.withValues(alpha: 0),
+                  ],
+                ),
               ),
             ),
           ),
           Positioned(
-            bottom: -30,
-            left: -20,
+            bottom: -40,
+            left: -30,
             child: Container(
-              width: 110,
-              height: 110,
+              width: 130,
+              height: 130,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF38BDF8).withValues(alpha: 0.20),
+                    Colors.white.withValues(alpha: 0),
+                  ],
+                ),
               ),
             ),
           ),
-          // Código de barras centralizado
+          // ── Linha de grid decorativa (efeito "scanner") ──
           Positioned(
-            bottom: 18,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _ScanGridPainter(),
+              ),
+            ),
+          ),
+          // ── Conteúdo central ──
+          Positioned(
+            bottom: 16,
             left: 16,
             right: 16,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.qr_code_scanner_rounded,
-                        color: Colors.white60, size: 14),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Código escaneado',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
+                // Badge com ícone scanner pulsante
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
+                      horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF38BDF8).withValues(alpha: 0.30),
+                        const Color(0xFF1D5FA8).withValues(alpha: 0.20),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: Colors.white.withOpacity(0.25)),
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.5),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF38BDF8).withValues(alpha: 0.35),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.qr_code_scanner_rounded,
+                          color: Color(0xFF7DD3FC), size: 13),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Código escaneado',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Container do barcode com glow
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 11),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0.18),
+                        Colors.white.withValues(alpha: 0.08),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.30),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF38BDF8).withValues(alpha: 0.25),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Text(
                     barcode,
                     style: const TextStyle(
                       color: Colors.white,
                       fontFamily: 'monospace',
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2.5,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
+                      shadows: [
+                        Shadow(
+                          color: Color(0x88000000),
+                          blurRadius: 4,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -380,6 +486,26 @@ class _HeroSection extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Pinta uma grade fina decorativa para efeito "scanner futurista"
+class _ScanGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.04)
+      ..strokeWidth = 0.5;
+    const step = 28.0;
+    for (var x = 0.0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (var y = 0.0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ScanGridPainter old) => false;
 }
 
 // ─── Seção: status do banco local ─────────────────────────────────────────
