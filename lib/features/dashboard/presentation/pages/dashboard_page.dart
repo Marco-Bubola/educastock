@@ -140,17 +140,17 @@ class DashboardPage extends ConsumerWidget {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final cross = constraints.maxWidth >= 900
-                      ? 4
+                      ? 6
                       : constraints.maxWidth >= 620
-                          ? 3
-                          : 2;
+                          ? 4
+                          : 3;
                   return KeyedSubtree(
                     key: _keyDashQuickActions,
                     child: GridView.count(
                     crossAxisCount: cross,
                     mainAxisSpacing: AppSpacing.sm,
                     crossAxisSpacing: AppSpacing.sm,
-                    childAspectRatio: 1.72,
+                    childAspectRatio: 0.92,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
@@ -622,7 +622,7 @@ class _HeaderKpiCard extends StatelessWidget {
   }
 }
 
-class _QuickActionTile extends StatelessWidget {
+class _QuickActionTile extends StatefulWidget {
   final IconData icon;
   final String label;
   final String subtitle;
@@ -638,77 +638,109 @@ class _QuickActionTile extends StatelessWidget {
   });
 
   @override
+  State<_QuickActionTile> createState() => _QuickActionTileState();
+}
+
+class _QuickActionTileState extends State<_QuickActionTile> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
+    final cardBg = isDark ? const Color(0xFF111827) : Colors.white;
+    final color = widget.color;
 
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: Ink(
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: isDark ? 0.16 : 0.09),
-            borderRadius: BorderRadius.circular(AppRadius.card),
+            color: cardBg,
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: color.withValues(alpha: isDark ? 0.35 : 0.22),
-              width: 1.5,
+              color: color.withValues(alpha: isDark ? 0.32 : 0.18),
+              width: 1.1,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(
+                    alpha: isDark ? 0.18 : (_pressed ? 0.18 : 0.10)),
+                blurRadius: _pressed ? 6 : 12,
+                offset: Offset(0, _pressed ? 2 : 5),
+              ),
+            ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
+          child: Stack(
+            children: [
+              // Círculo decorativo sutil no canto
+              Positioned(
+                right: -12,
+                top: -12,
+                child: Container(
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [color, color.withValues(alpha: 0.75)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(AppRadius.small),
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.4),
-                        blurRadius: 6,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+                    shape: BoxShape.circle,
+                    color: color.withValues(alpha: isDark ? 0.10 : 0.06),
                   ),
-                  child: Icon(icon, color: Colors.white, size: 18),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.labelMedium.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
+                    // Ícone em círculo com gradiente
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            color,
+                            Color.lerp(color, Colors.black, 0.15)!,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.45),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
+                      child: Icon(widget.icon, color: Colors.white, size: 19),
                     ),
-                    const SizedBox(height: 1),
+                    const SizedBox(height: 6),
+                    // Label
                     Text(
-                      subtitle,
+                      widget.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodySmall.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 10,
+                      textAlign: TextAlign.center,
+                      style: AppTypography.labelMedium.copyWith(
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11.5,
+                        letterSpacing: -0.1,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
