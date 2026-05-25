@@ -1,5 +1,6 @@
 // product_detail_page.dart — modernizado, adaptativo (dark/light) e com ações para lotes vencidos
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -177,6 +178,8 @@ class _DetailBody extends ConsumerWidget {
                           ? () => _openSingleResolveSheet(
                               context, ref, product, b, isDark, cs)
                           : null,
+                      onActions: () => _showBatchActionsSheet(
+                          context, ref, product, b),
                     ),
                   ),
                 ),
@@ -191,11 +194,83 @@ class _DetailBody extends ConsumerWidget {
       BuildContext context, WidgetRef ref, Batch b) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: true,
       builder: (_) => _DeleteConfirmDialog(batch: b),
     );
     if (confirmed == true && context.mounted) {
       await ref.read(deleteBatchProvider.notifier).deleteBatch(b.id);
     }
+  }
+
+  /// Sheet moderno de ações para um lote — focado em lotes com notificação
+  /// de validade (crítico/atenção/vencido). Aparece sempre acima da TabBar.
+  Future<void> _showBatchActionsSheet(
+      BuildContext context, WidgetRef ref, Product product, Batch b) async {
+    final isExpired = b.isExpired;
+    final isCritical = !b.noExpiry && !isExpired && b.daysToExpiry <= 7;
+    final isWarning = !b.noExpiry && !isExpired && b.daysToExpiry > 7 &&
+        b.daysToExpiry <= 30;
+
+    final accent = isExpired || isCritical
+        ? AppColors.danger600
+        : isWarning
+            ? AppColors.warning600
+            : AppColors.brandPrimary600;
+    final headerIcon = isExpired
+        ? Icons.dangerous_rounded
+        : isCritical
+            ? Icons.warning_amber_rounded
+            : isWarning
+                ? Icons.schedule_rounded
+                : Icons.inventory_2_rounded;
+    final subtitle = isExpired
+        ? 'Lote vencido — ação imediata'
+        : isCritical
+            ? 'Vence em ${b.daysToExpiry} ${b.daysToExpiry == 1 ? "dia" : "dias"}'
+            : isWarning
+                ? 'Vence em ${b.daysToExpiry} dias'
+                : 'Lote · ${b.quantity} un';
+
+    await showCasaActionSheet(
+      context: context,
+      title: product.name,
+      subtitle: subtitle,
+      headerColor: accent,
+      headerIcon: headerIcon,
+      actions: [
+        // Ação principal: distribuir/descartar (já pré-seleciona o produto)
+        CasaSheetItem(
+          icon: Icons.output_rounded,
+          label: isExpired ? 'Registrar descarte' : 'Distribuir lote',
+          subtitle: isExpired
+              ? 'Marcar saída por vencimento'
+              : 'Saída com o lote selecionado',
+          color: AppColors.brandPrimary600,
+          onTap: () => context.push(
+            '${AppRoutes.movement}'
+            '?batchId=${b.id}'
+            '&productId=${product.id}'
+            '&reason=${isExpired ? "validade" : "uso"}',
+          ),
+        ),
+        // Editar lote
+        CasaSheetItem(
+          icon: Icons.edit_outlined,
+          label: 'Editar lote',
+          subtitle: 'Quantidade, data, observações',
+          onTap: () => context.push(
+              '${AppRoutes.batchForm}?id=${b.id}&productId=${product.id}'),
+        ),
+        // Excluir lote (destrutivo)
+        CasaSheetItem(
+          icon: Icons.delete_outline_rounded,
+          label: 'Excluir lote',
+          subtitle: 'Remove permanentemente do estoque',
+          destructive: true,
+          onTap: () => _confirmDelete(context, ref, b),
+        ),
+      ],
+    );
   }
 
   void _openSingleResolveSheet(BuildContext context, WidgetRef ref,
@@ -1499,6 +1574,7 @@ class _BatchCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback? onResolveExpired;
+  final VoidCallback? onActions;
   const _BatchCard({
     required this.batch,
     required this.isDark,
@@ -1506,7 +1582,15 @@ class _BatchCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     this.onResolveExpired,
+    this.onActions,
   });
+
+  /// Lote merece o botão de ações modal (tem alerta de validade ou está vencido).
+  bool get _hasAlert {
+    if (batch.noExpiry) return false;
+    if (batch.isExpired) return true;
+    return batch.daysToExpiry <= 30;
+  }
 
   Color _statusColor() {
     if (batch.noExpiry) return const Color(0xFF22C55E);
@@ -1555,7 +1639,14 @@ class _BatchCard extends StatelessWidget {
     final borderColor = sc.withValues(alpha: isDark ? 0.28 : 0.20);
     final onCardSub = cs.onSurfaceVariant;
 
-    return Container(
+    return GestureDetector(
+      onLongPress: onActions == null
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              onActions!();
+            },
+      child: Container(
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(13),
@@ -1646,21 +1737,35 @@ class _BatchCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                _ActionBtn(
-                  icon: Icons.edit_rounded,
-                  color: const Color(0xFF60A5FA),
-                  isDark: isDark,
-                  onTap: onEdit,
-                  tooltip: 'Editar',
-                ),
-                const SizedBox(width: 4),
-                _ActionBtn(
-                  icon: Icons.delete_outline_rounded,
-                  color: const Color(0xFFEF4444),
-                  isDark: isDark,
-                  onTap: onDelete,
-                  tooltip: 'Excluir',
-                ),
+                // Quando o lote tem alerta (atenção/crítico/vencido), mostra
+                // um único botão kebab que abre o sheet moderno com TODAS as
+                // ações (distribuir, editar, excluir). Caso contrário, mantém
+                // os botões inline de editar/excluir para acesso rápido.
+                if (_hasAlert && onActions != null)
+                  _ActionBtn(
+                    icon: Icons.more_vert_rounded,
+                    color: sc,
+                    isDark: isDark,
+                    onTap: onActions!,
+                    tooltip: 'Ações do lote',
+                  )
+                else ...[
+                  _ActionBtn(
+                    icon: Icons.edit_rounded,
+                    color: const Color(0xFF60A5FA),
+                    isDark: isDark,
+                    onTap: onEdit,
+                    tooltip: 'Editar',
+                  ),
+                  const SizedBox(width: 4),
+                  _ActionBtn(
+                    icon: Icons.delete_outline_rounded,
+                    color: const Color(0xFFEF4444),
+                    isDark: isDark,
+                    onTap: onDelete,
+                    tooltip: 'Excluir',
+                  ),
+                ],
               ],
             ),
           ),
@@ -1751,6 +1856,7 @@ class _BatchCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
