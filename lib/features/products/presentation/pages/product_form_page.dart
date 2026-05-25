@@ -293,6 +293,8 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
       body: Column(children: [
       ModernProfileAppBar(
         title: isEditing ? 'Editar Produto' : 'Novo Produto',
+        pageIcon: Icons.inventory_2_rounded,
+        iconColor: const Color(0xFF38BDF8),
         subtitle: isEditing ? 'Atualize os dados do produto' : 'Preencha as informações do produto',
         showBackButton: true,
         actions: [
