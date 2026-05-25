@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import '../../../core/router/app_router.dart';
+import '../../../features/batches/domain/entities/batch.dart';
 import '../../../features/batches/presentation/controllers/batches_provider.dart';
 import '../tokens/color_tokens.dart';
 import '../tokens/spacing_tokens.dart';
 import '../tokens/typography_tokens.dart';
+import 'casa_dialog.dart';
 import 'casa_tutorial.dart';
 
 // Gradiente padrão de todos os headers do app
@@ -437,7 +439,7 @@ class CasaAlertsBellButton extends ConsumerWidget {
 
 // ─── Conteúdo do balão de alertas ─────────────────────────────────────────
 
-class _AlertBubble extends StatelessWidget {
+class _AlertBubble extends ConsumerWidget {
   final List<dynamic> batches;
   final int totalAlerts;
   final double width;
@@ -470,19 +472,207 @@ class _AlertBubble extends StatelessWidget {
     return 'Vence em $d dia${d == 1 ? '' : 's'}';
   }
 
+  // ─── Sheet de ações do lote ────────────────────────────────────────────
+  Future<void> _showBatchActions(
+    BuildContext context,
+    WidgetRef ref,
+    dynamic b,
+  ) async {
+    HapticFeedback.selectionClick();
+    final batchId = b.id as String;
+    final productId = b.productId as String;
+    final productName = b.productName as String;
+    final isExpired = b.isExpired as bool;
+    final dot = _dotColor(b);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: cs.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          dot.withValues(alpha: 0.9),
+                          dot.withValues(alpha: 0.5),
+                        ]),
+                        borderRadius: BorderRadius.circular(AppRadius.small),
+                      ),
+                      child: Icon(
+                        isExpired
+                            ? Icons.dangerous_rounded
+                            : Icons.schedule_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            productName,
+                            style: AppTypography.labelMedium.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            _daysLabel(b),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: dot,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Divider(
+                  height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
+              // Ações
+              _BubbleSheetAction(
+                icon: Icons.inventory_2_rounded,
+                label: 'Ver produto',
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  Navigator.of(context).maybePop(); // fecha a bubble se aberta
+                  context.push('/products/$productId');
+                },
+              ),
+              _BubbleSheetAction(
+                icon: Icons.output_rounded,
+                label: isExpired ? 'Registrar descarte' : 'Registrar saída',
+                color: AppColors.brandPrimary600,
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  Navigator.of(context).maybePop();
+                  context.push('${AppRoutes.movement}?batchId=$batchId');
+                },
+              ),
+              _BubbleSheetAction(
+                icon: Icons.edit_outlined,
+                label: 'Editar lote',
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  Navigator.of(context).maybePop();
+                  context.push(
+                      '${AppRoutes.batchForm}?productId=$productId&id=$batchId');
+                },
+              ),
+              if (isExpired)
+                _BubbleSheetAction(
+                  icon: Icons.delete_sweep_rounded,
+                  label: 'Marcar como descartado',
+                  color: AppColors.danger600,
+                  onTap: () async {
+                    Navigator.pop(sheetCtx);
+                    await _confirmDiscard(context, ref, b);
+                  },
+                ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmDiscard(
+    BuildContext context,
+    WidgetRef ref,
+    dynamic b,
+  ) async {
+    final ok = await CasaDialogConfirmacao.show(
+      context: context,
+      title: 'Marcar lote como descartado?',
+      message:
+          'O lote de "${b.productName}" será marcado como descartado e removido do estoque ativo. Use isto para vencidos sem registro de saída.',
+      confirmLabel: 'Descartar',
+      isDanger: true,
+    );
+    if (ok != true || !context.mounted) return;
+    try {
+      HapticFeedback.mediumImpact();
+      await ref.read(batchesDatasourceProvider).updateBatchQuantity(
+            b.id as String,
+            0,
+            BatchStatus.descartado,
+          );
+      if (!context.mounted) return;
+      Navigator.of(context).maybePop(); // fecha a bubble
+      showCasaSnackbar(context,
+          message: 'Lote marcado como descartado.', isSuccess: true);
+    } catch (_) {
+      if (!context.mounted) return;
+      showCasaSnackbar(context,
+          message: 'Erro ao descartar lote.', isError: true);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Cor "dominante" do header: vermelho se há vencidos/críticos, senão amarelo
+    final hasCritical = batches.any((b) =>
+        (b.isExpired as bool) || (b.daysToExpiry as int) <= 7);
+    final headerColor = hasCritical ? AppColors.danger600 : AppColors.warning600;
+    final headerColorSoft = hasCritical
+        ? const Color(0xFFEF4444)
+        : const Color(0xFFF59E0B);
+
     return Container(
       width: width,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.modal),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(AppRadius.modal + 2),
+        border: Border.all(
+          color: headerColor.withValues(alpha: isDark ? 0.35 : 0.22),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
+            color: headerColor.withValues(alpha: isDark ? 0.25 : 0.15),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -490,44 +680,100 @@ class _AlertBubble extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── HEADER moderno com gradiente ─────────────────────────────
           Container(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
+                AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.md),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppColors.warning600.withValues(alpha: isDark ? 0.18 : 0.09),
-                  AppColors.warning600.withValues(alpha: 0.02),
+                  headerColor.withValues(alpha: isDark ? 0.28 : 0.16),
+                  headerColorSoft.withValues(alpha: isDark ? 0.10 : 0.04),
                 ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(AppRadius.modal)),
+              borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(AppRadius.modal + 1)),
+              border: Border(
+                bottom: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.4),
+                ),
+              ),
             ),
             child: Row(
               children: [
+                // Ícone com gradiente
                 Container(
-                  width: 28,
-                  height: 28,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
-                    color: AppColors.warning600.withValues(alpha: 0.15),
+                    gradient: LinearGradient(
+                      colors: [
+                        headerColor.withValues(alpha: 0.95),
+                        headerColorSoft.withValues(alpha: 0.75),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                     shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: headerColor.withValues(alpha: 0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: const Icon(Icons.notifications_active_rounded,
-                      size: 15, color: AppColors.warning600),
+                      size: 19, color: Colors.white),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Alertas de validade',
-                          style: AppTypography.labelMedium.copyWith(
-                              color: cs.onSurface,
-                              fontWeight: FontWeight.w700)),
+                      Row(
+                        children: [
+                          Text('Notificações',
+                              style: AppTypography.labelMedium.copyWith(
+                                  color: cs.onSurface,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14)),
+                          const SizedBox(width: AppSpacing.sm),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: headerColor.withValues(alpha: 0.18),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.pill),
+                              border: Border.all(
+                                color: headerColor.withValues(alpha: 0.45),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              '$totalAlerts',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: headerColor,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
                       Text(
-                          '$totalAlerts item${totalAlerts == 1 ? '' : 's'} precisam de atenção',
-                          style: AppTypography.bodySmall.copyWith(
-                              color: cs.onSurfaceVariant, fontSize: 11)),
+                        totalAlerts == 0
+                            ? 'Tudo em dia ✓'
+                            : '$totalAlerts ${totalAlerts == 1 ? "item precisa" : "itens precisam"} de atenção',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -551,81 +797,260 @@ class _AlertBubble extends StatelessWidget {
               ),
             )
           else
-            ...batches.map((b) {
+            ...List.generate(batches.length, (i) {
+              final b = batches[i];
               final dot = _dotColor(b);
-              return InkWell(
-                onTap: () {
-                  Navigator.of(context).pop();
-                  context.push('/products/${b.productId}');
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+              final isExp = b.isExpired as bool;
+              final days = b.daysToExpiry as int;
+              final level = isExp || days <= 7
+                  ? 'CRÍTICO'
+                  : days <= 30
+                      ? 'ATENÇÃO'
+                      : 'OK';
+              final icon = isExp
+                  ? Icons.dangerous_rounded
+                  : days <= 7
+                      ? Icons.warning_amber_rounded
+                      : Icons.schedule_rounded;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (i > 0)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md),
+                      child: Divider(
+                        height: 1,
+                        color: cs.outlineVariant.withValues(alpha: 0.25),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        context.push('/products/${b.productId}');
+                      },
+                      onLongPress: () => _showBatchActions(context, ref, b),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.md, AppSpacing.sm + 2, AppSpacing.sm, AppSpacing.sm + 2),
+                        child: Row(
                           children: [
-                            Text(
-                              b.productName as String,
-                              style: AppTypography.labelSmall.copyWith(
-                                  color: cs.onSurface,
-                                  fontWeight: FontWeight.w600),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            // Badge ícone em gradiente
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    dot.withValues(alpha: 0.95),
+                                    dot.withValues(alpha: 0.55),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius:
+                                    BorderRadius.circular(AppRadius.small),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: dot.withValues(alpha: 0.32),
+                                    blurRadius: 5,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child:
+                                  Icon(icon, color: Colors.white, size: 18),
                             ),
-                            Text(
-                              _daysLabel(b),
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: dot,
-                                  fontWeight: FontWeight.w600),
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          b.productName as String,
+                                          style:
+                                              AppTypography.labelSmall.copyWith(
+                                            color: cs.onSurface,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12.5,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      // Severity pill
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 5, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              dot.withValues(alpha: 0.13),
+                                          borderRadius:
+                                              BorderRadius.circular(AppRadius.pill),
+                                          border: Border.all(
+                                            color: dot.withValues(alpha: 0.4),
+                                            width: 0.6,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          level,
+                                          style: TextStyle(
+                                            fontSize: 8,
+                                            color: dot,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.access_time_rounded,
+                                          size: 10,
+                                          color: dot.withValues(alpha: 0.85)),
+                                      const SizedBox(width: 3),
+                                      Flexible(
+                                        child: Text(
+                                          _daysLabel(b),
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            color: dot,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Botão de ações (kebab)
+                            InkWell(
+                              onTap: () => _showBatchActions(context, ref, b),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.pill),
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: cs.surfaceContainerHigh,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: cs.outlineVariant
+                                        .withValues(alpha: 0.4),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Icon(Icons.more_horiz_rounded,
+                                    size: 16, color: cs.onSurfaceVariant),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      Icon(Icons.chevron_right_rounded,
-                          size: 16, color: cs.onSurfaceVariant),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               );
             }),
           if (batches.isNotEmpty)
             Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
-          InkWell(
-            onTap: () {
-              Navigator.of(context).pop();
-              context.push(AppRoutes.alerts);
-            },
-            borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(AppRadius.modal)),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                  vertical: AppSpacing.sm + 2, horizontal: AppSpacing.md),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.list_alt_rounded,
-                      size: 15, color: AppColors.brandPrimary600),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text('Ver todas as notificações',
-                      style: AppTypography.labelSmall.copyWith(
-                          color: AppColors.brandPrimary600,
-                          fontWeight: FontWeight.w700)),
-                ],
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                Navigator.of(context).pop();
+                context.push(AppRoutes.alerts);
+              },
+              borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(AppRadius.modal + 1)),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                    vertical: AppSpacing.md, horizontal: AppSpacing.md),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.brandPrimary600.withValues(alpha: isDark ? 0.20 : 0.08),
+                      AppColors.brandPrimary500.withValues(alpha: isDark ? 0.08 : 0.02),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(AppRadius.modal + 1)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.list_alt_rounded,
+                        size: 16, color: AppColors.brandPrimary600),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text('Ver todas as notificações',
+                        style: AppTypography.labelSmall.copyWith(
+                            color: AppColors.brandPrimary600,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12)),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.arrow_forward_rounded,
+                        size: 14, color: AppColors.brandPrimary600),
+                  ],
+                ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Item de ação no sheet de batch ──────────────────────────────────────
+
+class _BubbleSheetAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  final VoidCallback onTap;
+
+  const _BubbleSheetAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final c = color ?? cs.onSurface;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        child: Row(
+          children: [
+            Icon(icon, color: c, size: 22),
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              label,
+              style: AppTypography.bodyMedium.copyWith(
+                color: c,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
