@@ -371,35 +371,37 @@ class _DashboardHeader extends ConsumerWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // ── Logo do app com glow ──
+                  // ── Logo do app com glow (zoom no logo) ──
                   Container(
-                    width: 46,
-                    height: 46,
-                    padding: const EdgeInsets.all(4),
+                    width: 58,
+                    height: 58,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          Colors.white.withValues(alpha: 0.18),
-                          Colors.white.withValues(alpha: 0.04),
+                          Colors.white.withValues(alpha: 0.22),
+                          Colors.white.withValues(alpha: 0.06),
                         ],
                       ),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        width: 1.5,
+                        color: Colors.white.withValues(alpha: 0.45),
+                        width: 1.8,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF38BDF8).withValues(alpha: 0.45),
-                          blurRadius: 14,
-                          spreadRadius: 1,
+                          color: const Color(0xFF38BDF8).withValues(alpha: 0.55),
+                          blurRadius: 18,
+                          spreadRadius: 2,
                         ),
                       ],
                     ),
                     child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        fit: BoxFit.contain,
+                      child: Transform.scale(
+                        scale: 1.55, // zoom in para eliminar whitespace
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                   ),
