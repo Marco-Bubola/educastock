@@ -200,39 +200,40 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
                 TutorialStep(
                   key: _keyAlertCard,
                   title: 'Card de Alerta',
-                  description: 'Cada cartão alerta sobre um produto com validade próxima ou vencida. Mostra: ícone de urgência, nome do produto, mensagem (quantos dias para vencer), horário de geração e botão para resolver. A cor indica criticidade.',
+                  description:
+                      'Cada cartão alerta sobre um produto com validade próxima ou vencida. Mostra: ícone de urgência, nome do produto, mensagem (quantos dias para vencer) e horário de geração. A cor indica criticidade.',
                   icon: Icons.notification_important_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
                     '🔴 Vermelho (crítico): vence em até 7 dias',
                     '🟡 Amarelo (atenção): vence em até 30 dias',
                     '🔵 Azul (info): alertas manuais customizados',
-                    '✓ Botão check verde resolve o alerta',
+                    '👆 Toque longo para ver ações (distribuir, ver produto)',
                   ],
                 ),
                 TutorialStep(
                   key: _keyFilters,
                   title: 'Filtros por Urgência',
-                  description: 'Os chips coloridos no topo são filtros rápidos por nível de urgência. Cada chip mostra a contagem da categoria. Toque para filtrar; toque novamente para limpar. Combine com "Resolver Todos" para limpeza em massa.',
+                  description:
+                      'Os chips coloridos no topo são filtros rápidos por nível de urgência. Cada chip mostra a contagem da categoria. Toque para filtrar; toque novamente para limpar.',
                   icon: Icons.filter_alt_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
                     '👆 1 toque: ativa o filtro',
                     '👆 2 toques: limpa o filtro',
-                    '🧹 "Resolver Todos" limpa a lista filtrada',
                     '🔢 Número no chip = quantos alertas naquela categoria',
                   ],
                 ),
                 TutorialStep(
                   key: _keyAlertList,
                   title: 'Lista Priorizada',
-                  description: 'Todos os alertas ativos em ordem de urgência (mais críticos primeiro). Use gestos para resolver rapidamente: arraste para direita = resolver; arraste para esquerda = excluir. Toque longo abre menu de ações extras.',
+                  description:
+                      'Todos os alertas ativos em ordem de urgência (mais críticos primeiro). Arraste para a esquerda para excluir um alerta. Toque longo abre o menu de ações.',
                   icon: Icons.list_alt_rounded,
                   align: ContentAlign.bottom,
                   hints: const [
-                    '👉 Arrastar para direita = resolver alerta',
                     '👈 Arrastar para esquerda = excluir',
-                    '👇 Toque longo = mais ações (adiar, abrir produto)',
+                    '👇 Toque longo = mais ações (distribuir, abrir produto)',
                     '📊 Lista atualiza automaticamente quando estoque muda',
                   ],
                 ),
@@ -264,27 +265,6 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
 
             return CustomScrollView(
               slivers: [
-                // ── Botão "Resolver Todos" (se há itens filtrados)
-                if (filtered.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: () => _confirmResolveAll(filtered),
-                          icon: const Icon(Icons.cleaning_services_rounded, size: 16),
-                          label: Text(
-                              'Resolver todos (${filtered.length})'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.success600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
                 // ── Lista ────────────────────────────────────────
                 if (filtered.isEmpty)
                   SliverFillRemaining(
@@ -332,31 +312,6 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
 
   // ─── Ações ──────────────────────────────────────────────────────────────
 
-  Future<void> _confirmResolveAll(List<StockAlert> list) async {
-    final ok = await CasaDialogConfirmacao.show(
-      context: context,
-      title: 'Resolver ${list.length} ${list.length == 1 ? "alerta" : "alertas"}?',
-      message:
-          'Todos os alertas visíveis serão marcados como resolvidos. Você pode reativá-los criando novos.',
-      confirmLabel: 'Resolver todos',
-      cancelLabel: 'Cancelar',
-    );
-    if (ok != true || !mounted) return;
-    try {
-      HapticFeedback.mediumImpact();
-      await ref
-          .read(alertsNotifierProvider.notifier)
-          .resolveAll(list.map((a) => a.id));
-      if (!mounted) return;
-      showCasaSnackbar(context,
-          message: '${list.length} alertas resolvidos!', isSuccess: true);
-    } catch (_) {
-      if (!mounted) return;
-      showCasaSnackbar(context,
-          message: 'Erro ao resolver alertas.', isError: true);
-    }
-  }
-
   Future<void> _showActionsSheet(StockAlert alert) async {
     final color = _colorForLevel(alert.level);
     final hasBatch = alert.batchId != null && alert.batchId!.isNotEmpty;
@@ -388,14 +343,6 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
           color: AppColors.brandPrimary600,
           onTap: () => context.push('/products/${alert.productId}'),
         ),
-      // Resolver
-      CasaSheetItem(
-        icon: Icons.check_circle_rounded,
-        label: 'Marcar resolvido',
-        subtitle: 'Remover este alerta da lista',
-        color: AppColors.success600,
-        onTap: () => _resolveAlert(alert),
-      ),
       // Excluir (destrutivo)
       CasaSheetItem(
         icon: Icons.delete_outline_rounded,
@@ -413,20 +360,6 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
       headerIcon: _iconForLevel(alert.level),
       actions: actions,
     );
-  }
-
-  Future<void> _resolveAlert(StockAlert alert) async {
-    try {
-      HapticFeedback.lightImpact();
-      await ref.read(alertsNotifierProvider.notifier).resolve(alert.id);
-      if (!mounted) return;
-      showCasaSnackbar(context,
-          message: 'Alerta resolvido!', isSuccess: true);
-    } catch (_) {
-      if (!mounted) return;
-      showCasaSnackbar(context,
-          message: 'Erro ao resolver alerta.', isError: true);
-    }
   }
 
   Future<void> _deleteAlert(StockAlert alert) async {
@@ -853,65 +786,37 @@ class _ModernAlertCard extends ConsumerWidget {
 
     return Dismissible(
       key: ValueKey('alert-${alert.id}'),
-      // Direita: resolver (verde)
+      // Só permite arrastar da direita para esquerda = excluir
+      direction: DismissDirection.endToStart,
       background: _SwipeBg(
-        align: Alignment.centerLeft,
-        color: AppColors.success600,
-        icon: Icons.check_circle_rounded,
-        label: 'Resolver',
-      ),
-      // Esquerda: excluir (vermelho)
-      secondaryBackground: _SwipeBg(
         align: Alignment.centerRight,
         color: AppColors.danger600,
         icon: Icons.delete_forever_rounded,
         label: 'Excluir',
       ),
       confirmDismiss: (direction) async {
-        if (direction == DismissDirection.startToEnd) {
-          HapticFeedback.lightImpact();
-          try {
-            await ref
-                .read(alertsNotifierProvider.notifier)
-                .resolve(alert.id);
-            if (context.mounted) {
-              showCasaSnackbar(context,
-                  message: 'Alerta resolvido!', isSuccess: true);
-            }
-            return true;
-          } catch (_) {
-            if (context.mounted) {
-              showCasaSnackbar(context,
-                  message: 'Erro ao resolver.', isError: true);
-            }
-            return false;
+        final ok = await CasaDialogConfirmacao.show(
+          context: context,
+          title: 'Excluir alerta?',
+          message: 'Esta ação não pode ser desfeita.',
+          confirmLabel: 'Excluir',
+          isDanger: true,
+        );
+        if (ok != true) return false;
+        try {
+          HapticFeedback.mediumImpact();
+          await ref.read(alertsNotifierProvider.notifier).delete(alert.id);
+          if (context.mounted) {
+            showCasaSnackbar(context,
+                message: 'Alerta excluído.', isSuccess: true);
           }
-        } else {
-          final ok = await CasaDialogConfirmacao.show(
-            context: context,
-            title: 'Excluir alerta?',
-            message: 'Esta ação não pode ser desfeita.',
-            confirmLabel: 'Excluir',
-            isDanger: true,
-          );
-          if (ok != true) return false;
-          try {
-            HapticFeedback.mediumImpact();
-            await ref
-                .read(alertsNotifierProvider.notifier)
-                .delete(alert.id);
-            if (context.mounted) {
-              showCasaSnackbar(context,
-                  message: 'Alerta excluído.', isSuccess: true);
-            }
-            return true;
-          } catch (_) {
-            if (context.mounted) {
-              showCasaSnackbar(context,
-                  message: 'Erro ao excluir.', isError: true);
-            }
-            return false;
+          return true;
+        } catch (_) {
+          if (context.mounted) {
+            showCasaSnackbar(context,
+                message: 'Erro ao excluir.', isError: true);
           }
+          return false;
         }
       },
       child: Material(
