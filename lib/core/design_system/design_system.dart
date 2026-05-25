@@ -13,6 +13,7 @@ export 'components/casa_section_header.dart';
 export 'components/casa_empty_state.dart';
 export 'components/casa_loading_skeleton.dart';
 export 'components/casa_dialog.dart';
+export 'components/casa_action_sheet.dart';
 export 'components/casa_search_bar.dart';
 export 'components/casa_fab_scan.dart';
 export 'components/casa_help_modal.dart';
