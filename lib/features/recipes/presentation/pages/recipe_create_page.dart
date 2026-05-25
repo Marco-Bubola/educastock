@@ -137,6 +137,8 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
       body: Column(children: [
       ModernProfileAppBar(
         title: _isEditing ? 'Editar Receita' : 'Nova Receita',
+        pageIcon: Icons.restaurant_menu_rounded,
+        iconColor: const Color(0xFFA78BFA),
         subtitle: _isEditing
             ? 'Altere os dados e salve'
             : 'Monte um modelo de distribuição',
