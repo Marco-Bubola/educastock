@@ -183,7 +183,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: AppRoutes.movement,
             builder: (_, state) {
               final batchId = state.uri.queryParameters['batchId'] ?? '';
-              return MovementPage(batchId: batchId);
+              final productId = state.uri.queryParameters['productId'];
+              final reason = state.uri.queryParameters['reason'];
+              return MovementPage(
+                batchId: batchId,
+                prefillProductId: productId,
+                prefillReason: reason,
+              );
             },
           ),
           GoRoute(
