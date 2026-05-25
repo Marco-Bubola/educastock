@@ -406,8 +406,12 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       backgroundColor: bg,
       body: Column(children: [
       ModernProfileAppBar(
-        title: 'Histórico',
-        subtitle: 'Registro completo de saídas',
+        title: 'Histórico de Saídas',
+        subtitle: 'Registro completo de distribuições',
+        extraContent: KeyedSubtree(
+          key: _keyHistoryHeader,
+          child: _buildHeaderStats(movementsAsync),
+        ),
         actions: [
           buildHelpButton(
             context: context,
@@ -518,13 +522,6 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       ),
       Expanded(child: Column(
         children: [
-          // ─── Header de stats ────────────────────────────────────────────────
-          KeyedSubtree(
-            key: _keyHistoryHeader,
-            child: _buildHeader(isDark, textPrimary, textSub, cardBg, borderColor,
-                movementsAsync),
-          ),
-
             // ─── Search + Filtros ────────────────────────────────────────────
             Padding(
               key: _keyFilterRow,
@@ -777,16 +774,10 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     );
   }
 
-  Widget _buildHeader(
-    bool isDark,
-    Color textPrimary,
-    Color textSub,
-    Color cardBg,
-    Color borderColor,
-    AsyncValue<List<StockMovement>> movementsAsync,
-  ) {
+  /// Constrói só os badges de stats — usado como extraContent do header
+  Widget _buildHeaderStats(
+      AsyncValue<List<StockMovement>> movementsAsync) {
     final today = DateTime.now();
-
     int totalToday = 0;
     int totalWeek = 0;
     int totalAll = 0;
@@ -807,84 +798,21 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       }
     });
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF7C3AED), Color(0xFF4F46E5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF7C3AED).withValues(alpha: isDark ? 0.3 : 0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.history_rounded,
-                    color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'Histórico de Saídas',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 18,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  Text(
-                    'Registro completo de distribuições',
-                    style: TextStyle(
-                      color: Color(0xFFDDD6FE),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _StatBadge(
-                  label: 'Hoje',
-                  value: '$totalToday',
-                  icon: Icons.today_rounded),
-              const SizedBox(width: 10),
-              _StatBadge(
-                  label: '7 dias',
-                  value: '$totalWeek',
-                  icon: Icons.date_range_rounded),
-              const SizedBox(width: 10),
-              _StatBadge(
-                  label: 'Total',
-                  value: '$totalAll',
-                  icon: Icons.all_inclusive_rounded),
-            ],
-          ),
-        ],
-      ),
+    return Row(
+      children: [
+        _StatBadge(
+            label: 'Hoje', value: '$totalToday', icon: Icons.today_rounded),
+        const SizedBox(width: 8),
+        _StatBadge(
+            label: '7 dias',
+            value: '$totalWeek',
+            icon: Icons.date_range_rounded),
+        const SizedBox(width: 8),
+        _StatBadge(
+            label: 'Total',
+            value: '$totalAll',
+            icon: Icons.all_inclusive_rounded),
+      ],
     );
   }
 }
