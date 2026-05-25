@@ -26,6 +26,8 @@ class LocationsPage extends ConsumerWidget {
       ModernProfileAppBar(
         title: 'Depósito',
         subtitle: 'Prateleiras e armários',
+        pageIcon: Icons.warehouse_rounded,
+        iconColor: const Color(0xFFA78BFA),
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         showBackButton: true,
