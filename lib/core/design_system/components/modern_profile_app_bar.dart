@@ -9,6 +9,7 @@ import '../../../features/batches/presentation/controllers/batches_provider.dart
 import '../tokens/color_tokens.dart';
 import '../tokens/spacing_tokens.dart';
 import '../tokens/typography_tokens.dart';
+import 'casa_action_sheet.dart';
 import 'casa_dialog.dart';
 import 'casa_tutorial.dart';
 
@@ -30,6 +31,11 @@ class ModernProfileAppBar extends ConsumerWidget {
   /// gradiente do header. Use para KPIs, busca, filtros, etc — estilo
   /// "hero header" do dashboard.
   final Widget? extraContent;
+  /// Ícone específico da página, renderizado em container com glow
+  /// à esquerda do título. Quando omitido, mostra só a barra branca.
+  final IconData? pageIcon;
+  /// Cor de acento do ícone (usada no glow). Default = ciano.
+  final Color iconColor;
 
   const ModernProfileAppBar({
     super.key,
@@ -45,6 +51,8 @@ class ModernProfileAppBar extends ConsumerWidget {
     Color? foregroundColor,
     this.showBackButton = false,
     this.extraContent,
+    this.pageIcon,
+    this.iconColor = const Color(0xFF38BDF8),
   });
 
   @override
@@ -100,6 +108,39 @@ class ModernProfileAppBar extends ConsumerWidget {
                             ),
                           ),
 
+                        // ── Ícone da página (se fornecido) ─────────
+                        if (pageIcon != null) ...[
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  iconColor.withValues(alpha: 0.35),
+                                  iconColor.withValues(alpha: 0.10),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(11),
+                              border: Border.all(
+                                color: iconColor.withValues(alpha: 0.55),
+                                width: 1.3,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: iconColor.withValues(alpha: 0.40),
+                                  blurRadius: 12,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: Icon(pageIcon,
+                                color: Colors.white, size: 20),
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+
                         // ── Título + subtítulo ─────────────────────
                         Expanded(
                           child: Column(
@@ -115,6 +156,13 @@ class ModernProfileAppBar extends ConsumerWidget {
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(2),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: iconColor
+                                              .withValues(alpha: 0.7),
+                                          blurRadius: 6,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   Flexible(
@@ -124,6 +172,13 @@ class ModernProfileAppBar extends ConsumerWidget {
                                           .copyWith(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w800,
+                                        shadows: const [
+                                          Shadow(
+                                            color: Color(0x66000000),
+                                            blurRadius: 6,
+                                            offset: Offset(0, 1),
+                                          ),
+                                        ],
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -137,7 +192,7 @@ class ModernProfileAppBar extends ConsumerWidget {
                                   subtitle!,
                                   style: AppTypography.bodySmall.copyWith(
                                     color:
-                                        Colors.white.withValues(alpha: 0.65),
+                                        Colors.white.withValues(alpha: 0.70),
                                     fontSize: 11,
                                   ),
                                   maxLines: 1,
@@ -484,131 +539,53 @@ class _AlertBubble extends ConsumerWidget {
     final productName = b.productName as String;
     final isExpired = b.isExpired as bool;
     final dot = _dotColor(b);
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
 
-    await showModalBottomSheet(
+    // Fecha a bubble antes de abrir o sheet (caso esteja aberta)
+    Navigator.of(context).maybePop();
+
+    await showCasaActionSheet(
       context: context,
-      backgroundColor: cs.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
-      ),
-      builder: (sheetCtx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle bar
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(top: AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [
-                          dot.withValues(alpha: 0.9),
-                          dot.withValues(alpha: 0.5),
-                        ]),
-                        borderRadius: BorderRadius.circular(AppRadius.small),
-                      ),
-                      child: Icon(
-                        isExpired
-                            ? Icons.dangerous_rounded
-                            : Icons.schedule_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            productName,
-                            style: AppTypography.labelMedium.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: cs.onSurface,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            _daysLabel(b),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: dot,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Divider(
-                  height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
-              // Ações
-              _BubbleSheetAction(
-                icon: Icons.inventory_2_rounded,
-                label: 'Ver produto',
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  Navigator.of(context).maybePop(); // fecha a bubble se aberta
-                  context.push('/products/$productId');
-                },
-              ),
-              _BubbleSheetAction(
-                icon: Icons.output_rounded,
-                label: isExpired ? 'Registrar descarte' : 'Registrar saída',
-                color: AppColors.brandPrimary600,
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  Navigator.of(context).maybePop();
-                  context.push('${AppRoutes.movement}?batchId=$batchId');
-                },
-              ),
-              _BubbleSheetAction(
-                icon: Icons.edit_outlined,
-                label: 'Editar lote',
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  Navigator.of(context).maybePop();
-                  context.push(
-                      '${AppRoutes.batchForm}?productId=$productId&id=$batchId');
-                },
-              ),
-              if (isExpired)
-                _BubbleSheetAction(
-                  icon: Icons.delete_sweep_rounded,
-                  label: 'Marcar como descartado',
-                  color: AppColors.danger600,
-                  onTap: () async {
-                    Navigator.pop(sheetCtx);
-                    await _confirmDiscard(context, ref, b);
-                  },
-                ),
-              const SizedBox(height: AppSpacing.sm),
-            ],
+      title: productName,
+      subtitle: _daysLabel(b),
+      headerColor: dot,
+      headerIcon:
+          isExpired ? Icons.dangerous_rounded : Icons.schedule_rounded,
+      actions: [
+        // Distribuir / Descartar (com pré-seleção do produto)
+        CasaSheetItem(
+          icon: Icons.output_rounded,
+          label: isExpired ? 'Registrar descarte' : 'Distribuir lote',
+          subtitle: isExpired
+              ? 'Marcar saída por vencimento'
+              : 'Ir para Saída com o lote selecionado',
+          color: AppColors.brandPrimary600,
+          onTap: () {
+            context.push(
+              '${AppRoutes.movement}'
+              '?batchId=$batchId'
+              '&productId=$productId'
+              '&reason=${isExpired ? "validade" : "uso"}',
+            );
+          },
+        ),
+        // Ver produto
+        CasaSheetItem(
+          icon: Icons.inventory_2_rounded,
+          label: 'Ver produto',
+          subtitle: 'Detalhes e todos os lotes',
+          color: AppColors.brandPrimary600,
+          onTap: () => context.push('/products/$productId'),
+        ),
+        // Marcar como descartado (só quando vencido)
+        if (isExpired)
+          CasaSheetItem(
+            icon: Icons.delete_sweep_rounded,
+            label: 'Marcar lote descartado',
+            subtitle: 'Removerá o lote do estoque ativo',
+            destructive: true,
+            onTap: () => _confirmDiscard(context, ref, b),
           ),
-        );
-      },
+      ],
     );
   }
 
@@ -1014,44 +991,3 @@ class _AlertBubble extends ConsumerWidget {
   }
 }
 
-// ─── Item de ação no sheet de batch ──────────────────────────────────────
-
-class _BubbleSheetAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color? color;
-  final VoidCallback onTap;
-
-  const _BubbleSheetAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final c = color ?? cs.onSurface;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-        child: Row(
-          children: [
-            Icon(icon, color: c, size: 22),
-            const SizedBox(width: AppSpacing.md),
-            Text(
-              label,
-              style: AppTypography.bodyMedium.copyWith(
-                color: c,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
