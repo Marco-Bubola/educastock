@@ -25,6 +25,8 @@ class UsersManagementPage extends ConsumerWidget {
         ModernProfileAppBar(
           title: 'Gerenciar usuárias',
           subtitle: 'Acesso restrito',
+          pageIcon: Icons.lock_rounded,
+          iconColor: const Color(0xFFEF4444),
           showBackButton: true,
           actions: [
             buildHelpButton(
@@ -88,8 +90,10 @@ class UsersManagementPage extends ConsumerWidget {
       backgroundColor: cs.surface,
       body: Column(children: [
       ModernProfileAppBar(
-        title: 'Gerenciar usuarias',
+        title: 'Gerenciar usuárias',
         subtitle: 'Controle de perfis e acessos',
+        pageIcon: Icons.manage_accounts_rounded,
+        iconColor: const Color(0xFF22C55E),
         profileName: currentUser.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         showBackButton: true,
