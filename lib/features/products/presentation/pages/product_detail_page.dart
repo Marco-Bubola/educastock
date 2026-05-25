@@ -352,15 +352,37 @@ class _ProductSliverAppBar extends ConsumerWidget {
               icon: Icons.arrow_back_rounded,
               onTap: () => context.pop(),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
+            Container(
+              width: 3.5,
+              height: 16,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(2),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.7),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 product.name,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
                   fontSize: 16,
-                  letterSpacing: -0.2,
+                  letterSpacing: -0.3,
+                  shadows: [
+                    Shadow(
+                      color: Color(0x99000000),
+                      blurRadius: 6,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -379,42 +401,76 @@ class _ProductSliverAppBar extends ConsumerWidget {
         titlePadding: EdgeInsets.zero,
         background: Stack(
           children: [
-            // Gradient base
+            // ── Gradient base com 4 paradas (estilo dashboard) ──
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Color(0xFF0F3B82),
+                    Color(0xFF0F2444),
+                    Color(0xFF1A3A6B),
                     Color(0xFF1D5FA8),
                     Color(0xFF2563EB),
                   ],
+                  stops: [0.0, 0.35, 0.7, 1.0],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
               ),
             ),
-            // Círculos decorativos
+            // ── Glow radial principal (canto superior direito) ──
             Positioned(
-              right: -30,
-              top: -20,
+              right: -60,
+              top: -50,
               child: Container(
-                width: 150,
-                height: 150,
+                width: 200,
+                height: 200,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.06),
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFF38BDF8).withValues(alpha: 0.20),
+                      Colors.white.withValues(alpha: 0),
+                    ],
+                  ),
                 ),
               ),
             ),
+            // ── Glow secundário (canto inferior esquerdo) ──
             Positioned(
-              right: 40,
-              bottom: 10,
+              left: -40,
+              bottom: -30,
+              child: Container(
+                width: 130,
+                height: 130,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.10),
+                      Colors.white.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // ── Esfera flutuante decorativa ──
+            Positioned(
+              right: 50,
+              bottom: 16,
               child: Container(
                 width: 70,
                 height: 70,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.08),
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.18),
+                      Colors.white.withValues(alpha: 0.02),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
                 ),
               ),
             ),
@@ -1071,10 +1127,24 @@ class _NavButton extends StatelessWidget {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.16),
+          gradient: LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0.22),
+              Colors.white.withValues(alpha: 0.10),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           shape: BoxShape.circle,
           border: Border.all(
-              color: Colors.white.withValues(alpha: 0.22), width: 1),
+              color: Colors.white.withValues(alpha: 0.35), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF38BDF8).withValues(alpha: 0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Icon(icon, color: Colors.white, size: 17),
       ),
