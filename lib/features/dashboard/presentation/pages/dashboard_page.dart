@@ -397,10 +397,10 @@ class _DashboardHeader extends ConsumerWidget {
                     ),
                     child: ClipOval(
                       child: Transform.scale(
-                        scale: 1.55, // zoom in para eliminar whitespace
+                        scale: 1.25, // zoom moderado, sem cortar
                         child: Image.asset(
                           'assets/images/logo.png',
-                          fit: BoxFit.cover,
+                          fit: BoxFit.contain,
                         ),
                       ),
                     ),
