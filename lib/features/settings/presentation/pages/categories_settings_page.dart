@@ -26,6 +26,8 @@ class CategoriesSettingsPage extends ConsumerWidget {
       ModernProfileAppBar(
         title: 'Categorias',
         subtitle: 'Controle de categorias de produtos',
+        pageIcon: Icons.category_rounded,
+        iconColor: const Color(0xFFFBBF24),
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         showBackButton: true,
