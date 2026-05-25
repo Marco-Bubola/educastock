@@ -9,8 +9,6 @@ import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
-import '../../../stock/domain/entities/stock_movement.dart';
-import '../../../stock/presentation/controllers/stock_provider.dart';
 import '../../domain/entities/product.dart';
 import '../controllers/products_provider.dart';
 
@@ -96,23 +94,6 @@ class _DetailBody extends ConsumerWidget {
       slivers: [
         _ProductSliverAppBar(product: product, productId: productId),
 
-        // Banner de lotes vencidos (sticky no topo do conteúdo)
-        if (expired.isNotEmpty)
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
-            sliver: SliverToBoxAdapter(
-              child: _ExpiredBanner(
-                product: product,
-                expired: expired,
-                isDark: isDark,
-                cs: cs,
-                onResolveAll: () => _openBulkResolveSheet(
-                    context, ref, product, expired, isDark, cs),
-              ),
-            ),
-          ),
-
         SliverPadding(
           padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
@@ -174,10 +155,6 @@ class _DetailBody extends ConsumerWidget {
                       onEdit: () => context.push(
                           '${AppRoutes.batchForm}?id=${b.id}&productId=$productId'),
                       onDelete: () => _confirmDelete(context, ref, b),
-                      onResolveExpired: b.isExpired
-                          ? () => _openSingleResolveSheet(
-                              context, ref, product, b, isDark, cs)
-                          : null,
                       onActions: () => _showBatchActionsSheet(
                           context, ref, product, b),
                     ),
@@ -273,35 +250,6 @@ class _DetailBody extends ConsumerWidget {
     );
   }
 
-  void _openSingleResolveSheet(BuildContext context, WidgetRef ref,
-      Product product, Batch batch, bool isDark, ColorScheme cs) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ResolveExpiredSheet(
-        product: product,
-        batches: [batch],
-        isDark: isDark,
-        cs: cs,
-      ),
-    );
-  }
-
-  void _openBulkResolveSheet(BuildContext context, WidgetRef ref,
-      Product product, List<Batch> expired, bool isDark, ColorScheme cs) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ResolveExpiredSheet(
-        product: product,
-        batches: expired,
-        isDark: isDark,
-        cs: cs,
-      ),
-    );
-  }
 }
 
 // ─── SliverAppBar moderno ──────────────────────────────────────────────────
@@ -359,15 +307,16 @@ class _ProductSliverAppBar extends ConsumerWidget {
               TutorialStep(
                 key: _keyDetailBatches,
                 title: 'Lotes Ativos',
-                description: 'Lista todos os lotes registrados para este produto. Cada cartão mostra: status colorido, número do lote, quantidade, data de validade com contagem de dias, origem (doação/compra), localização física e preço unitário. Lotes vencidos têm botão "Resolver" para baixa rápida.',
+                description:
+                    'Lista todos os lotes registrados para este produto. Cada cartão mostra: status colorido, número do lote, quantidade, data de validade com contagem de dias, origem (doação/compra), localização física e preço unitário. Lotes em alerta mostram o menu ⋮ com ações rápidas (distribuir, editar, excluir).',
                 icon: Icons.inventory_rounded,
                 align: ContentAlign.bottom,
                 hints: const [
-                  '🔴 Vencido → toque "Resolver" para baixa rápida',
+                  '🔴 Borda vermelha = vencido ou crítico (≤ 7 dias)',
                   '🟡 Borda amarela = vence em até 30 dias',
                   '🟢 Borda verde = validade segura (>30 dias)',
-                  '✏️ Ícone lápis edita o lote',
-                  '🗑️ Ícone lixeira exclui SEM baixa em estoque',
+                  '⋮ Menu (críticos/vencidos) → distribuir, editar, excluir',
+                  '👆 Toque longo no card abre o menu de ações',
                 ],
               ),
               TutorialStep(
@@ -733,460 +682,6 @@ class _ErrorScaffold extends StatelessWidget {
   }
 }
 
-// ─── Banner de vencidos ────────────────────────────────────────────────────
-
-class _ExpiredBanner extends StatelessWidget {
-  final Product product;
-  final List<Batch> expired;
-  final bool isDark;
-  final ColorScheme cs;
-  final VoidCallback onResolveAll;
-  const _ExpiredBanner({
-    required this.product,
-    required this.expired,
-    required this.isDark,
-    required this.cs,
-    required this.onResolveAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final totalUnits = expired.fold<int>(0, (s, b) => s + b.quantity);
-    final accent = const Color(0xFFEF4444);
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [
-                  const Color(0xFF3F1414),
-                  const Color(0xFF2A0F0F),
-                ]
-              : [
-                  const Color(0xFFFEF2F2),
-                  const Color(0xFFFEE2E2),
-                ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accent.withValues(alpha: 0.35), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: accent.withValues(alpha: isDark ? 0.20 : 0.12),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: isDark ? 0.22 : 0.14),
-                shape: BoxShape.circle,
-                border: Border.all(
-                    color: accent.withValues(alpha: 0.45), width: 1.2),
-              ),
-              child: Icon(Icons.warning_amber_rounded,
-                  color: accent, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${expired.length} lote${expired.length > 1 ? 's' : ''} vencido${expired.length > 1 ? 's' : ''}',
-                    style: TextStyle(
-                      color:
-                          isDark ? const Color(0xFFFCA5A5) : accent,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    '$totalUnits ${product.unit} pendentes de baixa',
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 11.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: onResolveAll,
-              style: FilledButton.styleFrom(
-                backgroundColor: accent,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                textStyle: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w700),
-                elevation: 0,
-              ),
-              icon: const Icon(Icons.task_alt_rounded, size: 15),
-              label: const Text('Resolver'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Bottom sheet de resolução (vencidos) ──────────────────────────────────
-
-class _ResolveExpiredSheet extends ConsumerStatefulWidget {
-  final Product product;
-  final List<Batch> batches;
-  final bool isDark;
-  final ColorScheme cs;
-  const _ResolveExpiredSheet({
-    required this.product,
-    required this.batches,
-    required this.isDark,
-    required this.cs,
-  });
-
-  @override
-  ConsumerState<_ResolveExpiredSheet> createState() =>
-      _ResolveExpiredSheetState();
-}
-
-class _ResolveExpiredSheetState extends ConsumerState<_ResolveExpiredSheet> {
-  bool _submitting = false;
-  final _noteCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _noteCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _apply({
-    required MovementType type,
-    required MovementReasonCode reasonCode,
-    required String successMessage,
-  }) async {
-    if (_submitting) return;
-    setState(() => _submitting = true);
-    final notifier = ref.read(stockNotifierProvider.notifier);
-    final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
-    try {
-      for (final b in widget.batches) {
-        await notifier.writeOffExpiredBatch(
-          b,
-          type: type,
-          reasonCode: reasonCode,
-          note: note,
-        );
-      }
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      showCasaSnackbar(context, message: successMessage, isSuccess: true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _submitting = false);
-      showCasaSnackbar(context,
-          message: 'Erro ao registrar baixa: $e', isError: true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = widget.cs;
-    final isDark = widget.isDark;
-    final totalUnits =
-        widget.batches.fold<int>(0, (s, b) => s + b.quantity);
-    final bg = isDark ? const Color(0xFF111827) : cs.surface;
-
-    return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(AppRadius.modal)),
-        ),
-        padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 38,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-              ),
-            ),
-            Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(11),
-                    border: Border.all(
-                        color: const Color(0xFFEF4444)
-                            .withValues(alpha: 0.35)),
-                  ),
-                  child: const Icon(Icons.warning_amber_rounded,
-                      color: Color(0xFFEF4444), size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.batches.length == 1
-                            ? 'Lote vencido'
-                            : '${widget.batches.length} lotes vencidos',
-                        style: TextStyle(
-                          color: cs.onSurface,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
-                      ),
-                      Text(
-                        '$totalUnits ${widget.product.unit} de ${widget.product.name}',
-                        style: TextStyle(
-                          color: cs.onSurfaceVariant,
-                          fontSize: 12,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'O que deseja fazer?',
-              style: TextStyle(
-                color: cs.onSurfaceVariant,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            _ResolveOption(
-              icon: Icons.delete_sweep_rounded,
-              title: 'Descartar (validade vencida)',
-              subtitle:
-                  'Baixa total · status descartado · motivo: validade',
-              color: const Color(0xFFEF4444),
-              isDark: isDark,
-              cs: cs,
-              enabled: !_submitting,
-              onTap: () => _apply(
-                type: MovementType.descarte,
-                reasonCode: MovementReasonCode.validade,
-                successMessage: 'Lote(s) descartado(s) por validade.',
-              ),
-            ),
-            const SizedBox(height: 8),
-            _ResolveOption(
-              icon: Icons.warning_amber_rounded,
-              title: 'Descartar (avaria/estraga­do)',
-              subtitle:
-                  'Baixa total · status descartado · motivo: avaria',
-              color: const Color(0xFFF59E0B),
-              isDark: isDark,
-              cs: cs,
-              enabled: !_submitting,
-              onTap: () => _apply(
-                type: MovementType.descarte,
-                reasonCode: MovementReasonCode.avaria,
-                successMessage: 'Lote(s) descartado(s) por avaria.',
-              ),
-            ),
-            const SizedBox(height: 8),
-            _ResolveOption(
-              icon: Icons.volunteer_activism_rounded,
-              title: 'Registrar como doação',
-              subtitle:
-                  'Baixa total como saída · status distribuído · motivo: doação',
-              color: const Color(0xFF22C55E),
-              isDark: isDark,
-              cs: cs,
-              enabled: !_submitting,
-              onTap: () => _apply(
-                type: MovementType.saida,
-                reasonCode: MovementReasonCode.doacao,
-                successMessage: 'Lote(s) registrado(s) como doação.',
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: _noteCtrl,
-              enabled: !_submitting,
-              minLines: 1,
-              maxLines: 3,
-              style: TextStyle(color: cs.onSurface, fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Observação (opcional)',
-                labelStyle:
-                    TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-                hintText: 'Ex.: Conferido por... / Destino...',
-                hintStyle: TextStyle(
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                    fontSize: 12),
-                filled: true,
-                fillColor: cs.surfaceContainerHigh,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.input),
-                  borderSide: BorderSide(color: cs.outlineVariant),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.input),
-                  borderSide: BorderSide(color: cs.outlineVariant),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.input),
-                  borderSide:
-                      const BorderSide(color: AppColors.brandPrimary600),
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            if (_submitting)
-              const Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            const SizedBox(height: 4),
-            TextButton(
-              onPressed:
-                  _submitting ? null : () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(
-                foregroundColor: cs.onSurfaceVariant,
-                minimumSize: const Size.fromHeight(40),
-              ),
-              child: const Text('Cancelar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ResolveOption extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final bool isDark;
-  final ColorScheme cs;
-  final bool enabled;
-  final VoidCallback onTap;
-  const _ResolveOption({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.isDark,
-    required this.cs,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1 : 0.55,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: enabled ? onTap : null,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(12, 11, 10, 11),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: color.withValues(alpha: isDark ? 0.30 : 0.22),
-                  width: 1),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: isDark ? 0.20 : 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: color, size: 18),
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: cs.onSurface,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: cs.onSurfaceVariant,
-                          fontSize: 10.5,
-                          height: 1.25,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.arrow_forward_ios_rounded,
-                    size: 12, color: cs.onSurfaceVariant),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ─── Botão de navegação (no AppBar) ────────────────────────────────────────
 
 class _NavButton extends StatelessWidget {
@@ -1472,7 +967,7 @@ class _DeleteConfirmDialog extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Esta ação remove o lote sem registrar baixa em estoque.\nUse "Resolver" para lotes vencidos quando quiser auditoria.',
+              'Esta ação remove o lote sem registrar baixa em estoque.\nPara lotes vencidos, prefira "Registrar descarte" no menu ⋮ para manter auditoria.',
               textAlign: TextAlign.center,
               style: TextStyle(
                   color: cs.onSurfaceVariant, fontSize: 12.5, height: 1.4),
@@ -1573,7 +1068,6 @@ class _BatchCard extends StatelessWidget {
   final ColorScheme cs;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback? onResolveExpired;
   final VoidCallback? onActions;
   const _BatchCard({
     required this.batch,
@@ -1581,7 +1075,6 @@ class _BatchCard extends StatelessWidget {
     required this.cs,
     required this.onEdit,
     required this.onDelete,
-    this.onResolveExpired,
     this.onActions,
   });
 
@@ -1829,27 +1322,6 @@ class _BatchCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ),
-                ],
-                if (onResolveExpired != null) ...[
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: onResolveExpired,
-                      icon: const Icon(Icons.task_alt_rounded, size: 16),
-                      label: const Text('Resolver lote vencido'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFEF4444),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        textStyle: const TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 12.5),
-                        elevation: 0,
-                      ),
-                    ),
                   ),
                 ],
               ],
