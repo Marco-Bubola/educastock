@@ -74,8 +74,10 @@ class _AlertsSettingsPageState extends ConsumerState<AlertsSettingsPage> {
       backgroundColor: cs.surface,
       body: Column(children: [
       ModernProfileAppBar(
-        title: 'Configurações de Alertas',
-        subtitle: 'Regras de vencimento e criticidade',
+        title: 'Alertas',
+        subtitle: 'Regras de vencimento',
+        pageIcon: Icons.notifications_active_rounded,
+        iconColor: const Color(0xFFFBBF24),
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
         showBackButton: true,
