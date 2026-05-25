@@ -10,7 +10,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import '../../../../core/design_system/design_system.dart';
-import '../../../../core/observability/analytics_service.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
@@ -52,6 +51,176 @@ final _keyMovList = GlobalKey();
 final _keyForecastKpi = GlobalKey();
 final _keyForecastCoverage = GlobalKey();
 final _keyForecastReplenish = GlobalKey();
+
+// ─── Tutorial steps por aba (centralizado para o header tab-aware) ──────
+List<TutorialStep> _chartsTutorialSteps() => [
+      TutorialStep(
+        key: _keyTrendChart,
+        title: 'Tendência Mensal de Entrada',
+        description:
+            'Gráfico de linha com entradas nos últimos 6 meses. Identifique padrões sazonais.',
+        icon: Icons.show_chart_rounded,
+        align: ContentAlign.bottom,
+        hints: const [
+          'Toque nos pontos para ver o valor exato',
+          'Picos = meses com grande volume de doações',
+        ],
+      ),
+      TutorialStep(
+        key: _keyExpiryChart,
+        title: 'Distribuição por Prazo',
+        description:
+            'Barras mostrando quantos lotes estão em cada faixa de vencimento.',
+        icon: Icons.bar_chart_rounded,
+        align: ContentAlign.bottom,
+        hints: const [
+          '🔴 Vermelho = vencidos — descarte imediato',
+          '🟢 Verde = prazo seguro (>30 dias)',
+        ],
+      ),
+      TutorialStep(
+        key: _keyCategoryChart,
+        title: 'Lotes por Origem',
+        description:
+            'Pizza mostrando proporção de lotes por origem (doação, compra, etc.).',
+        icon: Icons.pie_chart_rounded,
+        align: ContentAlign.bottom,
+        hints: const ['Toque em cada fatia para ver o percentual'],
+      ),
+    ];
+
+List<TutorialStep> _riskTutorialSteps() => [
+      TutorialStep(
+        key: _keyRiskBanner,
+        title: 'Saúde do Estoque',
+        description:
+            'Painel com totais de lotes críticos, em atenção e seguros. Quanto mais verde, melhor a situação.',
+        icon: Icons.shield_rounded,
+        align: ContentAlign.bottom,
+        hints: const [
+          '🔴 Críticos = ação imediata necessária',
+          '🟡 Atenção = monitorar de perto nos próximos dias',
+        ],
+      ),
+      TutorialStep(
+        key: _keyRiskDonut,
+        title: 'Distribuição por Risco',
+        description:
+            'Gráfico de rosca mostrando a proporção dos lotes em cada nível de risco. Ideal ter >70% verde.',
+        icon: Icons.pie_chart_rounded,
+        align: ContentAlign.bottom,
+        hints: const [
+          'Toque nas fatias para ver quantidade e %',
+          'Vermelho alto? Execute o Colab para redistribuição urgente',
+        ],
+      ),
+      TutorialStep(
+        key: _keyRiskInsights,
+        title: 'Insights Automáticos',
+        description:
+            'Alertas gerados automaticamente pela IA com base no estado atual do estoque. Siga as recomendações para evitar perdas.',
+        icon: Icons.lightbulb_rounded,
+        align: ContentAlign.top,
+        hints: const [
+          'Alertas em vermelho = ação urgente',
+          'Sugestões em azul = melhorias preventivas',
+        ],
+      ),
+    ];
+
+List<TutorialStep> _movementsTutorialSteps() => [
+      TutorialStep(
+        key: _keyMovSummary,
+        title: 'Resumo do Período',
+        description:
+            'Saldo líquido do período: entradas menos saídas e descartes. Verde = estoque cresceu, vermelho = diminuiu.',
+        icon: Icons.summarize_rounded,
+        align: ContentAlign.bottom,
+        hints: const [
+          'Alterne o período para comparar meses diferentes',
+          'Saldo negativo pode indicar distribuição alta — ótimo sinal!',
+        ],
+      ),
+      TutorialStep(
+        key: _keyMovChart,
+        title: 'Entradas × Saídas',
+        description:
+            'Comparativo visual por período. Verde = entradas no estoque; vermelho = saídas e descartes.',
+        icon: Icons.bar_chart_rounded,
+        align: ContentAlign.bottom,
+        hints: const [
+          'Toque nas barras para ver o valor exato',
+          'Saídas altas em período curto = distribuição ativa',
+        ],
+      ),
+      TutorialStep(
+        key: _keyMovList,
+        title: 'Histórico de Movimentações',
+        description:
+            'Lista completa agrupada por data. Use os filtros para visualizar apenas entradas, saídas ou descartes.',
+        icon: Icons.list_alt_rounded,
+        align: ContentAlign.top,
+        hints: const [
+          'Filtros de tipo na barra superior',
+          'Toque em "Ver mais" para carregar o histórico completo',
+        ],
+      ),
+    ];
+
+List<TutorialStep> _forecastTutorialSteps() => [
+      TutorialStep(
+        key: _keyForecastKpi,
+        title: 'KPIs de Previsão',
+        description:
+            'Resumo rápido: quantos produtos precisam repor, quantos estão em risco crítico, e o total de unidades sugeridas.',
+        icon: Icons.dashboard_rounded,
+        align: ContentAlign.bottom,
+        hints: const [
+          '🔴 Críticos = estoque muito baixo para consumo previsto',
+          '📦 Reposição = toque em "Gerar Pedido" para exportar CSV',
+        ],
+      ),
+      TutorialStep(
+        key: _keyForecastCoverage,
+        title: 'Cobertura de Estoque',
+        description:
+            'Barras azuis = estoque atual; barras verdes = consumo previsto para 30 dias. Se azul < verde, precisa repor.',
+        icon: Icons.bar_chart_rounded,
+        align: ContentAlign.bottom,
+        hints: const [
+          'Produtos sem barra azul têm estoque zerado',
+          'Use essa visualização para planejar compras mensais',
+        ],
+      ),
+      TutorialStep(
+        key: _keyForecastReplenish,
+        title: 'Lista de Reposição',
+        description:
+            'Produtos ordenados por urgência com a quantidade sugerida de compra. Exporte em CSV ou envie para fornecedores.',
+        icon: Icons.add_shopping_cart_rounded,
+        align: ContentAlign.top,
+        hints: const [
+          'Toque "Gerar Pedido" para exportar a lista',
+          'Treinar o modelo regularmente no Colab melhora as previsões',
+        ],
+      ),
+    ];
+
+/// Retorna os passos do tutorial conforme a aba ativa do reports.
+List<TutorialStep> _reportsTutorialForTab(int index) {
+  switch (index) {
+    case 0:
+      return _chartsTutorialSteps();
+    case 1:
+      return _riskTutorialSteps();
+    case 2:
+      return _movementsTutorialSteps();
+    case 3:
+      return _forecastTutorialSteps();
+    default:
+      return _chartsTutorialSteps();
+  }
+}
 
 Future<void> _exportCsv({
   required BuildContext context,
@@ -342,10 +511,6 @@ class ReportsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-    final allBatchesAsync = ref.watch(allAvailableBatchesProvider);
-    final allList = allBatchesAsync.valueOrNull ?? [];
-    final exp7List = ref.watch(expiringBatchesProvider(7)).valueOrNull ?? [];
-    final exp30List = ref.watch(expiringBatchesProvider(30)).valueOrNull ?? [];
 
     return DefaultTabController(
       length: 4,
@@ -357,38 +522,20 @@ class ReportsPage extends ConsumerWidget {
             if (!tutActive)
               _ReportsAppBar(
                 actions: [
-                  IconButton(
-                    icon: const Icon(Icons.event_repeat_rounded,
-                        color: Colors.white, size: 20),
-                    tooltip: 'Agendar relatório semanal',
-                    onPressed: () => _showScheduleSheet(context),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.picture_as_pdf_outlined,
-                        color: Colors.white, size: 20),
-                    tooltip: 'Exportar PDF',
-                    onPressed: () async {
-                      await _exportPdf(
-                          allBatches: allList,
-                          expiring7: exp7List,
-                          expiring30: exp30List);
-                      await ref.read(analyticsServiceProvider).logReportExport(
-                          format: 'pdf', reportType: 'inventory_overview');
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.table_view_outlined,
-                        color: Colors.white, size: 20),
-                    tooltip: 'Exportar CSV',
-                    onPressed: () async {
-                      await _exportCsv(
-                          context: context,
-                          allBatches: allList,
-                          expiring30: exp30List);
-                      await ref.read(analyticsServiceProvider).logReportExport(
-                          format: 'csv', reportType: 'inventory_overview');
-                    },
-                  ),
+                  // Botão dicas tab-aware (ouve mudança de aba)
+                  Builder(builder: (innerCtx) {
+                    final tabCtrl = DefaultTabController.of(innerCtx);
+                    return AnimatedBuilder(
+                      animation: tabCtrl,
+                      builder: (_, __) => buildHelpButton(
+                        context: innerCtx,
+                        onPressed: () => showCasaTutorial(
+                          context: innerCtx,
+                          steps: _reportsTutorialForTab(tabCtrl.index),
+                        ),
+                      ),
+                    );
+                  }),
                 ],
               ),
             const Expanded(child: TabBarView(
@@ -802,55 +949,6 @@ class _ChartsTab extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
           children: [
-            // ─── Help tutorial button
-            Align(
-              alignment: Alignment.centerRight,
-              child: buildHelpButton(
-                context: context,
-                onPressed: () => showCasaTutorial(
-                  context: context,
-                  steps: [
-                    TutorialStep(
-                      key: _keyTrendChart,
-                      title: 'Tendência Mensal de Entrada',
-                      description:
-                          'Gráfico de linha com entradas nos últimos 6 meses. Identifique padrões sazonais.',
-                      icon: Icons.show_chart_rounded,
-                      align: ContentAlign.bottom,
-                      hints: const [
-                        'Toque nos pontos para ver o valor exato',
-                        'Picos = meses com grande volume de doações',
-                      ],
-                    ),
-                    TutorialStep(
-                      key: _keyExpiryChart,
-                      title: 'Distribuição por Prazo',
-                      description:
-                          'Barras mostrando quantos lotes estão em cada faixa de vencimento.',
-                      icon: Icons.bar_chart_rounded,
-                      align: ContentAlign.bottom,
-                      hints: const [
-                        '🔴 Vermelho = vencidos — descarte imediato',
-                        '🟢 Verde = prazo seguro (>30 dias)',
-                      ],
-                    ),
-                    TutorialStep(
-                      key: _keyCategoryChart,
-                      title: 'Lotes por Origem',
-                      description:
-                          'Pizza mostrando proporção de lotes por origem (doação, compra, etc.).',
-                      icon: Icons.pie_chart_rounded,
-                      align: ContentAlign.bottom,
-                      hints: const [
-                        'Toque em cada fatia para ver o percentual',
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-
             // ─── Modern stats banner
             _ModernStatsBanner(
               totalBatches: batches.length,
@@ -1049,56 +1147,6 @@ class _MlRiskTab extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       children: [
-        // ─── Help tutorial button
-        Align(
-          alignment: Alignment.centerRight,
-          child: buildHelpButton(
-            context: context,
-            onPressed: () => showCasaTutorial(
-              context: context,
-              steps: [
-                TutorialStep(
-                  key: _keyRiskBanner,
-                  title: 'Saúde do Estoque',
-                  description:
-                      'Painel com totais de lotes críticos, em atenção e seguros. Quanto mais verde, melhor a situação.',
-                  icon: Icons.shield_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    '🔴 Críticos = ação imediata necessária',
-                    '🟡 Atenção = monitorar de perto nos próximos dias',
-                  ],
-                ),
-                TutorialStep(
-                  key: _keyRiskDonut,
-                  title: 'Distribuição por Risco',
-                  description:
-                      'Gráfico de rosca mostrando a proporção dos lotes em cada nível de risco. Ideal ter >70% verde.',
-                  icon: Icons.pie_chart_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Toque nas fatias para ver quantidade e %',
-                    'Vermelho alto? Execute o Colab para redistribuição urgente',
-                  ],
-                ),
-                TutorialStep(
-                  key: _keyRiskInsights,
-                  title: 'Insights Automáticos',
-                  description:
-                      'Alertas gerados automaticamente pela IA com base no estado atual do estoque. Siga as recomendações para evitar perdas.',
-                  icon: Icons.lightbulb_rounded,
-                  align: ContentAlign.top,
-                  hints: const [
-                    'Alertas em vermelho = ação urgente',
-                    'Sugestões em azul = melhorias preventivas',
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-
         // ─── Classifier badge
         _SectionHeader(
           title: 'Análise de Risco',
@@ -1748,56 +1796,6 @@ class _MovementsTabState extends ConsumerState<_MovementsTab> {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       children: [
-        // ─── Help tutorial button
-        Align(
-          alignment: Alignment.centerRight,
-          child: buildHelpButton(
-            context: context,
-            onPressed: () => showCasaTutorial(
-              context: context,
-              steps: [
-                TutorialStep(
-                  key: _keyMovSummary,
-                  title: 'Resumo do Período',
-                  description:
-                      'Saldo líquido do período: entradas menos saídas e descartes. Verde = estoque cresceu, vermelho = diminuiu.',
-                  icon: Icons.summarize_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Alterne o período para comparar meses diferentes',
-                    'Saldo negativo pode indicar distribuição alta — ótimo sinal!',
-                  ],
-                ),
-                TutorialStep(
-                  key: _keyMovChart,
-                  title: 'Entradas × Saídas',
-                  description:
-                      'Comparativo visual por período. Verde = entradas no estoque; vermelho = saídas e descartes.',
-                  icon: Icons.bar_chart_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Toque nas barras para ver o valor exato',
-                    'Saídas altas em período curto = distribuição ativa',
-                  ],
-                ),
-                TutorialStep(
-                  key: _keyMovList,
-                  title: 'Histórico de Movimentações',
-                  description:
-                      'Lista completa agrupada por data. Use os filtros para visualizar apenas entradas, saídas ou descartes.',
-                  icon: Icons.list_alt_rounded,
-                  align: ContentAlign.top,
-                  hints: const [
-                    'Filtros de tipo na barra superior',
-                    'Toque em "Ver mais" para carregar o histórico completo',
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-
         // ─── Modern period header
         _MovementsPeriodHeader(
           rangeLabel: rangeLabel,
@@ -4781,56 +4779,6 @@ class _ForecastReportTab extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       children: [
-        // ─── Help tutorial button
-        Align(
-          alignment: Alignment.centerRight,
-          child: buildHelpButton(
-            context: context,
-            onPressed: () => showCasaTutorial(
-              context: context,
-              steps: [
-                TutorialStep(
-                  key: _keyForecastKpi,
-                  title: 'KPIs de Previsão',
-                  description:
-                      'Resumo rápido: quantos produtos precisam repor, quantos estão em risco crítico, e o total de unidades sugeridas.',
-                  icon: Icons.dashboard_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    '🔴 Críticos = estoque muito baixo para consumo previsto',
-                    '📦 Reposição = toque em "Gerar Pedido" para exportar CSV',
-                  ],
-                ),
-                TutorialStep(
-                  key: _keyForecastCoverage,
-                  title: 'Cobertura de Estoque',
-                  description:
-                      'Barras azuis = estoque atual; barras verdes = consumo previsto para 30 dias. Se azul < verde, precisa repor.',
-                  icon: Icons.bar_chart_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Produtos sem barra azul têm estoque zerado',
-                    'Use essa visualização para planejar compras mensais',
-                  ],
-                ),
-                TutorialStep(
-                  key: _keyForecastReplenish,
-                  title: 'Lista de Reposição',
-                  description:
-                      'Produtos ordenados por urgência com a quantidade sugerida de compra. Exporte em CSV ou envie para fornecedores.',
-                  icon: Icons.add_shopping_cart_rounded,
-                  align: ContentAlign.top,
-                  hints: const [
-                    'Toque "Gerar Pedido" para exportar a lista',
-                    'Treinar o modelo regularmente no Colab melhora as previsões',
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-
         // ─── Header section
         _SectionHeader(
           title: 'Previsão de Consumo',
