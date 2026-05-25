@@ -1,11 +1,13 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../domain/entities/product.dart';
@@ -243,6 +245,102 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
             subtitle: 'Catálogo de produtos',
             profileName: user?.name,
             onProfileTap: () => context.push(AppRoutes.settings),
+            extraContent: Row(
+              children: [
+                Expanded(
+                  child: KeyedSubtree(
+                    key: _keySearch,
+                    child: Container(
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AppRadius.input),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      child: TextField(
+                        controller: _searchCtrl,
+                        onChanged: (v) =>
+                            setState(() => _query = v.toLowerCase()),
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: 'Buscar produto…',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.55),
+                            fontSize: 13,
+                          ),
+                          prefixIcon: Icon(Icons.search_rounded,
+                              size: 18,
+                              color: Colors.white.withValues(alpha: 0.8)),
+                          border: InputBorder.none,
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                KeyedSubtree(
+                  key: _keyFilterBtn,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [
+                            Color(0xFF1D5FA8),
+                            Color(0xFF38BDF8),
+                          ]),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.input),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF38BDF8)
+                                  .withValues(alpha: 0.4),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.tune_rounded,
+                              color: Colors.white, size: 18),
+                          onPressed: () => _openFilterModal(
+                              availableCategories, categoryLabelMap),
+                          tooltip: 'Filtros',
+                        ),
+                      ),
+                      if (_activeFilterCount > 0)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.danger600,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: Colors.white, width: 1.5),
+                            ),
+                            child: Text(
+                              '$_activeFilterCount',
+                              style: const TextStyle(
+                                fontSize: 9,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             actions: [
               buildHelpButton(
                 context: context,
@@ -306,40 +404,6 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
           Expanded(
             child: Column(
           children: [
-            // ─── Barra de busca e filtro
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: KeyedSubtree(
-                      key: _keySearch,
-                      child: _SearchField(
-                        controller: _searchCtrl,
-                        onChanged: (v) =>
-                            setState(() => _query = v.toLowerCase()),
-                        isDark: isDark,
-                        cs: cs,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  KeyedSubtree(
-                    key: _keyFilterBtn,
-                    child: _FilterButton(
-                      active: _activeFilterCount > 0,
-                      badge: _activeFilterCount,
-                      onTap: () =>
-                          _openFilterModal(availableCategories, categoryLabelMap),
-                      cs: cs,
-                      isDark: isDark,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
             const SizedBox(height: AppSpacing.sm),
 
             // ─── Grade de produtos
@@ -722,149 +786,6 @@ class _CsvImportSheetState extends ConsumerState<_CsvImportSheet> {
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchField extends StatelessWidget {
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final bool isDark;
-  final ColorScheme cs;
-  const _SearchField(
-      {required this.controller,
-      required this.onChanged,
-      required this.isDark,
-      required this.cs});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: isDark ? cs.surfaceContainer : cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-      ),
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        style: AppTypography.bodyMedium.copyWith(color: cs.onSurface),
-        decoration: InputDecoration(
-          hintText: 'Buscar produto...',
-          hintStyle: AppTypography.bodyMedium
-              .copyWith(color: cs.onSurfaceVariant),
-          prefixIcon: Icon(Icons.search_rounded,
-              color: cs.onSurfaceVariant, size: 20),
-          suffixIcon: controller.text.isNotEmpty
-              ? IconButton(
-                  icon: Icon(Icons.clear_rounded,
-                      size: 16, color: cs.onSurfaceVariant),
-                  onPressed: () {
-                    controller.clear();
-                    onChanged('');
-                  },
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md, vertical: 0),
-          isDense: true,
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Botão de filtro ──────────────────────────────────────────────────────
-
-class _FilterButton extends StatelessWidget {
-  final bool active;
-  final int badge;
-  final VoidCallback onTap;
-  final ColorScheme cs;
-  final bool isDark;
-  const _FilterButton(
-      {required this.active,
-      required this.badge,
-      required this.onTap,
-      required this.cs,
-      required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          gradient: active
-              ? const LinearGradient(
-                  colors: [
-                    AppColors.brandPrimary600,
-                    AppColors.secondaryBlue600
-                  ],
-                )
-              : null,
-          color: active
-              ? null
-              : isDark
-                  ? cs.surfaceContainer
-                  : cs.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(
-            color: active
-                ? Colors.transparent
-                : cs.outlineVariant.withValues(alpha: 0.5),
-          ),
-          boxShadow: active
-              ? [
-                  BoxShadow(
-                    color: AppColors.brandPrimary600.withValues(alpha: 0.35),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  )
-                ]
-              : [],
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Center(
-              child: Icon(
-                Icons.tune_rounded,
-                color: active ? Colors.white : cs.onSurfaceVariant,
-                size: 20,
-              ),
-            ),
-            if (badge > 0)
-              Positioned(
-                top: -2,
-                right: -2,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: AppColors.danger600,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: cs.surface, width: 1.5),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$badge',
-                      style: const TextStyle(
-                          fontSize: 9,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -1618,6 +1539,14 @@ class _ProductGridCard extends ConsumerWidget {
       expiryBadge = 'INATIVO';
     }
 
+    // Detecta estado de urgência para mostrar/esconder o botão rápido de ações
+    final isCritical = product.isPerishable && batchData != null &&
+        (batchData.isExpired || batchData.daysToExpiry <= 7);
+    final isWarning = product.isPerishable && batchData != null &&
+        !batchData.isExpired &&
+        batchData.daysToExpiry > 7 && batchData.daysToExpiry <= 30;
+    final showQuickAction = !inactive && (isCritical || isWarning);
+
     final accent      = palette[0];
     final accentDark  = palette[1];
     final cardBg      = isDark ? const Color(0xFF0F172A) : Colors.white;
@@ -1633,6 +1562,17 @@ class _ProductGridCard extends ConsumerWidget {
       ),
       child: GestureDetector(
         onTap: onTap,
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          _showProductActionsSheet(
+            context,
+            ref,
+            product: product,
+            nearestBatch: batchData,
+            isCritical: isCritical,
+            isWarning: isWarning,
+          );
+        },
         child: Container(
           decoration: BoxDecoration(
             color: cardBg,
@@ -1651,6 +1591,7 @@ class _ProductGridCard extends ConsumerWidget {
             children: [
               // ─── Header compacto com gradiente e ícone de categoria ───
               Stack(
+                clipBehavior: Clip.none, // permite que o botão bolt vaze
                 children: [
                   Container(
                     height: 62,
@@ -1770,6 +1711,26 @@ class _ProductGridCard extends ConsumerWidget {
                         ),
                       ),
                     ),
+
+                  // Botão de ação rápida (raio) — só em críticos/atenção
+                  if (showQuickAction)
+                    Positioned(
+                      bottom: -10, right: 6,
+                      child: _QuickActionButton(
+                        color: accent,
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          _showProductActionsSheet(
+                            context,
+                            ref,
+                            product: product,
+                            nearestBatch: batchData,
+                            isCritical: isCritical,
+                            isWarning: isWarning,
+                          );
+                        },
+                      ),
+                    ),
                 ],
               ),
 
@@ -1886,6 +1847,253 @@ class _ProductGridCard extends ConsumerWidget {
         0,      0,      0,      1, 0,
       ]),
       child: entryFade,
+    );
+  }
+
+  // ─── Sheet de ações de produto crítico/atenção ────────────────────────
+  Future<void> _showProductActionsSheet(
+    BuildContext context,
+    WidgetRef ref, {
+    required Product product,
+    required Batch? nearestBatch,
+    required bool isCritical,
+    required bool isWarning,
+  }) async {
+    final cs = Theme.of(context).colorScheme;
+    final accent = isCritical
+        ? const Color(0xFFDC2626)
+        : isWarning
+            ? const Color(0xFFD97706)
+            : AppColors.brandPrimary600;
+    final headerLabel = isCritical
+        ? (nearestBatch?.isExpired == true
+            ? 'Lote vencido — urgente'
+            : 'Vence em até 7 dias')
+        : isWarning
+            ? 'Vence em até 30 dias'
+            : 'Ações do produto';
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: cs.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Header com identidade do produto
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          accent.withValues(alpha: 0.95),
+                          accent.withValues(alpha: 0.55),
+                        ]),
+                        borderRadius: BorderRadius.circular(AppRadius.small),
+                        boxShadow: [
+                          BoxShadow(
+                            color: accent.withValues(alpha: 0.35),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        isCritical
+                            ? Icons.warning_amber_rounded
+                            : isWarning
+                                ? Icons.schedule_rounded
+                                : _categoryIcon(product.category),
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            product.name,
+                            style: AppTypography.labelMedium.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            headerLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: accent,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
+              // Ações
+              _ProductSheetAction(
+                icon: Icons.output_rounded,
+                label: 'Distribuir agora',
+                color: AppColors.brandPrimary600,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.push(
+                      '${AppRoutes.movement}?productId=${product.id}&reason=uso');
+                },
+              ),
+              if (isCritical && nearestBatch?.isExpired == true)
+                _ProductSheetAction(
+                  icon: Icons.delete_sweep_rounded,
+                  label: 'Registrar baixa por vencimento',
+                  color: AppColors.danger600,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.push(
+                        '${AppRoutes.movement}?batchId=${nearestBatch!.id}&reason=validade');
+                  },
+                ),
+              _ProductSheetAction(
+                icon: Icons.add_box_rounded,
+                label: 'Adicionar novo lote',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.push(
+                      '${AppRoutes.batchForm}?productId=${product.id}');
+                },
+              ),
+              if (nearestBatch != null)
+                _ProductSheetAction(
+                  icon: Icons.edit_outlined,
+                  label: 'Editar lote mais próximo',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.push(
+                        '${AppRoutes.batchForm}?productId=${product.id}&id=${nearestBatch.id}');
+                  },
+                ),
+              _ProductSheetAction(
+                icon: Icons.info_outline_rounded,
+                label: 'Ver detalhes do produto',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.push('/products/${product.id}');
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── Botão de ação rápida (raio) ───────────────────────────────────────────
+
+class _QuickActionButton extends StatelessWidget {
+  final Color color;
+  final VoidCallback onTap;
+  const _QuickActionButton({required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [color, Color.lerp(color, Colors.black, 0.18) ?? color],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.45),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.bolt_rounded,
+              color: Colors.white, size: 14),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Item de ação no sheet de produto ──────────────────────────────────────
+
+class _ProductSheetAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  final VoidCallback onTap;
+  const _ProductSheetAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final c = color ?? cs.onSurface;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        child: Row(
+          children: [
+            Icon(icon, color: c, size: 22),
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              label,
+              style: AppTypography.bodyMedium.copyWith(
+                color: c,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
