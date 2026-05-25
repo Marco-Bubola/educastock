@@ -333,6 +333,8 @@ class _MovementPageState extends ConsumerState<MovementPage> {
       ModernProfileAppBar(
         title: 'Distribuição',
         subtitle: 'Produtos avulsos ou por receita',
+        pageIcon: Icons.outbound_rounded,
+        iconColor: const Color(0xFFEF4444),
         showBackButton: true,
         extraContent: Column(
           mainAxisSize: MainAxisSize.min,
