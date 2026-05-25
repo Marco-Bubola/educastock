@@ -484,6 +484,8 @@
           tState: tracks.length > 0 ? tracks[0].readyState : 'none',
           IC:     ('ImageCapture' in window),
           zx:     window._zxingReady,
+          ml:     !!window._barcodeDetector,
+          hd:     !!window._boostedTrack,
         });
       } catch(e) { return '{"err":"' + String(e.message || e) + '"}'; }
     };
@@ -507,25 +509,44 @@
     };
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 6. INICIALIZAÇÃO DE CÂMERA (resolução — disparo único, 5 s)
-    // O flickering anterior era causado pelo setInterval disparando a cada 2 s
-    // ANTES da Promise do applyConstraints anterior resolver — múltiplas
-    // renegociações sobrepostas do track → "troca de formato" na preview.
-    // Solução: disparo único, 5 s de espera, apenas se resolução < 1080 p.
+    // 6. RESOLUÇÃO MÁXIMA DE CÂMERA — polling com track fingerprint
+    //
+    // BUG ANTERIOR: setTimeout(5 s) disparo-único disparava ANTES do usuário
+    // chegar na câmera (PWA abre no home → navega → scanner abre após > 5 s)
+    // → sem stream disponível → retornava sem fazer nada → ficava em 640×480.
+    // Após reiniciar e ir direto ao scanner (< 5 s), a câmera já estava pronta
+    // e o boost funcionava — era ISSO que o usuário percebia como "funciona só
+    // depois de reiniciar".
+    //
+    // SOLUÇÃO: polling leve a cada 2 s com fingerprint de track.
+    //  • applyConstraints é chamado NO MÁXIMO UMA VEZ por track (sem flickering).
+    //  • Se câmera restartar após scan (novo track), o boost é reaplicado.
+    //  • Se já estiver em ≥ 1280 px, registra como OK sem nenhuma constraint.
     // ─────────────────────────────────────────────────────────────────────────
-    setTimeout(function() {
+    window._boostedTrack = null;
+    window._applyMaxResolution = function() {
       try {
         var video = document.querySelector('video');
         if (!video || !video.srcObject) return;
         var tracks = video.srcObject.getVideoTracks();
         if (!tracks || !tracks.length || tracks[0].readyState !== 'live') return;
         var track = tracks[0];
+        // Este track já foi tratado — nada a fazer
+        if (window._boostedTrack === track) return;
         var s = track.getSettings();
-        console.log('[EducaStock] Câmera: ' + (s.width||'?') + 'x' + (s.height||'?')
-          + ' foco:' + (s.focusMode||'n/a') + ' facing:' + (s.facingMode||'n/a'));
-        if (s.width && s.width >= 1920) return; // já em Full HD — sem renegociação
-        // Único disparo — sem retry, sem interval.
-        // Ordem de preferência: 1080p → 720p → 540p (browser escolhe o melhor suportado)
+        if (s.width && s.width >= 1280) {
+          // Resolução já adequada — marca sem applyConstraints
+          window._boostedTrack = track;
+          console.log('[EducaStock] Câmera OK: ' + s.width + 'x' + s.height
+            + ' facing:' + (s.facingMode||'n/a'));
+          return;
+        }
+        // Track em baixa resolução — aplica constraint UMA ÚNICA VEZ para este track.
+        // Marca ANTES da Promise para evitar chamadas duplas se o intervalo
+        // disparar novamente antes da Promise resolver.
+        window._boostedTrack = track;
+        console.log('[EducaStock] Câmera em ' + (s.width||'?') + 'x' + (s.height||'?')
+          + ' → solicitando Full HD...');
         track.applyConstraints({
           advanced: [
             { width: { ideal: 1920 }, height: { ideal: 1080 } },
@@ -534,10 +555,20 @@
           ]
         }).then(function() {
           var ns = track.getSettings();
-          console.log('[EducaStock] Câmera ajustada para Full HD: ' + (ns.width||'?') + 'x' + (ns.height||'?'));
-        }).catch(function() {}); // falha silenciosa — câmera continua funcionando
+          console.log('[EducaStock] Câmera ajustada: ' + (ns.width||'?') + 'x' + (ns.height||'?'));
+        }).catch(function(e) {
+          // Constraint falhou — libera o lock para nova tentativa no próximo tick
+          console.warn('[EducaStock] applyConstraints falhou:', e && e.message ? e.message : e);
+          window._boostedTrack = null;
+        });
       } catch(e) {}
-    }, 5000);
+    };
+    // Polling a cada 2 s — custo mínimo (apenas leitura de propriedades JS).
+    // Detecta o stream assim que a câmera iniciar, independente de quando o
+    // usuário navegar até a tela do scanner.
+    setInterval(window._applyMaxResolution, 2000);
+    // Tenta imediatamente após 300 ms (caso câmera já esteja pronta no load)
+    setTimeout(window._applyMaxResolution, 300);
 
     // ─────────────────────────────────────────────────────────────────────────
     // 7. SCAN DE FRAME (loop contínuo — ML primeiro, ZXing como complemento)
