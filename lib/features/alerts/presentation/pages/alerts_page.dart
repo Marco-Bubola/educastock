@@ -53,6 +53,8 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
         ModernProfileAppBar(
           title: 'Alertas',
           subtitle: 'Alertas desativados',
+          pageIcon: Icons.notifications_off_rounded,
+          iconColor: const Color(0xFF94A3B8),
           profileName: user?.name,
           onProfileTap: () => context.push(AppRoutes.settings),
           actions: [
@@ -93,6 +95,8 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
       body: Column(children: [
       ModernProfileAppBar(
         title: 'Notificações',
+        pageIcon: Icons.notifications_active_rounded,
+        iconColor: const Color(0xFFFBBF24),
         subtitle: alertsAsync.when(
           data: (list) => list.isEmpty
               ? 'Tudo em dia'
@@ -354,198 +358,61 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
   }
 
   Future<void> _showActionsSheet(StockAlert alert) async {
-    final cs = Theme.of(context).colorScheme;
     final color = _colorForLevel(alert.level);
+    final hasBatch = alert.batchId != null && alert.batchId!.isNotEmpty;
+    final isCritical = alert.level == AlertLevel.critical;
 
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: cs.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle bar
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(top: AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [
-                          color.withValues(alpha: 0.9),
-                          color.withValues(alpha: 0.55),
-                        ]),
-                        borderRadius: BorderRadius.circular(AppRadius.small),
-                      ),
-                      child: Icon(_iconForLevel(alert.level),
-                          color: Colors.white, size: 22),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(alert.productName,
-                              style: AppTypography.labelMedium.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: cs.onSurface),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                          Text(
-                            _relativeTime(alert.createdAt),
-                            style: AppTypography.bodySmall.copyWith(
-                                color: cs.onSurfaceVariant, fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.4)),
-              // Actions
-              if (!alert.isManual)
-                _SheetAction(
-                  icon: Icons.inventory_2_rounded,
-                  label: 'Ver produto',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    context.push('/products/${alert.productId}');
-                  },
-                ),
-              if (alert.batchId != null && alert.batchId!.isNotEmpty)
-                _SheetAction(
-                  icon: Icons.output_rounded,
-                  label: alert.level == AlertLevel.critical
-                      ? 'Registrar descarte / saída'
-                      : 'Registrar saída',
-                  color: AppColors.brandPrimary600,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    context.push(
-                        '${AppRoutes.movement}?batchId=${alert.batchId}');
-                  },
-                ),
-              if (alert.batchId != null && alert.batchId!.isNotEmpty)
-                _SheetAction(
-                  icon: Icons.edit_outlined,
-                  label: 'Editar lote',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    context.push(
-                        '${AppRoutes.batchForm}?productId=${alert.productId}&id=${alert.batchId}');
-                  },
-                ),
-              _SheetAction(
-                icon: Icons.check_circle_outline_rounded,
-                label: 'Resolver',
-                color: AppColors.success600,
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await _resolveAlert(alert);
-                },
-              ),
-              _SheetAction(
-                icon: Icons.snooze_rounded,
-                label: 'Adiar...',
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await _showSnoozeSheet(alert);
-                },
-              ),
-              _SheetAction(
-                icon: Icons.delete_outline_rounded,
-                label: 'Excluir',
-                color: AppColors.danger600,
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await _deleteAlert(alert);
-                },
-              ),
-              const SizedBox(height: AppSpacing.sm),
-            ],
+    final actions = <CasaSheetItem>[
+      // Ação primária: distribuir/descartar (quando há lote)
+      if (hasBatch)
+        CasaSheetItem(
+          icon: Icons.output_rounded,
+          label: isCritical ? 'Registrar descarte' : 'Distribuir lote',
+          subtitle: isCritical
+              ? 'Marcar saída por vencimento'
+              : 'Ir para Saída com o produto selecionado',
+          color: AppColors.brandPrimary600,
+          onTap: () => context.push(
+            '${AppRoutes.movement}'
+            '?batchId=${alert.batchId}'
+            '&productId=${alert.productId}'
+            '&reason=${isCritical ? "validade" : "uso"}',
           ),
-        );
-      },
-    );
-  }
-
-  Future<void> _showSnoozeSheet(StockAlert alert) async {
-    final cs = Theme.of(context).colorScheme;
-    final options = [
-      ('1 hora', const Duration(hours: 1)),
-      ('4 horas', const Duration(hours: 4)),
-      ('Amanhã', const Duration(days: 1)),
-      ('Próxima semana', const Duration(days: 7)),
+        ),
+      // Ver produto (quando não é manual)
+      if (!alert.isManual)
+        CasaSheetItem(
+          icon: Icons.inventory_2_rounded,
+          label: 'Ver produto',
+          subtitle: 'Detalhes e todos os lotes',
+          color: AppColors.brandPrimary600,
+          onTap: () => context.push('/products/${alert.productId}'),
+        ),
+      // Resolver
+      CasaSheetItem(
+        icon: Icons.check_circle_rounded,
+        label: 'Marcar resolvido',
+        subtitle: 'Remover este alerta da lista',
+        color: AppColors.success600,
+        onTap: () => _resolveAlert(alert),
+      ),
+      // Excluir (destrutivo)
+      CasaSheetItem(
+        icon: Icons.delete_outline_rounded,
+        label: 'Excluir alerta',
+        destructive: true,
+        onTap: () => _deleteAlert(alert),
+      ),
     ];
 
-    final picked = await showModalBottomSheet<Duration>(
+    await showCasaActionSheet(
       context: context,
-      backgroundColor: cs.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.modal)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
-                child: Row(
-                  children: [
-                    const Icon(Icons.snooze_rounded,
-                        color: AppColors.brandPrimary600),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text('Adiar alerta', style: AppTypography.headingSmall),
-                  ],
-                ),
-              ),
-              for (final (label, dur) in options)
-                _SheetAction(
-                  icon: Icons.timer_outlined,
-                  label: label,
-                  onTap: () => Navigator.pop(ctx, dur),
-                ),
-              const SizedBox(height: AppSpacing.sm),
-            ],
-          ),
-        );
-      },
+      title: alert.productName,
+      subtitle: '${_levelHeaderLabel(alert.level)} · ${_relativeTime(alert.createdAt)}',
+      headerColor: color,
+      headerIcon: _iconForLevel(alert.level),
+      actions: actions,
     );
-
-    if (picked == null || !mounted) return;
-    try {
-      await ref.read(alertsNotifierProvider.notifier).snooze(alert.id, picked);
-      if (!mounted) return;
-      showCasaSnackbar(context, message: 'Alerta adiado.', isSuccess: true);
-    } catch (_) {
-      if (!mounted) return;
-      showCasaSnackbar(context,
-          message: 'Erro ao adiar alerta.', isError: true);
-    }
   }
 
   Future<void> _resolveAlert(StockAlert alert) async {
@@ -593,6 +460,7 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
 
     await showModalBottomSheet(
       context: context,
+      useRootNavigator: true, // acima da TabBar
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius:
@@ -763,6 +631,12 @@ String _labelForLevel(AlertLevel lvl) => switch (lvl) {
       AlertLevel.critical => 'Críticos',
       AlertLevel.warning => 'Atenção',
       AlertLevel.info => 'Info',
+    };
+
+String _levelHeaderLabel(AlertLevel lvl) => switch (lvl) {
+      AlertLevel.critical => 'Crítico',
+      AlertLevel.warning => 'Atenção',
+      AlertLevel.info => 'Informativo',
     };
 
 String _relativeTime(DateTime dt) {
@@ -1296,50 +1170,6 @@ class _SwipeBg extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Sheet action item
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _SheetAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color? color;
-  final VoidCallback onTap;
-
-  const _SheetAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final c = color ?? cs.onSurface;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-        child: Row(
-          children: [
-            Icon(icon, color: c, size: 22),
-            const SizedBox(width: AppSpacing.md),
-            Text(
-              label,
-              style: AppTypography.bodyMedium.copyWith(
-                color: c,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
