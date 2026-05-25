@@ -30,8 +30,10 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
         backgroundColor: cs.surface,
         body: Column(children: [
         ModernProfileAppBar(
-          title: 'Aprovações de Ajuste',
+          title: 'Aprovações',
           subtitle: 'Acesso restrito',
+          pageIcon: Icons.gavel_rounded,
+          iconColor: const Color(0xFFEF4444),
           showBackButton: true,
           actions: [
             buildHelpButton(
@@ -72,8 +74,10 @@ class AdjustmentApprovalsPage extends ConsumerWidget {
       backgroundColor: cs.surface,
       body: Column(children: [
       ModernProfileAppBar(
-        title: 'Aprovações de Ajuste',
-        subtitle: 'Solicitações pendentes de revisão',
+        title: 'Aprovações',
+        subtitle: 'Solicitações pendentes',
+        pageIcon: Icons.gavel_rounded,
+        iconColor: const Color(0xFFFBBF24),
         showBackButton: true,
         actions: [
           buildHelpButton(
