@@ -31,7 +31,9 @@ class _ForecastPageState extends ConsumerState<ForecastPage> {
       body: Column(children: [
       ModernProfileAppBar(
         title: 'Previsão de Consumo',
-        subtitle: 'Modelo Prophet (séries temporais)',
+        subtitle: 'Modelo Prophet de IA',
+        pageIcon: Icons.trending_up_rounded,
+        iconColor: const Color(0xFF22C55E),
         showBackButton: true,
         actions: [
           buildHelpButton(
