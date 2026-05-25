@@ -55,8 +55,10 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
       backgroundColor: bg,
       body: Column(children: [
       ModernProfileAppBar(
-        title: 'Receitas de Saída',
-        subtitle: 'Modelos ativos para baixa rápida',
+        title: 'Receitas',
+        subtitle: 'Modelos de distribuição rápida',
+        pageIcon: Icons.menu_book_rounded,
+        iconColor: const Color(0xFFA78BFA),
         showBackButton: true,
         extraContent: Column(
           mainAxisSize: MainAxisSize.min,
