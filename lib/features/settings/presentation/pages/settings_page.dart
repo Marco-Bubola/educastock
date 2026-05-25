@@ -186,8 +186,10 @@ class SettingsPage extends ConsumerWidget {
       backgroundColor: cs.surface,
       body: Column(children: [
       ModernProfileAppBar(
-        title: 'Configuracoes',
-        subtitle: 'Preferencias e conta',
+        title: 'Configurações',
+        subtitle: 'Preferências e conta',
+        pageIcon: Icons.settings_rounded,
+        iconColor: const Color(0xFF94A3B8),
         profileName: user?.name,
         onProfileTap: () {},
         actions: [
