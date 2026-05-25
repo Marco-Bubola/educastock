@@ -299,6 +299,8 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
       body: Column(children: [
       ModernProfileAppBar(
         title: _isEdit ? 'Editar Lote' : 'Cadastrar Lote',
+        pageIcon: Icons.inventory_rounded,
+        iconColor: const Color(0xFF38BDF8),
         subtitle: productName != null
             ? 'Produto: $productName'
             : 'Adicionar ao estoque',
