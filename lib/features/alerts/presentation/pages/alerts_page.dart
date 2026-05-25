@@ -102,6 +102,91 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
         ),
         profileName: user?.name,
         onProfileTap: () => context.push(AppRoutes.settings),
+        extraContent: alertsAsync.maybeWhen(
+          data: (alerts) {
+            if (alerts.isEmpty) return null;
+            final counts = _SeverityCounts.from(alerts);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Stats compactas
+                Row(
+                  children: [
+                    _HeaderStatPill(
+                      label: 'Críticos',
+                      value: counts.critical,
+                      icon: Icons.warning_amber_rounded,
+                      color: AppColors.danger600,
+                    ),
+                    const SizedBox(width: 8),
+                    _HeaderStatPill(
+                      label: 'Atenção',
+                      value: counts.warning,
+                      icon: Icons.schedule_rounded,
+                      color: AppColors.warning600,
+                    ),
+                    const SizedBox(width: 8),
+                    _HeaderStatPill(
+                      label: 'Info',
+                      value: counts.info,
+                      icon: Icons.info_outline_rounded,
+                      color: AppColors.brandPrimary600,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // ── Filtros chips
+                KeyedSubtree(
+                  key: _keyFilters,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _HeaderFilterChip(
+                          label: 'Todos',
+                          selected: _filter == null,
+                          color: Colors.white,
+                          onTap: () => setState(() => _filter = null),
+                        ),
+                        const SizedBox(width: 6),
+                        _HeaderFilterChip(
+                          label: 'Críticos (${counts.critical})',
+                          selected: _filter == AlertLevel.critical,
+                          color: AppColors.danger600,
+                          onTap: () => setState(() => _filter =
+                              _filter == AlertLevel.critical
+                                  ? null
+                                  : AlertLevel.critical),
+                        ),
+                        const SizedBox(width: 6),
+                        _HeaderFilterChip(
+                          label: 'Atenção (${counts.warning})',
+                          selected: _filter == AlertLevel.warning,
+                          color: AppColors.warning600,
+                          onTap: () => setState(() => _filter =
+                              _filter == AlertLevel.warning
+                                  ? null
+                                  : AlertLevel.warning),
+                        ),
+                        const SizedBox(width: 6),
+                        _HeaderFilterChip(
+                          label: 'Info (${counts.info})',
+                          selected: _filter == AlertLevel.info,
+                          color: AppColors.brandPrimary600,
+                          onTap: () => setState(() => _filter =
+                              _filter == AlertLevel.info
+                                  ? null
+                                  : AlertLevel.info),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+          orElse: () => null,
+        ),
         actions: [
           buildHelpButton(
             context: context,
@@ -173,38 +258,28 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
                 ? alerts
                 : alerts.where((a) => a.level == _filter).toList();
 
-            final counts = _SeverityCounts.from(alerts);
-
             return CustomScrollView(
               slivers: [
-                // ── Banner de stats ─────────────────────────────
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
-                    child: _StatsBanner(counts: counts, cs: cs),
-                  ),
-                ),
-
-                // ── Filtros + ação em massa ─────────────────────
-                SliverToBoxAdapter(
-                  child: KeyedSubtree(
-                    key: _keyFilters,
+                // ── Botão "Resolver Todos" (se há itens filtrados)
+                if (filtered.isNotEmpty)
+                  SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.md),
-                      child: _FiltersRow(
-                        current: _filter,
-                        counts: counts,
-                        onChanged: (lvl) =>
-                            setState(() => _filter = _filter == lvl ? null : lvl),
-                        onResolveAll: filtered.isEmpty
-                            ? null
-                            : () => _confirmResolveAll(filtered),
+                          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => _confirmResolveAll(filtered),
+                          icon: const Icon(Icons.cleaning_services_rounded, size: 16),
+                          label: Text(
+                              'Resolver todos (${filtered.length})'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.success600,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
 
                 // ── Lista ────────────────────────────────────────
                 if (filtered.isEmpty)
@@ -355,6 +430,29 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
                   onTap: () {
                     Navigator.pop(ctx);
                     context.push('/products/${alert.productId}');
+                  },
+                ),
+              if (alert.batchId != null && alert.batchId!.isNotEmpty)
+                _SheetAction(
+                  icon: Icons.output_rounded,
+                  label: alert.level == AlertLevel.critical
+                      ? 'Registrar descarte / saída'
+                      : 'Registrar saída',
+                  color: AppColors.brandPrimary600,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.push(
+                        '${AppRoutes.movement}?batchId=${alert.batchId}');
+                  },
+                ),
+              if (alert.batchId != null && alert.batchId!.isNotEmpty)
+                _SheetAction(
+                  icon: Icons.edit_outlined,
+                  label: 'Editar lote',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    context.push(
+                        '${AppRoutes.batchForm}?productId=${alert.productId}&id=${alert.batchId}');
                   },
                 ),
               _SheetAction(
@@ -724,260 +822,133 @@ class _SeverityCounts {
       };
 }
 
-class _StatsBanner extends StatelessWidget {
-  final _SeverityCounts counts;
-  final ColorScheme cs;
-  const _StatsBanner({required this.counts, required this.cs});
+// ═══════════════════════════════════════════════════════════════════════════
+// Widgets compactos para uso no header (fundo gradiente escuro)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [
-                  AppColors.brandPrimary800.withValues(alpha: 0.5),
-                  AppColors.brandPrimary600.withValues(alpha: 0.25),
-                ]
-              : [
-                  AppColors.brandPrimary600.withValues(alpha: 0.08),
-                  AppColors.secondarySky500.withValues(alpha: 0.05),
-                ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.modal),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-              child: _StatTile(
-                  label: 'Críticos',
-                  count: counts.critical,
-                  color: AppColors.danger600,
-                  icon: Icons.warning_amber_rounded,
-                  cs: cs)),
-          Container(
-              width: 1,
-              height: 42,
-              color: cs.outlineVariant.withValues(alpha: 0.35)),
-          Expanded(
-              child: _StatTile(
-                  label: 'Atenção',
-                  count: counts.warning,
-                  color: AppColors.warning600,
-                  icon: Icons.schedule_rounded,
-                  cs: cs)),
-          Container(
-              width: 1,
-              height: 42,
-              color: cs.outlineVariant.withValues(alpha: 0.35)),
-          Expanded(
-              child: _StatTile(
-                  label: 'Info',
-                  count: counts.info,
-                  color: AppColors.brandPrimary600,
-                  icon: Icons.info_outline_rounded,
-                  cs: cs)),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
+class _HeaderStatPill extends StatelessWidget {
   final String label;
-  final int count;
-  final Color color;
+  final int value;
   final IconData icon;
-  final ColorScheme cs;
+  final Color color;
 
-  const _StatTile({
+  const _HeaderStatPill({
     required this.label,
-    required this.count,
-    required this.color,
+    required this.value,
     required this.icon,
-    required this.cs,
+    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
-            shape: BoxShape.circle,
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              color.withValues(alpha: 0.32),
+              color.withValues(alpha: 0.16),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-          child: Icon(icon, color: color, size: 18),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          '$count',
-          style: AppTypography.headingMedium.copyWith(
-            color: cs.onSurface,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        Text(
-          label,
-          style: AppTypography.bodySmall.copyWith(
-            color: cs.onSurfaceVariant,
-            fontSize: 11,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Filtros + ação em massa
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _FiltersRow extends StatelessWidget {
-  final AlertLevel? current;
-  final _SeverityCounts counts;
-  final ValueChanged<AlertLevel> onChanged;
-  final VoidCallback? onResolveAll;
-
-  const _FiltersRow({
-    required this.current,
-    required this.counts,
-    required this.onChanged,
-    required this.onResolveAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 38,
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final lvl in AlertLevel.values) ...[
-                    _FilterChip(
-                      label: _labelForLevel(lvl),
-                      count: counts.countFor(lvl),
-                      color: _colorForLevel(lvl),
-                      selected: current == lvl,
-                      onTap: () => onChanged(lvl),
+                  Text(
+                    '$value',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 17,
+                      height: 1,
                     ),
-                    const SizedBox(width: AppSpacing.xs),
-                  ],
+                  ),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
-          ),
-          if (onResolveAll != null)
-            Padding(
-              padding: const EdgeInsets.only(left: AppSpacing.sm),
-              child: TextButton.icon(
-                onPressed: onResolveAll,
-                icon: const Icon(Icons.done_all_rounded, size: 16),
-                label: const Text('Resolver todos'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.success600,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                  textStyle: AppTypography.labelSmall.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _FilterChip extends StatelessWidget {
+class _HeaderFilterChip extends StatelessWidget {
   final String label;
-  final int count;
-  final Color color;
   final bool selected;
+  final Color color;
   final VoidCallback onTap;
 
-  const _FilterChip({
+  const _HeaderFilterChip({
     required this.label,
-    required this.count,
-    required this.color,
     required this.selected,
+    required this.color,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md, vertical: 7),
-          decoration: BoxDecoration(
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? LinearGradient(colors: [color, color.withValues(alpha: 0.75)])
+              : null,
+          color: selected ? null : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
             color: selected
-                ? color.withValues(alpha: 0.18)
-                : cs.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(
-              color: selected
-                  ? color.withValues(alpha: 0.55)
-                  : cs.outlineVariant.withValues(alpha: 0.45),
-              width: 1.2,
-            ),
+                ? Colors.white.withValues(alpha: 0.25)
+                : Colors.white.withValues(alpha: 0.2),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: AppSpacing.xs + 2),
-              Text(
-                label,
-                style: AppTypography.labelSmall.copyWith(
-                  color: selected ? color : cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? color.withValues(alpha: 0.25)
-                      : cs.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Text(
-                  '$count',
-                  style: AppTypography.labelSmall.copyWith(
-                    color: selected ? color : cs.onSurfaceVariant,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 10,
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4),
+                    blurRadius: 8,
                   ),
-                ),
-              ),
-            ],
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: selected
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.85),
           ),
         ),
       ),
