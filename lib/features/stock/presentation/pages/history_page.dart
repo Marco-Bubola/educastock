@@ -1,9 +1,6 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/design_system/design_system.dart';
 import '../../domain/entities/stock_movement.dart';
@@ -24,7 +21,6 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   final _keyFilterRow = GlobalKey();
   final _keyHistoryList = GlobalKey();
   final _keyHistoryHeader = GlobalKey();
-  final _keyHistoryExport = GlobalKey();
 
   static const _reasonColors = <String, List<Color>>{
     'uso': [Color(0xFF2563EB), Color(0xFF1D4ED8)],
@@ -406,11 +402,118 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       backgroundColor: bg,
       body: Column(children: [
       ModernProfileAppBar(
-        title: 'Histórico de Saídas',
-        subtitle: 'Registro completo de distribuições',
-        extraContent: KeyedSubtree(
-          key: _keyHistoryHeader,
-          child: _buildHeaderStats(movementsAsync),
+        title: 'Histórico',
+        subtitle: 'Registro de distribuições',
+        pageIcon: Icons.history_rounded,
+        iconColor: const Color(0xFFA78BFA),
+        extraContent: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            KeyedSubtree(
+              key: _keyHistoryHeader,
+              child: _buildHeaderStats(movementsAsync),
+            ),
+            const SizedBox(height: 10),
+            // ── Search + Filter no header (estilo dark) ──
+            Row(
+              key: _keyFilterRow,
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.input),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
+                    ),
+                    child: TextField(
+                      onChanged: (v) => setState(() => _search = v),
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Buscar produto ou responsável…',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          fontSize: 13,
+                        ),
+                        prefixIcon: Icon(Icons.search_rounded,
+                            size: 18,
+                            color: Colors.white.withValues(alpha: 0.8)),
+                        suffixIcon: _search.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(Icons.close_rounded,
+                                    size: 16,
+                                    color: Colors.white
+                                        .withValues(alpha: 0.7)),
+                                onPressed: () =>
+                                    setState(() => _search = ''),
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [
+                          Color(0xFF1D5FA8),
+                          Color(0xFF38BDF8),
+                        ]),
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.input),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF38BDF8)
+                                .withValues(alpha: 0.4),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.tune_rounded,
+                            color: Colors.white, size: 18),
+                        onPressed: _showFilterModal,
+                        tooltip: 'Filtros',
+                      ),
+                    ),
+                    if (_activeFilterCount > 0)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.danger600,
+                            borderRadius: BorderRadius.circular(10),
+                            border:
+                                Border.all(color: Colors.white, width: 1.5),
+                          ),
+                          child: Text(
+                            '$_activeFilterCount',
+                            style: const TextStyle(
+                              fontSize: 9,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ),
         actions: [
           buildHelpButton(
@@ -445,19 +548,6 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                   ],
                 ),
                 TutorialStep(
-                  key: _keyHistoryExport,
-                  title: 'Exportar CSV',
-                  description: 'O botão de download exporta os registros filtrados em planilha CSV. Essencial para relatórios mensais, prestação de contas a doadores e análise financeira no Excel ou Google Sheets.',
-                  icon: Icons.download_rounded,
-                  align: ContentAlign.bottom,
-                  hints: const [
-                    'Exporta APENAS o que está visível com filtros aplicados',
-                    'Inclui: data, produto, qty, motivo, usuária, observação',
-                    'Use para fechamento mensal/trimestral',
-                    'Compatível com Excel, Google Sheets, LibreOffice',
-                  ],
-                ),
-                TutorialStep(
                   key: _keyHistoryList,
                   title: 'Registro de Movimentações',
                   description: 'Lista cronológica (mais recente primeiro) de todas as saídas e descartes. Cada cartão mostra produto, quantidade, motivo colorido, colaboradora responsável e horário. Toque para ver detalhes completos da movimentação.',
@@ -474,151 +564,11 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               ],
             ),
           ),
-          IconButton(
-            key: _keyHistoryExport,
-            icon: const Icon(Icons.download_rounded),
-            tooltip: 'Exportar CSV',
-            onPressed: () {
-              final movAsync = ref.read(stockMovementsProvider);
-              movAsync.whenData((all) async {
-                var filtered = all
-                    .where((m) =>
-                        m.type == MovementType.saida ||
-                        m.type == MovementType.descarte)
-                    .toList();
-                if (_filterReason != null) {
-                  filtered = filtered
-                      .where((m) => m.reasonCode == _filterReason)
-                      .toList();
-                }
-                if (_filterDateRange != null) {
-                  final start = _filterDateRange!.start;
-                  final end = DateTime(
-                      _filterDateRange!.end.year,
-                      _filterDateRange!.end.month,
-                      _filterDateRange!.end.day,
-                      23, 59, 59);
-                  filtered = filtered
-                      .where((m) =>
-                          m.performedAt.isAfter(
-                              start.subtract(const Duration(seconds: 1))) &&
-                          m.performedAt.isBefore(
-                              end.add(const Duration(seconds: 1))))
-                      .toList();
-                }
-                if (_search.isNotEmpty) {
-                  final q = _search.toLowerCase();
-                  filtered = filtered
-                      .where((m) =>
-                          m.productName.toLowerCase().contains(q) ||
-                          m.performedByName.toLowerCase().contains(q))
-                      .toList();
-                }
-                await _exportCsv(context, filtered);
-              });
-            },
-          ),
         ],
       ),
       Expanded(child: Column(
         children: [
-            // ─── Search + Filtros ────────────────────────────────────────────
-            Padding(
-              key: _keyFilterRow,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: TextField(
-                        onChanged: (v) => setState(() => _search = v),
-                        style: TextStyle(color: textPrimary, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'Buscar por produto ou responsável…',
-                          hintStyle: TextStyle(color: textSub, fontSize: 14),
-                          prefixIcon: Icon(Icons.search_rounded,
-                              color: textSub, size: 20),
-                          suffixIcon: _search.isNotEmpty
-                              ? IconButton(
-                                  icon: Icon(Icons.close_rounded,
-                                      color: textSub, size: 18),
-                                  onPressed: () =>
-                                      setState(() => _search = ''),
-                                )
-                              : null,
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Botão de Filtro
-                  GestureDetector(
-                    onTap: _showFilterModal,
-                    child: Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: _activeFilterCount > 0
-                            ? const Color(0xFF7C3AED)
-                            : cardBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _activeFilterCount > 0
-                              ? const Color(0xFF7C3AED)
-                              : borderColor,
-                        ),
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Icon(
-                            Icons.tune_rounded,
-                            color: _activeFilterCount > 0
-                                ? Colors.white
-                                : textSub,
-                            size: 20,
-                          ),
-                          if (_activeFilterCount > 0)
-                            Positioned(
-                              top: 6,
-                              right: 6,
-                              child: Container(
-                                width: 16,
-                                height: 16,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                      color: const Color(0xFF7C3AED),
-                                      width: 1.5),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '$_activeFilterCount',
-                                    style: const TextStyle(
-                                      color: Color(0xFF7C3AED),
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 12),
 
             // ─── Lista ─────────────────────────────────────────────────────
             Expanded(
@@ -801,17 +751,25 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     return Row(
       children: [
         _StatBadge(
-            label: 'Hoje', value: '$totalToday', icon: Icons.today_rounded),
-        const SizedBox(width: 8),
+          label: 'Hoje',
+          value: '$totalToday',
+          icon: Icons.today_rounded,
+          accent: const Color(0xFF38BDF8),
+        ),
+        const SizedBox(width: 6),
         _StatBadge(
-            label: '7 dias',
-            value: '$totalWeek',
-            icon: Icons.date_range_rounded),
-        const SizedBox(width: 8),
+          label: '7 dias',
+          value: '$totalWeek',
+          icon: Icons.date_range_rounded,
+          accent: const Color(0xFFA78BFA),
+        ),
+        const SizedBox(width: 6),
         _StatBadge(
-            label: 'Total',
-            value: '$totalAll',
-            icon: Icons.all_inclusive_rounded),
+          label: 'Total',
+          value: '$totalAll',
+          icon: Icons.all_inclusive_rounded,
+          accent: const Color(0xFFFBBF24),
+        ),
       ],
     );
   }
@@ -823,38 +781,71 @@ class _StatBadge extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final Color accent;
 
-  const _StatBadge(
-      {required this.label, required this.value, required this.icon});
+  const _StatBadge({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.accent = const Color(0xFF38BDF8),
+  });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: Colors.white, size: 16),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-              ),
+          gradient: LinearGradient(
+            colors: [
+              accent.withValues(alpha: 0.28),
+              accent.withValues(alpha: 0.10),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: accent.withValues(alpha: 0.45),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-            Text(
-              label,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.75),
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-              ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: Colors.white, size: 14),
+            const SizedBox(width: 6),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.80),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1385,35 +1376,6 @@ class _SessionCardState extends State<_SessionCard> {
       ),
     );
   }
-}
-
-// ─── Export CSV function ──────────────────────────────────────────────────
-
-Future<void> _exportCsv(
-    BuildContext context, List<StockMovement> movements) async {
-  final buffer = StringBuffer();
-  buffer.writeln('Data,Produto,Tipo,Motivo,Quantidade,Usuário,Observação');
-  final fmt = DateFormat('dd/MM/yyyy HH:mm');
-  for (final m in movements) {
-    buffer.writeln([
-      '"${fmt.format(m.performedAt)}"',
-      '"${m.productName.replaceAll('"', '""')}"',
-      '"${m.type.name}"',
-      '"${m.reasonCode ?? ''}"',
-      '${m.quantity}',
-      '"${m.performedByName}"',
-      '"${(m.activity ?? '').replaceAll('"', '""')}"',
-    ].join(','));
-  }
-  final dir = await getTemporaryDirectory();
-  final file = File(
-      '${dir.path}/historico_${DateTime.now().millisecondsSinceEpoch}.csv');
-  await file.writeAsString(buffer.toString());
-  await Share.shareXFiles(
-      [XFile(file.path, mimeType: 'text/csv')],
-      text: 'Histórico EducaStock');
-  if (!context.mounted) return;
-  showCasaSnackbar(context, message: 'CSV exportado!', isSuccess: true);
 }
 
 // ─── Summary banner ───────────────────────────────────────────────────────
