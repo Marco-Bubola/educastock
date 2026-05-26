@@ -147,8 +147,11 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
               ),
               child: TextField(
                 onChanged: (v) => setState(() => _search = v),
+                cursorColor: Colors.white,
                 style: const TextStyle(color: Colors.white, fontSize: 14),
                 decoration: InputDecoration(
+                  filled: false,
+                  fillColor: Colors.transparent,
                   hintText: 'Buscar receita…',
                   hintStyle: TextStyle(
                     color: Colors.white.withValues(alpha: 0.55),
@@ -166,6 +169,8 @@ class _RecipesPageState extends ConsumerState<RecipesPage> {
                         )
                       : null,
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
                   contentPadding:
                       const EdgeInsets.symmetric(vertical: 10),
                 ),
