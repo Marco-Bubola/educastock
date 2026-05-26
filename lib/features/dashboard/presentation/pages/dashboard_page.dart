@@ -242,34 +242,45 @@ class DashboardPage extends ConsumerWidget {
 
             const SizedBox(height: AppSpacing.xl),
 
-            // Alertas recentes
-            expiringCritical.when(
-              data: (batches) {
-                if (batches.isEmpty) return const SizedBox.shrink();
-                return Column(
-                  key: _keyDashExpiring,
-                  children: [
-                    CasaSectionHeader(
-                      title: 'Alertas Críticos',
-                      count: batches.length,
-                      action: 'Ver todos',
-                      onAction: () => context.go(AppRoutes.alerts),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    ...batches.take(3).map(
-                          (b) => Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.lg,
-                              vertical: AppSpacing.xs,
+            // Alertas recentes — key SEMPRE no tree para o tutorial encontrar
+            KeyedSubtree(
+              key: _keyDashExpiring,
+              child: expiringCritical.when(
+                data: (batches) {
+                  if (batches.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.lg),
+                      child: CasaSectionHeader(
+                        title: 'Alertas Críticos',
+                        count: 0,
+                      ),
+                    );
+                  }
+                  return Column(
+                    children: [
+                      CasaSectionHeader(
+                        title: 'Alertas Críticos',
+                        count: batches.length,
+                        action: 'Ver todos',
+                        onAction: () => context.go(AppRoutes.alerts),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      ...batches.take(3).map(
+                            (b) => Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.lg,
+                                vertical: AppSpacing.xs,
+                              ),
+                              child: _AlertBatchTile(batch: b),
                             ),
-                            child: _AlertBatchTile(batch: b),
                           ),
-                        ),
-                  ],
-                );
-              },
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
+                    ],
+                  );
+                },
+                loading: () => const SizedBox(height: 80),
+                error: (_, __) => const SizedBox(height: 80),
+              ),
             ),
 
             const SizedBox(height: AppSpacing.xxxl),
