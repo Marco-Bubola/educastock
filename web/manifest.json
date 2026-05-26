@@ -1,9 +1,10 @@
 {
     "name": "EducaStock",
     "short_name": "EducaStock",
-    "start_url": ".",
+    "start_url": "/",
+    "scope": "/",
     "display": "standalone",
-    "background_color": "#FFFFFF",
+    "background_color": "#0F2444",
     "theme_color": "#1D5FA8",
     "description": "EducaStock - Controle de estoque da Casa da Criança",
     "orientation": "portrait-primary",
