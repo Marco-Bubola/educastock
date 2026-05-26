@@ -74,67 +74,135 @@ void showCasaTutorial({
   if (steps.isEmpty) return;
   tutorialActiveNotifier.value = true;
 
-  /// Espera o widget alvo aparecer no tree (até `maxTries` × 60ms).
-  /// Necessário porque o tutorial_coach_mark pode trocar de step antes
-  /// do widget ser renderizado, especialmente quando há listas longas.
+  /// Retorna true se o contexto tem um RenderBox válido e tamanho > 0.
+  /// Necessário porque o coach mark calcula o spotlight a partir do RenderBox;
+  /// se ele estiver desanexado ou com tamanho zero, o tutorial encerra.
+  bool isRenderable(BuildContext? ctx) {
+    if (ctx == null || !ctx.mounted) return false;
+    final ro = ctx.findRenderObject();
+    if (ro is! RenderBox) return false;
+    if (!ro.attached) return false;
+    if (!ro.hasSize) return false;
+    final s = ro.size;
+    return s.width > 0 && s.height > 0;
+  }
+
+  /// Espera o widget aparecer e ser renderizável (tem RenderBox com tamanho).
   Future<BuildContext?> waitForKey(GlobalKey key,
-      {int maxTries = 12}) async {
+      {int maxTries = 25}) async {
     for (int i = 0; i < maxTries; i++) {
       final ctx = key.currentContext;
-      if (ctx != null && ctx.mounted) return ctx;
+      // ignore: use_build_context_synchronously
+      if (isRenderable(ctx)) return ctx;
       await Future<void>.delayed(const Duration(milliseconds: 60));
     }
-    return key.currentContext;
+    return key.currentContext; // último recurso, mesmo que invalid
   }
 
   Future<void> scrollTo(int index) async {
     if (index < 0 || index >= steps.length) return;
     final key = steps[index].key;
-    // Tentativa 1: contexto imediato
+
+    // Etapa 1 — garante que o widget existe no tree
     var ctx = key.currentContext;
-    // Tentativa 2: se null, aguarda render
-    ctx ??= await waitForKey(key);
+    if (!isRenderable(ctx)) {
+      ctx = await waitForKey(key);
+    }
     if (ctx == null) return;
 
     try {
-      // Faz scroll de forma robusta — tenta múltiplas vezes pois alguns
-      // widgets só ficam visíveis após scroll parcial (KeyedSubtree em
-      // SliverList, por exemplo).
-      for (int attempt = 0; attempt < 2; attempt++) {
+      // Etapa 2 — scroll com várias passagens, em alignments diferentes
+      // (alguns widgets só ficam visíveis após scroll parcial — Sliver lazy).
+      const alignments = [0.30, 0.25, 0.30];
+      for (final a in alignments) {
         final currentCtx = key.currentContext;
-        if (currentCtx == null || !currentCtx.mounted) break;
-        await Scrollable.ensureVisible(
-          currentCtx,
-          duration: const Duration(milliseconds: 420),
-          curve: Curves.easeInOut,
-          // 0.30 deixa espaço pro botão fixo no topo (Próximo/Anterior)
-          alignment: 0.30,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-        );
-        // Pequeno gap para o tree estabilizar entre tentativas
-        await Future<void>.delayed(const Duration(milliseconds: 80));
+        // ignore: use_build_context_synchronously
+        if (!isRenderable(currentCtx)) {
+          // tenta esperar novamente — pode ter sido reciclado pelo scroll
+          await waitForKey(key, maxTries: 8);
+        }
+        final c2 = key.currentContext;
+        if (c2 == null || !c2.mounted) break;
+        try {
+          await Scrollable.ensureVisible(
+            c2,
+            duration: const Duration(milliseconds: 380),
+            curve: Curves.easeInOut,
+            alignment: a,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+          );
+        } catch (_) {
+          // contexto pode não ter Scrollable ancestral — segue adiante
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 90));
       }
-      // Buffer extra para o coach mark reposicionar
-      await Future<void>.delayed(const Duration(milliseconds: 180));
+
+      // Etapa 3 — espera 1 frame extra + buffer para o coach mark reposicionar
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+
+      // Etapa 4 — confirma que o widget continua renderizável após scroll
+      // Se mesmo assim falhou, aguarda mais um pouco
+      if (!isRenderable(key.currentContext)) {
+        await waitForKey(key, maxTries: 15);
+      }
     } catch (_) {}
   }
 
   bool isTransitioning = false;
 
-  Future<void> handleNext(TutorialCoachMarkController ctrl, int nextIndex) async {
-    if (isTransitioning) return;
-    isTransitioning = true;
-    await scrollTo(nextIndex);
-    isTransitioning = false;
-    ctrl.next();
+  /// Encontra o próximo step VÁLIDO (com widget renderizável no tree),
+  /// começando em `startIndex`. Faz scroll para cada candidato.
+  /// Retorna o índice válido encontrado, ou -1 se nenhum.
+  Future<int> findValidStep(int startIndex, {bool forward = true}) async {
+    int idx = startIndex;
+    while (idx >= 0 && idx < steps.length) {
+      await scrollTo(idx);
+      if (isRenderable(steps[idx].key.currentContext)) return idx;
+      // Aguarda ainda mais uma chance
+      await waitForKey(steps[idx].key, maxTries: 15);
+      if (isRenderable(steps[idx].key.currentContext)) return idx;
+      // Step inválido — pula
+      idx += forward ? 1 : -1;
+    }
+    return -1;
   }
 
-  Future<void> handlePrevious(TutorialCoachMarkController ctrl, int prevIndex) async {
+  Future<void> handleNext(
+      TutorialCoachMarkController ctrl, int nextIndex) async {
     if (isTransitioning) return;
     isTransitioning = true;
-    await scrollTo(prevIndex);
-    isTransitioning = false;
-    ctrl.previous();
+    try {
+      final validIdx = await findValidStep(nextIndex, forward: true);
+      if (validIdx == -1) {
+        // Nenhum step válido à frente → finaliza tutorial graciosamente
+        ctrl.skip();
+        return;
+      }
+      // Avança N vezes para pular eventuais steps inválidos
+      final jumps = validIdx - nextIndex + 1;
+      for (int i = 0; i < jumps; i++) {
+        ctrl.next();
+      }
+    } finally {
+      isTransitioning = false;
+    }
+  }
+
+  Future<void> handlePrevious(
+      TutorialCoachMarkController ctrl, int prevIndex) async {
+    if (isTransitioning) return;
+    isTransitioning = true;
+    try {
+      final validIdx = await findValidStep(prevIndex, forward: false);
+      if (validIdx == -1) return; // mantém step atual
+      final jumps = prevIndex - validIdx + 1;
+      for (int i = 0; i < jumps; i++) {
+        ctrl.previous();
+      }
+    } finally {
+      isTransitioning = false;
+    }
   }
 
   // OverlayEntry reference (assinado depois)
