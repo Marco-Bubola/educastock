@@ -387,9 +387,12 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                     child: TextField(
                       controller: _searchController,
                       onChanged: (v) => setState(() => _search = v),
+                      cursorColor: Colors.white,
                       style: const TextStyle(
                           color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
+                        filled: false,
+                        fillColor: Colors.transparent,
                         hintText: 'Buscar produto ou receita…',
                         hintStyle: TextStyle(
                           color: Colors.white.withValues(alpha: 0.55),
@@ -399,6 +402,8 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                             size: 18,
                             color: Colors.white.withValues(alpha: 0.8)),
                         border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
                         contentPadding:
                             const EdgeInsets.symmetric(vertical: 10),
                       ),
@@ -599,16 +604,28 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                           final qty = _selectedQtyByProduct[p.id] ?? 0;
                           final isDark = Theme.of(context).brightness == Brightness.dark;
 
+                          final now = DateTime.now();
+                          // Crítico: lote vence em até 7 dias (mas ainda não venceu)
+                          final criticalBatch = batches.any((b) =>
+                              b.productId == p.id &&
+                              b.status == BatchStatus.disponivel &&
+                              b.expiryDate != null &&
+                              !b.expiryDate!.isBefore(now) &&
+                              b.expiryDate!.difference(now).inDays <= 7);
+                          // Atenção: lote vence entre 8 e 30 dias
                           final nearExpiry = batches.any((b) =>
                               b.productId == p.id &&
                               b.status == BatchStatus.disponivel &&
                               b.expiryDate != null &&
-                              b.expiryDate!.difference(DateTime.now()).inDays <= 30);
+                              !b.expiryDate!.isBefore(now) &&
+                              b.expiryDate!.difference(now).inDays > 7 &&
+                              b.expiryDate!.difference(now).inDays <= 30);
+                          // Vencido: lote no passado
                           final expiredBatch = batches.any((b) =>
                               b.productId == p.id &&
                               b.status == BatchStatus.disponivel &&
                               b.expiryDate != null &&
-                              b.expiryDate!.isBefore(DateTime.now()));
+                              b.expiryDate!.isBefore(now));
 
                           return _ProductOutputCard(
                             product: p,
@@ -618,6 +635,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                             index: i,
                             nearExpiry: nearExpiry,
                             expiredBatch: expiredBatch,
+                            criticalBatch: criticalBatch,
                             onDecrement: qty > 0
                                 ? () => setState(() {
                                       final next = qty - 1;
@@ -1036,6 +1054,7 @@ class _ProductOutputCard extends StatelessWidget {
   final int index;
   final bool nearExpiry;
   final bool expiredBatch;
+  final bool criticalBatch; // ≤7 dias, ainda não vencido
   final VoidCallback? onDecrement;
   final VoidCallback? onIncrement;
 
@@ -1047,6 +1066,7 @@ class _ProductOutputCard extends StatelessWidget {
     required this.index,
     required this.nearExpiry,
     required this.expiredBatch,
+    this.criticalBatch = false,
     required this.onDecrement,
     required this.onIncrement,
   });
@@ -1057,9 +1077,11 @@ class _ProductOutputCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Cores de alerta conforme status de validade
+    // Cores de alerta conforme status de validade.
+    // Vermelho cobre: vencido (passado) E crítico (≤7 dias, urgente).
+    final isRedAlert = expiredBatch || criticalBatch;
     final List<Color> palette;
-    if (expiredBatch) {
+    if (isRedAlert) {
       palette = _paletteRed;
     } else if (nearExpiry) {
       palette = _paletteYellow;
@@ -1174,7 +1196,7 @@ class _ProductOutputCard extends StatelessWidget {
           ),
 
           // ── Faixa status validade ─────────────────────────────────
-          if (expiredBatch || nearExpiry)
+          if (expiredBatch || criticalBatch || nearExpiry)
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1190,13 +1212,19 @@ class _ProductOutputCard extends StatelessWidget {
                   Icon(
                     expiredBatch
                         ? Icons.cancel_rounded
-                        : Icons.schedule_rounded,
+                        : criticalBatch
+                            ? Icons.warning_amber_rounded
+                            : Icons.schedule_rounded,
                     size: 8,
                     color: accent,
                   ),
                   const SizedBox(width: 3),
                   Text(
-                    expiredBatch ? 'VENCIDO' : 'VENCE EM BREVE',
+                    expiredBatch
+                        ? 'VENCIDO'
+                        : criticalBatch
+                            ? 'CRÍTICO'
+                            : 'VENCE EM BREVE',
                     style: TextStyle(
                       fontSize: 8,
                       color: accent,
