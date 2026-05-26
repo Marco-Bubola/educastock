@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'core/router/app_router.dart';
 import 'core/firebase/firebase_bootstrap.dart';
@@ -10,6 +12,12 @@ import 'core/theme/theme_mode_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // No web (incluindo PWA iOS), usa URLs path-based em vez de hash (#/...).
+  // Isso garante que rotas como /dashboard funcionem corretamente quando o app
+  // é aberto via Add-to-Home-Screen no iOS/iPadOS.
+  if (kIsWeb) {
+    usePathUrlStrategy();
+  }
   await initializeDateFormatting('pt_BR');
   await FirebaseBootstrap.initialize();
   runApp(const ProviderScope(child: EducaStockApp()));
