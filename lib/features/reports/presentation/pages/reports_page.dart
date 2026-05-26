@@ -40,7 +40,6 @@ final _keyCategoryChart = GlobalKey();
 // ─── Tutorial keys – Risk tab ─────────────────────────────────────────────
 final _keyRiskBanner = GlobalKey();
 final _keyRiskDonut = GlobalKey();
-final _keyRiskInsights = GlobalKey();
 
 // ─── Tutorial keys – Movements tab ───────────────────────────────────────
 final _keyMovSummary = GlobalKey();
@@ -112,18 +111,6 @@ List<TutorialStep> _riskTutorialSteps() => [
         hints: const [
           'Toque nas fatias para ver quantidade e %',
           'Vermelho alto? Execute o Colab para redistribuição urgente',
-        ],
-      ),
-      TutorialStep(
-        key: _keyRiskInsights,
-        title: 'Insights Automáticos',
-        description:
-            'Alertas gerados automaticamente pela IA com base no estado atual do estoque. Siga as recomendações para evitar perdas.',
-        icon: Icons.lightbulb_rounded,
-        align: ContentAlign.top,
-        hints: const [
-          'Alertas em vermelho = ação urgente',
-          'Sugestões em azul = melhorias preventivas',
         ],
       ),
     ];
@@ -1118,20 +1105,6 @@ class _MlRiskTab extends ConsumerWidget {
     final riskPredictionsAsync = ref.watch(batchRiskPredictionsProvider);
     final classifierSourceAsync = ref.watch(classifierSourceProvider);
 
-    // batch data for insights
-    final allBatches = ref.watch(allAvailableBatchesProvider).valueOrNull ?? [];
-    final exp7 = ref.watch(expiringBatchesProvider(7)).valueOrNull ?? [];
-    final exp30 = ref.watch(expiringBatchesProvider(30)).valueOrNull ?? [];
-    final totalItems = allBatches.fold<int>(0, (s, b) => s + b.quantity);
-    final expired = allBatches.where((b) => b.isExpired).length;
-    final insights = _buildInsights(
-      batches: allBatches,
-      exp7: exp7.length,
-      exp30: exp30.length,
-      expired: expired,
-      totalItems: totalItems,
-    );
-
     final predictions = riskPredictionsAsync.valueOrNull ?? [];
     final sortedPredictions = [...predictions]..sort(_sortByRisk);
     final classifierSrc = classifierSourceAsync.valueOrNull ?? 'rule_based';
@@ -1303,59 +1276,6 @@ class _MlRiskTab extends ConsumerWidget {
           ),
         const SizedBox(height: AppSpacing.md),
 
-        // ─── Insights do estoque
-        _SectionHeader(
-          title: 'Insights do Estoque',
-          subtitle: 'Alertas e recomendações automáticas',
-          icon: Icons.lightbulb_rounded,
-          color: AppColors.warning600,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _InsightsPanel(key: _keyRiskInsights, insights: insights),
-        const SizedBox(height: AppSpacing.md),
-
-        // ─── Legenda
-        _SectionHeader(
-          title: 'Como Funciona a Classificação',
-          subtitle: 'Entenda os níveis de risco',
-          icon: Icons.info_outline_rounded,
-          color: AppColors.secondaryBlue600,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _MlLegend(isDark: isDark, cs: cs),
-        const SizedBox(height: AppSpacing.md),
-
-        // ─── Tips
-        _TabTipCard(
-          tips: const [
-            _TipItem(
-              icon: Icons.psychology_rounded,
-              color: AppColors.brandPrimary600,
-              title: 'Classificação por IA',
-              body: 'A IA analisa dias para vencer, quantidade e histórico para classificar cada lote. Lotes "Críticos" precisam de ação imediata.',
-            ),
-            _TipItem(
-              icon: Icons.bar_chart_rounded,
-              color: AppColors.secondaryBlue600,
-              title: 'Confiança do Modelo',
-              body: 'Barras mais altas = modelo mais certo. Confiança abaixo de 60% pode indicar dados insuficientes ou situação ambígua.',
-            ),
-            _TipItem(
-              icon: Icons.local_shipping_rounded,
-              color: AppColors.danger600,
-              title: 'Ação com Críticos',
-              body: 'Use "Distribuir Críticos" para registrar saídas imediatas. Reduza o risco distribuindo os lotes às famílias prioritárias.',
-            ),
-            _TipItem(
-              icon: Icons.memory_rounded,
-              color: AppColors.success600,
-              title: 'Melhorar o Modelo',
-              body: 'Quanto mais lotes registrados, mais preciso o modelo fica. Execute o Colab para retreinar com dados reais do Firestore.',
-            ),
-          ],
-          isDark: isDark,
-          cs: cs,
-        ),
       ],
     );
   }
