@@ -264,9 +264,12 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                         controller: _searchCtrl,
                         onChanged: (v) =>
                             setState(() => _query = v.toLowerCase()),
+                        cursorColor: Colors.white,
                         style: const TextStyle(
                             color: Colors.white, fontSize: 14),
                         decoration: InputDecoration(
+                          filled: false,
+                          fillColor: Colors.transparent,
                           hintText: 'Buscar produto…',
                           hintStyle: TextStyle(
                             color: Colors.white.withValues(alpha: 0.55),
@@ -276,6 +279,8 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                               size: 18,
                               color: Colors.white.withValues(alpha: 0.8)),
                           border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
                           contentPadding:
                               const EdgeInsets.symmetric(vertical: 10),
                         ),
