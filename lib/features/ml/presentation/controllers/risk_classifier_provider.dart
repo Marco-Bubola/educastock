@@ -1,43 +1,76 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/risk_prediction.dart';
-import '../../domain/repositories/risk_classifier_repository.dart';
 import '../../data/repositories/rule_based_risk_classifier.dart';
-import '../../data/repositories/classifier_factory.dart';
+import '../../data/repositories/risk_classification_firestore_repository.dart';
+import '../../../../features/batches/domain/entities/batch.dart';
 import '../../../../features/batches/presentation/controllers/batches_provider.dart';
 
 // ---------------------------------------------------------------------------
-// Instância do classificador (singleton no ciclo de vida do app)
+// Repositório do Firestore (singleton)
+// ---------------------------------------------------------------------------
+//
+// O ML #1 (Classificação de Risco) NÃO roda mais no dispositivo.
+// O modelo Random Forest é treinado no Colab e grava o resultado por lote
+// na coleção `risk_classifications` do Firestore. O app apenas observa.
+//
+// Para lotes sem classificação na nuvem (recém-cadastrados, coleção vazia
+// ou notebook nunca executado), usamos o RuleBasedRiskClassifier local
+// como plano B determinístico.
+
+final riskClassificationRepoProvider =
+    Provider<RiskClassificationFirestoreRepository>(
+  (ref) => RiskClassificationFirestoreRepository(),
+);
+
+final _ruleFallbackProvider = Provider<RuleBasedRiskClassifier>(
+  (ref) => RuleBasedRiskClassifier(),
+);
+
+// ---------------------------------------------------------------------------
+// Stream das classificações do Firestore (todas, em tempo real)
 // ---------------------------------------------------------------------------
 
-/// Inicializa o classificador correto via factory com conditional imports.
-/// Web → RuleBasedRiskClassifier; Native → TFLite com fallback rule-based.
-final riskClassifierProvider = FutureProvider<RiskClassifierRepository>((ref) async {
-  return buildClassifier();
+final riskClassificationsStreamProvider =
+    StreamProvider<List<RiskPrediction>>((ref) {
+  final repo = ref.watch(riskClassificationRepoProvider);
+  return repo.watchAll();
 });
 
 // ---------------------------------------------------------------------------
-// Predições em batch (todos os lotes disponíveis)
+// Predições combinadas (Firestore + plano B local para o que faltar)
 // ---------------------------------------------------------------------------
 
-/// Estado atual de todas as predições de risco.
+/// Predição de risco para todos os lotes disponíveis.
+/// Cruza:
+///   - lotes ativos do estoque (allAvailableBatchesProvider)
+///   - classificações pré-calculadas no Firestore (risk_classifications)
+/// Quando não há classificação na nuvem para um lote, gera localmente
+/// via RuleBasedRiskClassifier (determinístico, sempre disponível).
 final batchRiskPredictionsProvider =
     FutureProvider<List<RiskPrediction>>((ref) async {
-  final classifierAsync = ref.watch(riskClassifierProvider);
-  final allBatchesAsync = ref.watch(allAvailableBatchesProvider);
+  final cloudAsync = ref.watch(riskClassificationsStreamProvider);
+  final batchesAsync = ref.watch(allAvailableBatchesProvider);
 
-  final classifier = await classifierAsync.when(
-    data: (c) async => c,
-    loading: () async {
-      await Future.delayed(const Duration(milliseconds: 200));
-      return RuleBasedRiskClassifier() as RiskClassifierRepository;
-    },
-    error: (_, __) async => RuleBasedRiskClassifier() as RiskClassifierRepository,
-  );
+  final batches = batchesAsync.valueOrNull ?? const <Batch>[];
+  if (batches.isEmpty) return const <RiskPrediction>[];
 
-  final batches = allBatchesAsync.valueOrNull ?? const [];
-  if (batches.isEmpty) return const [];
+  final cloud = cloudAsync.valueOrNull ?? const <RiskPrediction>[];
+  final cloudById = <String, RiskPrediction>{
+    for (final p in cloud) p.batchId: p,
+  };
 
-  return classifier.classifyAll(batches);
+  final fallback = ref.read(_ruleFallbackProvider);
+
+  final results = <RiskPrediction>[];
+  for (final b in batches) {
+    final fromCloud = cloudById[b.id];
+    if (fromCloud != null) {
+      results.add(fromCloud);
+    } else {
+      results.add(await fallback.classify(b));
+    }
+  }
+  return results;
 });
 
 /// Predição de risco para um único lote por ID.
@@ -66,7 +99,7 @@ final riskCountsProvider = FutureProvider<Map<RiskLevel, int>>((ref) async {
   return counts;
 });
 
-/// Lotes classificados como vermelho em ordem de risco decrescente.
+/// Lotes classificados como vermelho em ordem de confiança decrescente.
 final criticalBatchPredictionsProvider =
     FutureProvider<List<RiskPrediction>>((ref) async {
   final predictions = await ref.watch(batchRiskPredictionsProvider.future);
@@ -77,9 +110,14 @@ final criticalBatchPredictionsProvider =
   return critical;
 });
 
-/// Fonte atual do classificador ("tflite" ou "rule_based").
+/// Fonte predominante da classificação atual:
+///   - 'random_forest' quando há classificações vindas do Colab/Firestore
+///   - 'rule_based'    quando o app está usando apenas o plano B local
 final classifierSourceProvider = FutureProvider<String>((ref) async {
   final predictions = await ref.watch(batchRiskPredictionsProvider.future);
   if (predictions.isEmpty) return 'rule_based';
-  return predictions.first.source;
+  final fromCloud =
+      predictions.where((p) => p.source == 'random_forest').length;
+  // Maioria define a fonte exibida no rótulo do app.
+  return fromCloud >= predictions.length / 2 ? 'random_forest' : 'rule_based';
 });
