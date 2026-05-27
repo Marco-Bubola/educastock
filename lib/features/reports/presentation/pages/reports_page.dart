@@ -506,25 +506,7 @@ class ReportsPage extends ConsumerWidget {
         builder: (ctx, tutActive, _) => Scaffold(
           backgroundColor: cs.surface,
           body: Column(children: [
-            if (!tutActive)
-              _ReportsAppBar(
-                actions: [
-                  // Botão dicas tab-aware (ouve mudança de aba)
-                  Builder(builder: (innerCtx) {
-                    final tabCtrl = DefaultTabController.of(innerCtx);
-                    return AnimatedBuilder(
-                      animation: tabCtrl,
-                      builder: (_, __) => buildHelpButton(
-                        context: innerCtx,
-                        onPressed: () => showCasaTutorial(
-                          context: innerCtx,
-                          steps: _reportsTutorialForTab(tabCtrl.index),
-                        ),
-                      ),
-                    );
-                  }),
-                ],
-              ),
+            if (!tutActive) const _ReportsAppBar(),
             const Expanded(child: TabBarView(
               children: [
                 _ChartsTab(),
@@ -936,6 +918,18 @@ class _ChartsTab extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
           children: [
+            // ─── Botão de tutorial
+            Align(
+              alignment: Alignment.centerRight,
+              child: buildHelpButton(
+                context: context,
+                onPressed: () => showCasaTutorial(
+                  context: context,
+                  steps: _chartsTutorialSteps(),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
             // ─── Modern stats banner
             _ModernStatsBanner(
               totalBatches: batches.length,
@@ -1120,6 +1114,18 @@ class _MlRiskTab extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       children: [
+        // ─── Botão de tutorial
+        Align(
+          alignment: Alignment.centerRight,
+          child: buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: _riskTutorialSteps(),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
         // ─── Classifier badge
         _SectionHeader(
           title: 'Análise de Risco',
@@ -1716,6 +1722,18 @@ class _MovementsTabState extends ConsumerState<_MovementsTab> {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       children: [
+        // ─── Botão de tutorial
+        Align(
+          alignment: Alignment.centerRight,
+          child: buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: _movementsTutorialSteps(),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
         // ─── Modern period header
         _MovementsPeriodHeader(
           rangeLabel: rangeLabel,
@@ -4699,6 +4717,18 @@ class _ForecastReportTab extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       children: [
+        // ─── Botão de tutorial
+        Align(
+          alignment: Alignment.centerRight,
+          child: buildHelpButton(
+            context: context,
+            onPressed: () => showCasaTutorial(
+              context: context,
+              steps: _forecastTutorialSteps(),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
         // ─── Header section
         _SectionHeader(
           title: 'Previsão de Consumo',
