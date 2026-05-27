@@ -264,7 +264,7 @@ void showCasaTutorial({
   final coachMark = TutorialCoachMark(
     targets: targets,
     colorShadow: const Color(0xFF050B17),
-    opacityShadow: 0.94,
+    opacityShadow: 0.60, // mais transparente → user vê e consegue scrollar
     hideSkip: true,
     focusAnimationDuration: const Duration(milliseconds: 380),
     unFocusAnimationDuration: const Duration(milliseconds: 240),
@@ -341,10 +341,11 @@ class _TutorialContentState extends State<_TutorialContent>
 
     // Reservas:
     //  - safe area top + bottom (notch, gestureBar)
-    //  - ~170 barra de navegação fixa no TOPO (contador + dots + botões)
+    //  - ~60 status/notch
     //  - ~120 spotlight do tutorial_coach_mark
+    //  - ~180 barra de navegação fixa no RODAPÉ (Próximo/Anterior/Fechar)
     //  - ~24 padding extra de respiro
-    final reservedSpace = mq.padding.top + mq.padding.bottom + 170 + 120 + 24;
+    final reservedSpace = mq.padding.top + mq.padding.bottom + 60 + 120 + 180 + 24;
     final maxHeight = (screenHeight - reservedSpace).clamp(220.0, 480.0);
 
     return ConstrainedBox(
@@ -731,7 +732,7 @@ class _FixedBottomBar extends StatelessWidget {
     return Positioned(
       left: 0,
       right: 0,
-      top: 0,
+      bottom: 0,
       child: ValueListenableBuilder<_BarState?>(
         valueListenable: _barStateNotifier,
         builder: (_, state, __) {
@@ -741,9 +742,9 @@ class _FixedBottomBar extends StatelessWidget {
             child: Directionality(
               textDirection: TextDirection.ltr,
               child: SafeArea(
-                bottom: false,
+                top: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                   child: _BottomBarContent(state: state),
                 ),
               ),
