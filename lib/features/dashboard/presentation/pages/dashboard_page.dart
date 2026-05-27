@@ -226,17 +226,21 @@ class DashboardPage extends ConsumerWidget {
 
             const SizedBox(height: AppSpacing.xl),
 
-            // Análise de Risco ML
-            KeyedSubtree(
+            // Análise de Risco ML — Container garante RenderBox válido p/ tutorial
+            Container(
               key: _keyDashMlRisk,
+              constraints: const BoxConstraints(minHeight: 60),
+              width: double.infinity,
               child: _MlRiskSection(),
             ),
 
             const SizedBox(height: AppSpacing.xl),
 
-            // Previsão de Consumo Prophet
-            KeyedSubtree(
+            // Previsão de Consumo Prophet — idem
+            Container(
               key: _keyDashMlForecast,
+              constraints: const BoxConstraints(minHeight: 60),
+              width: double.infinity,
               child: const _ForecastSection(),
             ),
 
