@@ -509,7 +509,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                     title: 'Selecionar Produtos',
                     description: 'Cada card é um produto disponível. Mostra nome, marca, quantidade total em estoque e badge colorido de validade do lote mais próximo do vencimento. Use os botões + e - para ajustar quanto vai distribuir. O sistema aplica FEFO automaticamente.',
                     icon: Icons.inventory_2_rounded,
-                    align: ContentAlign.top,
+                    align: ContentAlign.bottom,
                     hints: const [
                       '🔴 Vermelho: lote vencido — confira antes de distribuir',
                       '🟡 Amarelo: vence em 30 dias — prioridade alta',
@@ -524,7 +524,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                     title: 'Selecionar Receita',
                     description: 'Lista de receitas ativas (modelos prontos com múltiplos produtos). Toque em uma receita para selecionar — o sistema calcula automaticamente todas as quantidades necessárias e verifica se há estoque suficiente.',
                     icon: Icons.menu_book_rounded,
-                    align: ContentAlign.top,
+                    align: ContentAlign.bottom,
                     hints: const [
                       '📋 Cada receita = vários produtos de uma vez',
                       '✅ Sistema verifica estoque antes de executar',
