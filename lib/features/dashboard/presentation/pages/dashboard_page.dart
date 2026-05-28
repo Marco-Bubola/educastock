@@ -144,9 +144,7 @@ class DashboardPage extends ConsumerWidget {
                       : constraints.maxWidth >= 620
                           ? 4
                           : 3;
-                  return KeyedSubtree(
-                    key: _keyDashQuickActions,
-                    child: GridView.count(
+                  return GridView.count(
                     crossAxisCount: cross,
                     mainAxisSpacing: AppSpacing.sm,
                     crossAxisSpacing: AppSpacing.sm,
@@ -154,14 +152,17 @@ class DashboardPage extends ConsumerWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
-                      _AnimatedQuickAction(
-                        delayMs: 0,
-                        child: _QuickActionTile(
-                          icon: Icons.qr_code_scanner_rounded,
-                          label: 'Escanear',
-                          subtitle: 'Entrada por código',
-                          color: AppColors.brandPrimary600,
-                          onTap: () => context.push(AppRoutes.scanner),
+                      KeyedSubtree(
+                        key: _keyDashQuickActions,
+                        child: _AnimatedQuickAction(
+                          delayMs: 0,
+                          child: _QuickActionTile(
+                            icon: Icons.qr_code_scanner_rounded,
+                            label: 'Escanear',
+                            subtitle: 'Entrada por código',
+                            color: AppColors.brandPrimary600,
+                            onTap: () => context.push(AppRoutes.scanner),
+                          ),
                         ),
                       ),
                       _AnimatedQuickAction(
@@ -215,7 +216,6 @@ class DashboardPage extends ConsumerWidget {
                         ),
                       ),
                     ],
-                    ),
                   );
                 },
               ),
