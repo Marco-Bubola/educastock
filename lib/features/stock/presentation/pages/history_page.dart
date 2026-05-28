@@ -1067,11 +1067,21 @@ class _SessionCard extends StatefulWidget {
 class _SessionCardState extends State<_SessionCard> {
   bool _expanded = false;
 
+  /// Retorna true quando a saída é considerada DESCARTE (baixa por vencimento
+  /// ou avaria). Visualmente exibimos com identidade própria para diferenciar
+  /// de saídas normais (uso/distribuição/doação).
+  bool get _isDiscard {
+    final r = widget.movements.first.reasonCode;
+    return r == 'validade' || r == 'avaria';
+  }
+
   @override
   Widget build(BuildContext context) {
     final first = widget.movements.first;
     final reasonKey = first.reasonCode ?? 'outro';
     final colors = widget.reasonColors[reasonKey] ?? widget.reasonColors['outro']!;
+    final reasonLabel = widget.reasonLabels[reasonKey] ?? 'Saída';
+    final reasonIcon = widget.reasonIcons[reasonKey] ?? Icons.outbound_rounded;
     final totalQty = widget.movements.fold<int>(0, (s, m) => s + m.quantity);
     final timeStr = widget.formatTime(first.performedAt);
     final firstName = first.performedByName.split(' ').first;
@@ -1079,6 +1089,10 @@ class _SessionCardState extends State<_SessionCard> {
     final onCard = isDark ? const Color(0xFFE5E7EB) : const Color(0xFF0F172A);
     final subColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
     final divColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9);
+    final discard = _isDiscard;
+    final typeLabel = discard ? 'DESCARTE' : 'SAÍDA';
+    final typeIcon =
+        discard ? Icons.delete_sweep_rounded : Icons.outbound_rounded;
 
     final preview = widget.movements.take(4).toList();
     final extra = widget.movements.length > 4 ? widget.movements.length - 4 : 0;
@@ -1088,13 +1102,27 @@ class _SessionCardState extends State<_SessionCard> {
       decoration: BoxDecoration(
         color: widget.cardBg,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: widget.borderColor),
+        border: Border.all(
+          color: discard
+              ? colors[0].withValues(alpha: isDark ? 0.45 : 0.30)
+              : widget.borderColor,
+          width: discard ? 1.2 : 1,
+        ),
         boxShadow: isDark
-            ? []
+            ? [
+                if (discard)
+                  BoxShadow(
+                    color: colors[0].withValues(alpha: 0.18),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+              ]
             : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
+                  color: discard
+                      ? colors[0].withValues(alpha: 0.10)
+                      : Colors.black.withValues(alpha: 0.05),
+                  blurRadius: discard ? 14 : 10,
                   offset: const Offset(0, 3),
                 ),
               ],
@@ -1103,7 +1131,7 @@ class _SessionCardState extends State<_SessionCard> {
         children: [
           // ── Barra colorida no topo ───────────────────────────────────
           Container(
-            height: 5,
+            height: discard ? 6 : 5,
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: colors),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(17)),
@@ -1116,62 +1144,134 @@ class _SessionCardState extends State<_SessionCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Linha 1: hora + responsável + total
+                // ── Linha 0: badge de tipo (DESCARTE/SAÍDA) + motivo + total
                 Row(
                   children: [
+                    // Badge de TIPO (gradiente forte)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
-                        color: colors[0].withValues(alpha: isDark ? 0.18 : 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        gradient: LinearGradient(colors: colors),
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors[0].withValues(alpha: 0.35),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.access_time_rounded, size: 13, color: colors[0]),
+                          Icon(typeIcon, size: 12, color: Colors.white),
                           const SizedBox(width: 4),
                           Text(
-                            timeStr,
-                            style: TextStyle(
-                              color: colors[0],
+                            typeLabel,
+                            style: const TextStyle(
+                              color: Colors.white,
                               fontWeight: FontWeight.w800,
-                              fontSize: 13,
+                              fontSize: 10.5,
+                              letterSpacing: 0.4,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Icon(Icons.person_outline_rounded, size: 13, color: subColor),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              firstName,
-                              style: TextStyle(color: subColor, fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                    const SizedBox(width: 6),
+                    // Pill do motivo (com ícone)
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color:
+                              colors[0].withValues(alpha: isDark ? 0.18 : 0.10),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          border: Border.all(
+                            color: colors[0].withValues(alpha: 0.30),
+                            width: 0.8,
                           ),
-                        ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(reasonIcon, size: 11, color: colors[0]),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                reasonLabel,
+                                style: TextStyle(
+                                  color: colors[0],
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                    const Spacer(),
                     // Badge total
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
+                        color: isDark
+                            ? const Color(0xFF1F2937)
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
                         border: Border.all(color: widget.borderColor),
                       ),
                       child: Text(
                         '$totalQty un',
                         style: TextStyle(
                           color: onCard,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11.5,
                         ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Linha 1: hora + responsável
+                Row(
+                  children: [
+                    Icon(Icons.access_time_rounded,
+                        size: 12, color: subColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      timeStr,
+                      style: TextStyle(
+                        color: onCard,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      width: 3,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: subColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Icon(Icons.person_outline_rounded,
+                        size: 12, color: subColor),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        firstName,
+                        style: TextStyle(color: subColor, fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
