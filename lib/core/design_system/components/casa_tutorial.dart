@@ -233,21 +233,11 @@ void showCasaTutorial({
           builder: (ctx, controller) {
             // Sincroniza o estado dos botões com o step atual
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              // Decide se a barra vai no topo ou rodapé baseado na posição
-              // do widget alvo dentro da tela. Se o alvo está na METADE
-              // INFERIOR, mostra a barra no TOPO. Senão, no rodapé.
-              var barAtTop = false;
-              final keyCtx = step.key.currentContext;
-              if (keyCtx != null && keyCtx.mounted) {
-                final ro = keyCtx.findRenderObject();
-                if (ro is RenderBox && ro.attached && ro.hasSize) {
-                  final pos = ro.localToGlobal(Offset.zero);
-                  final screenH = MediaQuery.of(ctx).size.height;
-                  // Centro do widget alvo
-                  final centerY = pos.dy + ro.size.height / 2;
-                  barAtTop = centerY > screenH * 0.55;
-                }
-              }
+              // A barra fica SEMPRE no lado OPOSTO ao conteúdo do tutorial:
+              //  - conteúdo ABAIXO do alvo (align bottom) → barra no TOPO
+              //  - conteúdo ACIMA do alvo (align top)     → barra no RODAPÉ
+              // Assim a barra nunca cobre o texto descritivo.
+              final barAtTop = step.align == ContentAlign.bottom;
               _barStateNotifier.value = _BarState(
                 stepIndex: i,
                 totalSteps: steps.length,
@@ -366,7 +356,7 @@ class _TutorialContentState extends State<_TutorialContent>
     //  - ~180 barra de navegação fixa no RODAPÉ (Próximo/Anterior/Fechar)
     //  - ~24 padding extra de respiro
     final reservedSpace = mq.padding.top + mq.padding.bottom + 60 + 120 + 180 + 24;
-    final maxHeight = (screenHeight - reservedSpace).clamp(220.0, 480.0);
+    final maxHeight = (screenHeight - reservedSpace).clamp(220.0, 560.0);
 
     return ConstrainedBox(
       constraints: BoxConstraints(
