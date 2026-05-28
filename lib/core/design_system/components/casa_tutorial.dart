@@ -51,6 +51,9 @@ class _BarState {
   final VoidCallback onNext;
   final VoidCallback onSkip;
   final bool isLast;
+  /// Se true, a barra renderiza no TOPO da tela (quando target está embaixo).
+  /// Se false (default), renderiza no RODAPÉ.
+  final bool barAtTop;
 
   const _BarState({
     required this.stepIndex,
@@ -60,6 +63,7 @@ class _BarState {
     required this.onNext,
     required this.onSkip,
     required this.isLast,
+    this.barAtTop = false,
   });
 }
 
@@ -229,6 +233,21 @@ void showCasaTutorial({
           builder: (ctx, controller) {
             // Sincroniza o estado dos botões com o step atual
             WidgetsBinding.instance.addPostFrameCallback((_) {
+              // Decide se a barra vai no topo ou rodapé baseado na posição
+              // do widget alvo dentro da tela. Se o alvo está na METADE
+              // INFERIOR, mostra a barra no TOPO. Senão, no rodapé.
+              var barAtTop = false;
+              final keyCtx = step.key.currentContext;
+              if (keyCtx != null && keyCtx.mounted) {
+                final ro = keyCtx.findRenderObject();
+                if (ro is RenderBox && ro.attached && ro.hasSize) {
+                  final pos = ro.localToGlobal(Offset.zero);
+                  final screenH = MediaQuery.of(ctx).size.height;
+                  // Centro do widget alvo
+                  final centerY = pos.dy + ro.size.height / 2;
+                  barAtTop = centerY > screenH * 0.55;
+                }
+              }
               _barStateNotifier.value = _BarState(
                 stepIndex: i,
                 totalSteps: steps.length,
@@ -243,6 +262,7 @@ void showCasaTutorial({
                   onSkip?.call();
                 },
                 isLast: i == steps.length - 1,
+                barAtTop: barAtTop,
               );
             });
             return Material(
@@ -729,29 +749,33 @@ class _FixedBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      child: ValueListenableBuilder<_BarState?>(
-        valueListenable: _barStateNotifier,
-        builder: (_, state, __) {
-          if (state == null) return const SizedBox.shrink();
-          return Material(
+    return ValueListenableBuilder<_BarState?>(
+      valueListenable: _barStateNotifier,
+      builder: (_, state, __) {
+        if (state == null) return const SizedBox.shrink();
+        return Positioned(
+          left: 0,
+          right: 0,
+          top: state.barAtTop ? 0 : null,
+          bottom: state.barAtTop ? null : 0,
+          child: Material(
             type: MaterialType.transparency,
             child: Directionality(
               textDirection: TextDirection.ltr,
               child: SafeArea(
-                top: false,
+                top: state.barAtTop,
+                bottom: !state.barAtTop,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  padding: state.barAtTop
+                      ? const EdgeInsets.fromLTRB(16, 10, 16, 8)
+                      : const EdgeInsets.fromLTRB(16, 8, 16, 12),
                   child: _BottomBarContent(state: state),
                 ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
