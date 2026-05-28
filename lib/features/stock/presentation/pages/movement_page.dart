@@ -74,16 +74,39 @@ class _MovementPageState extends ConsumerState<MovementPage> {
   @override
   void initState() {
     super.initState();
-    // Pré-seleciona produto vindo de URL (ex.: vindo de um alerta crítico)
-    final pid = widget.prefillProductId;
-    if (pid != null && pid.isNotEmpty) {
-      _selectedQtyByProduct[pid] = 1;
-    }
+    // Pré-seleciona o motivo (sync — fast path)
     if (widget.prefillReason != null && widget.prefillReason!.isNotEmpty) {
       final valid = MovementReasonCode.values
           .firstWhere((r) => r.name == widget.prefillReason,
               orElse: () => MovementReasonCode.uso);
       _reasonCode = valid.name;
+    }
+
+    // Pré-seleciona produto vindo de URL (ex.: alerta crítico).
+    // Para flows normais (uso): 1 unidade.
+    final pid = widget.prefillProductId;
+    if (pid != null && pid.isNotEmpty) {
+      _selectedQtyByProduct[pid] = 1;
+    }
+
+    // Se vier batchId (descarte/saída de lote específico): carrega o lote
+    // e pré-seleciona a QUANTIDADE TOTAL do lote — útil para registrar
+    // baixa de lote vencido em um único toque.
+    if (widget.batchId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          final batch =
+              await ref.read(batchByIdProvider(widget.batchId).future);
+          if (!mounted || batch == null) return;
+          setState(() {
+            // Sobrescreve a quantidade 1 da pré-seleção sync com o total
+            _selectedQtyByProduct[batch.productId] = batch.quantity;
+          });
+        } catch (_) {
+          // Se falhar (offline, lote inexistente), mantém o que estiver
+          // pré-selecionado.
+        }
+      });
     }
   }
 
@@ -586,19 +609,17 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                     ),
                   const SizedBox(height: AppSpacing.sm),
                   if (_mode == _OutputMode.products) ...[
-                    KeyedSubtree(
-                      key: _keyProductGrid,
-                      child: GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: filteredProducts.length,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 10,
-                          crossAxisSpacing: 10,
-                          childAspectRatio: 0.72,
-                        ),
-                        itemBuilder: (_, i) {
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filteredProducts.length,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: 0.72,
+                      ),
+                      itemBuilder: (_, i) {
                           final p = filteredProducts[i];
                           final available = _availableForProduct(p.id, batches);
                           final qty = _selectedQtyByProduct[p.id] ?? 0;
@@ -627,7 +648,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                               b.expiryDate != null &&
                               b.expiryDate!.isBefore(now));
 
-                          return _ProductOutputCard(
+                          final card = _ProductOutputCard(
                             product: p,
                             available: available,
                             qty: qty,
@@ -652,9 +673,14 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                                     )
                                 : null,
                           );
+                          // Spotlight do tutorial só no PRIMEIRO card
+                          if (i == 0) {
+                            return KeyedSubtree(
+                                key: _keyProductGrid, child: card);
+                          }
+                          return card;
                         },
                       ),
-                    ),
                   ] else ...[
                     recipesAsync.when(
                       data: (recipes) {
