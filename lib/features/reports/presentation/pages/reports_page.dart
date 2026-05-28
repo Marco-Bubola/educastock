@@ -501,22 +501,19 @@ class ReportsPage extends ConsumerWidget {
 
     return DefaultTabController(
       length: 4,
-      child: ValueListenableBuilder<bool>(
-        valueListenable: tutorialActiveNotifier,
-        builder: (ctx, tutActive, _) => Scaffold(
-          backgroundColor: cs.surface,
-          body: Column(children: [
-            if (!tutActive) const _ReportsAppBar(),
-            const Expanded(child: TabBarView(
-              children: [
-                _ChartsTab(),
-                _MlRiskTab(),
-                _MovementsTab(),
-                _ForecastReportTab(),
-              ],
-            )),
-          ]),
-        ),
+      child: Scaffold(
+        backgroundColor: cs.surface,
+        body: const Column(children: [
+          _ReportsAppBar(),
+          Expanded(child: TabBarView(
+            children: [
+              _ChartsTab(),
+              _MlRiskTab(),
+              _MovementsTab(),
+              _ForecastReportTab(),
+            ],
+          )),
+        ]),
       ),
     );
   }
