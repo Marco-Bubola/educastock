@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/design_system/design_system.dart';
+import '../../../batches/presentation/controllers/batches_provider.dart';
 
 // ─── Helpers de localização ───────────────────────────────────────────────────
 
@@ -234,18 +236,7 @@ class _OutputViewPageState extends State<OutputViewPage>
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: context.pageBg,
-        body: Column(children: [
-        ModernProfileAppBar(
-          title: 'Relatório de Saída',
-          subtitle: 'Detalhes da distribuição',
-          pageIcon: Icons.task_alt_rounded,
-          iconColor: const Color(0xFF22C55E),
-          showBackButton: true,
-          actions: [
-            buildHelpButton(context: context, onPressed: _showTutorial),
-          ],
-        ),
-        Expanded(child: CustomScrollView(
+        body: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(
@@ -256,6 +247,7 @@ class _OutputViewPageState extends State<OutputViewPage>
                 createdAt: createdAt,
                 checkAnim: _anim(0.0, 0.30, curve: Curves.elasticOut),
                 fadeAnim: _anim(0.08, 0.40),
+                onHelp: _showTutorial,
               ),
             ),
             SliverToBoxAdapter(
@@ -343,8 +335,7 @@ class _OutputViewPageState extends State<OutputViewPage>
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
-        )),
-        ]),
+        ),
         bottomNavigationBar: _BottomBar(isDark: isDark),
       ),
     );
@@ -736,13 +727,14 @@ class _BottomBar extends StatelessWidget {
 
 // ─── Hero header ─────────────────────────────────────────────────────────────
 
-class _HeroHeader extends StatelessWidget {
+class _HeroHeader extends ConsumerWidget {
   final String outputId;
   final String performedByName;
   final String reasonLabel;
   final DateTime? createdAt;
   final Animation<double> checkAnim;
   final Animation<double> fadeAnim;
+  final VoidCallback onHelp;
 
   const _HeroHeader({
     required this.outputId,
@@ -751,21 +743,61 @@ class _HeroHeader extends StatelessWidget {
     required this.createdAt,
     required this.checkAnim,
     required this.fadeAnim,
+    required this.onHelp,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final fmt = DateFormat('dd/MM/yyyy  •  HH:mm');
     final shortId = outputId.length > 16 ? '${outputId.substring(0, 16)}…' : outputId;
+    final alertCount = ref.watch(allAvailableBatchesProvider).when(
+          data: (list) => list
+              .where((b) =>
+                  !b.noExpiry && (b.isExpired || b.daysToExpiry <= 30))
+              .length,
+          loading: () => 0,
+          error: (_, __) => 0,
+        );
 
     return Container(
       decoration: const BoxDecoration(gradient: _kNavy),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-      child: FadeTransition(
-        opacity: fadeAnim,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Barra superior com ações ──
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 12, 0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white, size: 20),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                  const Spacer(),
+                  buildHelpButton(context: context, onPressed: onHelp),
+                  CasaAlertsBellButton(
+                    alertCount: alertCount,
+                    onDarkBg: true,
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: CasaThemeToggleButton(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // ── Hero content ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            child: FadeTransition(
+              opacity: fadeAnim,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
             // ── Título com ícone ao lado ──
             ScaleTransition(
               scale: checkAnim,
@@ -850,6 +882,9 @@ class _HeroHeader extends StatelessWidget {
             ),
           ],
         ),
+            ),
+          ),
+        ],
       ),
     );
   }
