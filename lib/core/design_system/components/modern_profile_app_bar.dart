@@ -11,7 +11,6 @@ import '../tokens/spacing_tokens.dart';
 import '../tokens/typography_tokens.dart';
 import 'casa_action_sheet.dart';
 import 'casa_dialog.dart';
-import 'casa_tutorial.dart';
 
 // Gradiente padrão de todos os headers do app
 const _kHeaderGradient = LinearGradient(
@@ -69,14 +68,9 @@ class ModernProfileAppBar extends ConsumerWidget {
           error: (_, __) => 0,
         );
 
-    return ValueListenableBuilder<bool>(
-      valueListenable: tutorialActiveNotifier,
-      builder: (_, tutActive, child) => AnimatedOpacity(
-        opacity: tutActive ? 0.0 : 1.0,
-        duration: const Duration(milliseconds: 250),
-        child: child,
-      ),
-      child: AnnotatedRegion<SystemUiOverlayStyle>(
+    // Header sempre visível — necessário pro tutorial conseguir spotlight
+    // em elementos como search/filtros dentro do extraContent.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle.light
             .copyWith(statusBarColor: Colors.transparent),
         child: Container(
@@ -288,7 +282,6 @@ class ModernProfileAppBar extends ConsumerWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }
