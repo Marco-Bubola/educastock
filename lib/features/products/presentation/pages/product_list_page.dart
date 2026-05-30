@@ -447,10 +447,10 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                         AppSpacing.xs, AppSpacing.md, AppSpacing.xxxl),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      mainAxisSpacing: AppSpacing.sm,
-                      crossAxisSpacing: AppSpacing.sm,
-                      childAspectRatio: 0.72,
+                      crossAxisCount: 2,
+                      mainAxisSpacing: AppSpacing.md,
+                      crossAxisSpacing: AppSpacing.md,
+                      childAspectRatio: 0.74,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
@@ -479,12 +479,12 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                   padding: const EdgeInsets.all(AppSpacing.md),
                   gridDelegate:
                       const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisSpacing: AppSpacing.xs,
-                    crossAxisSpacing: AppSpacing.xs,
-                    childAspectRatio: 0.72,
+                    crossAxisCount: 2,
+                    mainAxisSpacing: AppSpacing.md,
+                    crossAxisSpacing: AppSpacing.md,
+                    childAspectRatio: 0.74,
                   ),
-                  itemCount: 8,
+                  itemCount: 6,
                   itemBuilder: (_, __) => const CasaCardSkeleton(),
                 ),
                 error: (e, _) => CasaEmptyState(
@@ -1502,15 +1502,9 @@ class _ProductGridCard extends ConsumerWidget {
     this.inactive = false,
   });
 
-  static const _paletteRed    = [Color(0xFFDC2626), Color(0xFFB91C1C)];
-  static const _paletteYellow = [Color(0xFFD97706), Color(0xFFB45309)];
-  static const _paletteGreen  = [Color(0xFF059669), Color(0xFF047857)];
-  static const _paletteBlue   = [Color(0xFF2563EB), Color(0xFF1D4ED8)];
-  static const _paletteGray   = [Color(0xFF6B7280), Color(0xFF4B5563)];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
     final dateFmt = DateFormat('dd/MM');
 
     final batches = ref
@@ -1524,370 +1518,131 @@ class _ProductGridCard extends ConsumerWidget {
     final batchData = nearestBatch.firstOrNull;
     final mlRisk = worstRiskLevel(batches);
 
-    // Status de validade
-    Color expiryColor;
-    IconData expiryIcon;
-    String? expiryBadge; // rótulo curto para o badge do header
+    // Define paleta e badge de validade
     List<Color> palette;
+    String? expiryLabel;
+    Color expiryBadgeColor = AppColors.brandPrimary600;
+    IconData expiryBadgeIcon = Icons.event_rounded;
 
     if (!product.isPerishable || batchData == null) {
-      expiryColor = const Color(0xFF60A5FA);
-      expiryIcon  = Icons.all_inclusive_rounded;
-      expiryBadge = null;
-      palette     = _paletteBlue;
+      palette = CasaProductCard.paletteBlue;
     } else if (batchData.isExpired) {
-      expiryColor = const Color(0xFFF87171);
-      expiryIcon  = Icons.cancel_rounded;
-      expiryBadge = 'VENCIDO';
-      palette     = _paletteRed;
+      palette = CasaProductCard.paletteRed;
+      expiryLabel = 'VENCIDO';
+      expiryBadgeColor = const Color(0xFFFCA5A5);
+      expiryBadgeIcon = Icons.cancel_rounded;
     } else if (batchData.daysToExpiry <= 7) {
-      expiryColor = const Color(0xFFFCA5A5);
-      expiryIcon  = Icons.warning_amber_rounded;
-      expiryBadge = batchData.expiryDate != null
-          ? '${dateFmt.format(batchData.expiryDate!)}·${batchData.daysToExpiry}d'
+      palette = CasaProductCard.paletteRed;
+      expiryLabel = batchData.expiryDate != null
+          ? '${dateFmt.format(batchData.expiryDate!)} · ${batchData.daysToExpiry}d'
           : 'CRÍTICO';
-      palette = _paletteRed;
+      expiryBadgeColor = const Color(0xFFFCA5A5);
+      expiryBadgeIcon = Icons.warning_amber_rounded;
     } else if (batchData.daysToExpiry <= 30) {
-      expiryColor = const Color(0xFFFDE68A);
-      expiryIcon  = Icons.schedule_rounded;
-      expiryBadge = batchData.expiryDate != null
-          ? '${dateFmt.format(batchData.expiryDate!)}·${batchData.daysToExpiry}d'
+      palette = CasaProductCard.paletteYellow;
+      expiryLabel = batchData.expiryDate != null
+          ? '${dateFmt.format(batchData.expiryDate!)} · ${batchData.daysToExpiry}d'
           : 'ATENÇÃO';
-      palette = _paletteYellow;
+      expiryBadgeColor = const Color(0xFFFDE68A);
+      expiryBadgeIcon = Icons.schedule_rounded;
     } else {
-      expiryColor = const Color(0xFF6EE7B7);
-      expiryIcon  = Icons.check_circle_rounded;
-      expiryBadge = null; // seguro: não polui o header
-      palette     = _paletteGreen;
+      palette = CasaProductCard.paletteGreen;
     }
 
-    // Produto sem estoque (inativo) sobrescreve toda a coloração com cinza
-    // e exibe badge "INATIVO".
     if (inactive) {
-      palette = _paletteGray;
-      expiryColor = const Color(0xFF9CA3AF);
-      expiryIcon = Icons.do_not_disturb_on_outlined;
-      expiryBadge = 'INATIVO';
+      palette = CasaProductCard.paletteGray;
+      expiryLabel = 'INATIVO';
+      expiryBadgeColor = const Color(0xFF9CA3AF);
+      expiryBadgeIcon = Icons.do_not_disturb_on_outlined;
     }
 
-    // Detecta estado de urgência para mostrar/esconder o botão rápido de ações
     final isCritical = product.isPerishable && batchData != null &&
         (batchData.isExpired || batchData.daysToExpiry <= 7);
     final isWarning = product.isPerishable && batchData != null &&
         !batchData.isExpired &&
         batchData.daysToExpiry > 7 && batchData.daysToExpiry <= 30;
-    final showQuickAction = !inactive && (isCritical || isWarning);
 
-    final accent      = palette[0];
-    final accentDark  = palette[1];
-    final cardBg      = isDark ? const Color(0xFF0F172A) : Colors.white;
-    final borderColor = accent.withValues(alpha: isDark ? 0.35 : 0.20);
-
-    final entryFade = TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 180 + index * 8),
-      curve: Curves.easeOutCubic,
-      builder: (_, v, child) => Opacity(
-        opacity: v * (inactive ? 0.62 : 1),
-        child: Transform.translate(offset: Offset(0, 10 * (1 - v)), child: child),
-      ),
-      child: GestureDetector(
+    return GestureDetector(
+      onLongPress: (isCritical || isWarning)
+          ? () {
+              HapticFeedback.mediumImpact();
+              _showProductActionsSheet(
+                context,
+                ref,
+                product: product,
+                nearestBatch: batchData,
+                isCritical: isCritical,
+                isWarning: isWarning,
+              );
+            }
+          : null,
+      child: CasaProductCard(
+        name: product.name,
+        imageUrl: product.imageUrl,
+        fallbackIcon: _categoryIcon(product.category),
+        palette: palette,
         onTap: onTap,
-        onLongPress: () {
-          HapticFeedback.mediumImpact();
-          _showProductActionsSheet(
-            context,
-            ref,
-            product: product,
-            nearestBatch: batchData,
-            isCritical: isCritical,
-            isWarning: isWarning,
-          );
-        },
-        child: Container(
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: borderColor, width: 1.2),
-            boxShadow: [
-              BoxShadow(
-                color: accent.withValues(alpha: isDark ? 0.20 : 0.12),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+        inactive: inactive,
+        animationIndex: index,
+        headerBadgeLeft: mlRisk != null && !inactive
+            ? Tooltip(
+                message: 'Risco ML: ${mlRisk.label}',
+                child: RiskBadge(level: mlRisk, compact: true),
+              )
+            : null,
+        headerBadgeRight: expiryLabel != null
+            ? CasaProductBadge(
+                icon: expiryBadgeIcon,
+                label: expiryLabel.split('·').first.trim(),
+                accent: expiryBadgeColor,
+              )
+            : (!product.isPerishable
+                ? const CasaProductBadge(
+                    label: '∞',
+                    accent: Color(0xFFE0F2FE),
+                  )
+                : null),
+        footer: Row(
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: palette[0].withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(7),
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ─── Header compacto com gradiente e ícone de categoria ───
-              Stack(
-                clipBehavior: Clip.none, // permite que o botão bolt vaze
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    height: 62,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [accent, accentDark],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius:
-                          const BorderRadius.vertical(top: Radius.circular(13)),
-                    ),
-                    child: Stack(
-                      children: [
-                        // Círculo decorativo
-                        Positioned(
-                          right: -10, top: -10,
-                          child: Container(
-                            width: 44, height: 44,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.08),
-                            ),
-                          ),
-                        ),
-                        Center(
-                          child: product.imageUrl != null &&
-                                  product.imageUrl!.isNotEmpty
-                              ? ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(13)),
-                                  child: Image.network(
-                                    product.imageUrl!,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: 62,
-                                  ),
-                                )
-                              : Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.18),
-                                    borderRadius: BorderRadius.circular(9),
-                                    border: Border.all(
-                                      color: Colors.white.withValues(alpha: 0.30),
-                                      width: 1.2,
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    _categoryIcon(product.category),
-                                    color: Colors.white,
-                                    size: 18,
-                                  ),
-                                ),
-                        ),
-                      ],
+                  Icon(Icons.inventory_2_rounded,
+                      size: 11, color: palette[0]),
+                  const SizedBox(width: 4),
+                  Text(
+                    inactive ? 'Sem estoque' : '$totalQty ${product.unit ?? "un"}',
+                    style: AppTypography.labelSmall.copyWith(
+                      color: palette[0],
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10.5,
                     ),
                   ),
-
-                  // Badge de validade (topo-direito do header)
-                  if (expiryBadge != null)
-                    Positioned(
-                      top: 5, right: 5,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.52),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: expiryColor.withValues(alpha: 0.60),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(expiryIcon, size: 7, color: expiryColor),
-                            const SizedBox(width: 2),
-                            Text(
-                              expiryBadge.split('·').first.trim(),
-                              style: TextStyle(
-                                fontSize: 7.5,
-                                color: expiryColor,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.1,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                  // Badge "∞" para não perecível
-                  if (!product.isPerishable)
-                    Positioned(
-                      top: 5, right: 5,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.18),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: const Text(
-                          '∞',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // Badge ML (canto superior esquerdo) — risco previsto
-                  if (mlRisk != null && !inactive)
-                    Positioned(
-                      top: 5, left: 5,
-                      child: Tooltip(
-                        message: 'Risco ML: ${mlRisk.label}',
-                        child: RiskBadge(level: mlRisk, compact: true),
-                      ),
-                    ),
-
-                  // Botão de ação rápida (raio) — só em críticos/atenção
-                  if (showQuickAction)
-                    Positioned(
-                      bottom: -10, right: 6,
-                      child: _QuickActionButton(
-                        color: accent,
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          _showProductActionsSheet(
-                            context,
-                            ref,
-                            product: product,
-                            nearestBatch: batchData,
-                            isCritical: isCritical,
-                            isWarning: isWarning,
-                          );
-                        },
-                      ),
-                    ),
                 ],
               ),
-
-              // ─── Corpo compacto ───────────────────────────────────────
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(7, 7, 7, 7),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Nome do produto
-                      Text(
-                        product.name,
-                        style: TextStyle(
-                          color: isDark
-                              ? const Color(0xFFF1F5F9)
-                              : const Color(0xFF0F172A),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 10.5,
-                          height: 1.20,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-
-                      const Spacer(),
-
-                      // Linha: quantidade + categoria
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Qty pill
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: accent.withValues(
-                                  alpha: isDark ? 0.22 : 0.11),
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.layers_rounded,
-                                    size: 9, color: accent),
-                                const SizedBox(width: 2),
-                                Text(
-                                  '$totalQty',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    color: accent,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(width: 1),
-                                Text(
-                                  product.unit,
-                                  style: TextStyle(
-                                    fontSize: 8,
-                                    color: accent.withValues(alpha: 0.75),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Spacer(),
-                          // Categoria
-                          Flexible(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: accent.withValues(
-                                    alpha: isDark ? 0.12 : 0.07),
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(
-                                  color: accent.withValues(
-                                      alpha: isDark ? 0.20 : 0.14),
-                                  width: 0.7,
-                                ),
-                              ),
-                              child: Text(
-                                catLabel,
-                                style: TextStyle(
-                                  fontSize: 8,
-                                  color: accent,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                catLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.labelSmall.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontSize: 10.5,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-
-    // Quando inativo, aplica dessaturação grayscale por cima do card todo.
-    if (!inactive) return entryFade;
-    return ColorFiltered(
-      colorFilter: const ColorFilter.matrix(<double>[
-        0.2126, 0.7152, 0.0722, 0, 0,
-        0.2126, 0.7152, 0.0722, 0, 0,
-        0.2126, 0.7152, 0.0722, 0, 0,
-        0,      0,      0,      1, 0,
-      ]),
-      child: entryFade,
     );
   }
 
