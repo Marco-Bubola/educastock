@@ -5,6 +5,10 @@ import '../../../../core/design_system/design_system.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../ml/data/repositories/rule_based_risk_classifier.dart';
+import '../../../ml/domain/entities/risk_prediction.dart';
+import '../../../ml/presentation/controllers/consumption_forecast_provider.dart';
+import '../../../ml/presentation/widgets/risk_widgets.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/controllers/products_provider.dart';
 import '../../../recipes/domain/entities/stock_recipe.dart';
@@ -13,6 +17,24 @@ import '../../../settings/presentation/controllers/system_settings_provider.dart
 import '../../data/datasources/stock_remote_datasource.dart';
 import '../../domain/entities/stock_movement.dart';
 import 'output_view_page.dart';
+
+// Helper local: pior nível de risco entre os lotes disponíveis de um produto.
+RiskLevel? _worstRisk(String productId, List<Batch> batches) {
+  final classifier = RuleBasedRiskClassifier();
+  var worst = RiskLevel.verde;
+  var found = false;
+  for (final b in batches) {
+    if (b.productId != productId) continue;
+    if (b.status != BatchStatus.disponivel) continue;
+    found = true;
+    final lvl = classifier.classifySync(b).level;
+    if (lvl == RiskLevel.vermelho) return RiskLevel.vermelho;
+    if (lvl == RiskLevel.amarelo && worst == RiskLevel.verde) {
+      worst = RiskLevel.amarelo;
+    }
+  }
+  return found ? worst : null;
+}
 
 enum _OutputMode { products, recipes }
 
@@ -781,6 +803,22 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                 return searchOk && categoryOk && expiryOk;
               }).toList();
 
+              // Ordena por risco ML: vermelho → amarelo → verde → outros.
+              // A IA orienta o usuário a tirar os críticos antes.
+              const riskOrder = {
+                RiskLevel.vermelho: 0,
+                RiskLevel.amarelo: 1,
+                RiskLevel.verde: 2,
+              };
+              filteredProducts.sort((a, b) {
+                final ra = _worstRisk(a.id, batches);
+                final rb = _worstRisk(b.id, batches);
+                final oa = ra == null ? 3 : riskOrder[ra]!;
+                final ob = rb == null ? 3 : riskOrder[rb]!;
+                if (oa != ob) return oa.compareTo(ob);
+                return a.name.compareTo(b.name);
+              });
+
               final width = MediaQuery.of(context).size.width;
 
               return ListView(
@@ -892,30 +930,47 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                               b.expiryDate != null &&
                               b.expiryDate!.isBefore(now));
 
-                          final card = _ProductOutputCard(
-                            product: p,
-                            available: available,
-                            qty: qty,
-                            isDark: isDark,
-                            index: i,
-                            nearExpiry: nearExpiry,
-                            expiredBatch: expiredBatch,
-                            criticalBatch: criticalBatch,
-                            onDecrement: qty > 0
-                                ? () => setState(() {
-                                      final next = qty - 1;
-                                      if (next <= 0) {
-                                        _selectedQtyByProduct.remove(p.id);
-                                      } else {
-                                        _selectedQtyByProduct[p.id] = next;
-                                      }
-                                    })
-                                : null,
-                            onIncrement: available > qty
-                                ? () => setState(
-                                      () => _selectedQtyByProduct[p.id] = qty + 1,
-                                    )
-                                : null,
+                          final mlRisk = _worstRisk(p.id, batches);
+                          final card = Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              _ProductOutputCard(
+                                product: p,
+                                available: available,
+                                qty: qty,
+                                isDark: isDark,
+                                index: i,
+                                nearExpiry: nearExpiry,
+                                expiredBatch: expiredBatch,
+                                criticalBatch: criticalBatch,
+                                onDecrement: qty > 0
+                                    ? () => setState(() {
+                                          final next = qty - 1;
+                                          if (next <= 0) {
+                                            _selectedQtyByProduct.remove(p.id);
+                                          } else {
+                                            _selectedQtyByProduct[p.id] = next;
+                                          }
+                                        })
+                                    : null,
+                                onIncrement: available > qty
+                                    ? () => setState(
+                                          () => _selectedQtyByProduct[p.id] =
+                                              qty + 1,
+                                        )
+                                    : null,
+                              ),
+                              if (mlRisk != null)
+                                Positioned(
+                                  top: 6,
+                                  left: 6,
+                                  child: Tooltip(
+                                    message: 'Risco ML: ${mlRisk.label}',
+                                    child: RiskBadge(
+                                        level: mlRisk, compact: true),
+                                  ),
+                                ),
+                            ],
                           );
                           // Spotlight do tutorial só no PRIMEIRO card
                           if (i == 0) {
@@ -1015,6 +1070,12 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                                   );
                                 },
                               ),
+                              // Banner Prophet — projeção do estoque ao executar
+                              if (_selectedRecipeId != null)
+                                _RecipeForecastBanner(
+                                  recipe: filtered.firstWhere(
+                                      (r) => r.id == _selectedRecipeId),
+                                ),
                             ],
                           ),
                         );
@@ -2061,6 +2122,114 @@ class _SummarySheet extends StatelessWidget {
 }
 
 // ─── Card moderno de receita ───────────────────────────────────────────────
+
+// ─── Banner Prophet — projeção ao executar receita ────────────────────────
+class _RecipeForecastBanner extends ConsumerWidget {
+  final StockRecipe recipe;
+  const _RecipeForecastBanner({required this.recipe});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final forecasts =
+        ref.watch(liveForecastsProvider).valueOrNull ?? const [];
+    if (forecasts.isEmpty) return const SizedBox.shrink();
+
+    final byPid = {for (final f in forecasts) f.productId: f};
+    final problems = <String>[];
+    for (final item in recipe.items) {
+      final f = byPid[item.productId];
+      if (f == null) continue;
+      // Estoque ao vivo já está embutido em f.currentStock (liveForecastsProvider)
+      final projected = f.currentStock - item.quantity;
+      // Se sobra menos do que o consumo previsto de 7 dias, alerta.
+      if (projected < f.forecastWeekly.round()) {
+        problems.add(
+          '${item.productName}: sobraria $projected un. '
+          '(consumo previsto: ~${f.forecastWeekly.toStringAsFixed(0)}/sem)',
+        );
+      }
+    }
+
+    if (problems.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.warning600.withValues(alpha: isDark ? 0.20 : 0.10),
+            AppColors.warning600.withValues(alpha: isDark ? 0.10 : 0.04),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border:
+            Border.all(color: AppColors.warning600.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.psychology_alt_rounded,
+                  color: AppColors.warning600, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                'Aviso Prophet',
+                style: AppTypography.labelMedium.copyWith(
+                    color: AppColors.warning600,
+                    fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppColors.warning600.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${problems.length}',
+                  style: const TextStyle(
+                    color: AppColors.warning600,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Executar esta receita pode deixar estoque insuficiente para o consumo previsto:',
+            style: AppTypography.bodySmall
+                .copyWith(color: cs.onSurface, fontSize: 11),
+          ),
+          const SizedBox(height: 6),
+          ...problems.map((p) => Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('•  ',
+                        style: TextStyle(
+                            color: AppColors.warning600,
+                            fontWeight: FontWeight.w900)),
+                    Expanded(
+                      child: Text(p,
+                          style: AppTypography.bodySmall
+                              .copyWith(color: cs.onSurface, fontSize: 10.5)),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+}
 
 class _RecipeCard extends StatelessWidget {
   final StockRecipe recipe;
