@@ -371,77 +371,167 @@ class RiskPreviewBanner extends StatelessWidget {
     final bg = _bgForLevel(p.level, isDark);
     final pct = (p.confidence * 100).toInt();
 
+    // Posiciona o indicador na barra de risco contínua: 0..1
+    // verde = ~0.18, amarelo = ~0.55, vermelho = ~0.85 (do nível + confiança).
+    final basePos = switch (p.level) {
+      RiskLevel.verde => 0.18,
+      RiskLevel.amarelo => 0.55,
+      RiskLevel.vermelho => 0.85,
+    };
+    final progress = basePos.clamp(0.0, 1.0);
+
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 280),
       child: Container(
         key: ValueKey(p.level),
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: fg.withValues(alpha: 0.35)),
+          border: Border.all(color: fg.withValues(alpha: 0.40)),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: fg,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(_iconForLevel(p.level),
-                  color: Colors.white, size: 18),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Risco previsto: ${p.level.label}',
-                        style: AppTypography.labelMedium.copyWith(
-                          color: fg,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [fg, Color.lerp(fg, Colors.black, 0.18)!],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: fg.withValues(alpha: 0.45),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
                       ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: fg.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '$pct%',
-                          style: AppTypography.labelSmall.copyWith(
-                            color: fg,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 9,
+                    ],
+                  ),
+                  child: Icon(_iconForLevel(p.level),
+                      color: Colors.white, size: 19),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Risco previsto: ${p.level.label}',
+                            style: AppTypography.productName(
+                              size: 14,
+                              weight: FontWeight.w900,
+                              color: fg,
+                            ),
                           ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: fg.withValues(alpha: 0.22),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(
+                              '$pct%',
+                              style: AppTypography.labelSmall.copyWith(
+                                color: fg,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 10.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _recommendation(p.level, noExpiry),
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: 0.85),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _recommendation(p.level, noExpiry),
-                    style: AppTypography.bodySmall.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
+            const SizedBox(height: AppSpacing.sm),
+            // ── Barra de progresso de risco ─────────────────────────────
+            _RiskProgressBar(progress: progress),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _RiskProgressBar extends StatelessWidget {
+  final double progress;
+  const _RiskProgressBar({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Stack(
+      children: [
+        Container(
+          height: 10,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [
+                AppColors.success600,
+                AppColors.warning600,
+                AppColors.danger600,
+              ],
+              stops: [0.0, 0.5, 1.0],
+            ),
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        // Marcador (ponteiro) na posição do risco
+        Positioned(
+          left: (progress * 100).clamp(0, 100) * 0.01 *
+              (MediaQuery.of(context).size.width - 80),
+          top: -3,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.6, end: 1.0),
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutBack,
+            builder: (_, v, __) => Transform.scale(
+              scale: v,
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: cs.onSurface.withValues(alpha: 0.4),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
