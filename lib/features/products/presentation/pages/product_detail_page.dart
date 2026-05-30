@@ -9,6 +9,8 @@ import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../ml/presentation/controllers/consumption_forecast_provider.dart';
+import '../../../ml/presentation/widgets/forecast_widgets.dart';
 import '../../domain/entities/product.dart';
 import '../controllers/products_provider.dart';
 
@@ -114,6 +116,9 @@ class _DetailBody extends ConsumerWidget {
                   cs: cs,
                 ),
               ),
+              const SizedBox(height: AppSpacing.md),
+              _ForecastCard(
+                  productId: productId, isDark: isDark, cs: cs),
               const SizedBox(height: AppSpacing.lg),
               KeyedSubtree(
                 key: _keyDetailBatches,
@@ -1410,6 +1415,241 @@ class _InfoChip extends StatelessWidget {
               color: cs.onSurface.withValues(alpha: 0.8),
               fontWeight: FontWeight.w600,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Forecast Card (Prophet) ───────────────────────────────────────────────
+
+class _ForecastCard extends ConsumerWidget {
+  final String productId;
+  final bool isDark;
+  final ColorScheme cs;
+
+  const _ForecastCard({
+    required this.productId,
+    required this.isDark,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final forecastAsync = ref.watch(forecastForProductProvider(productId));
+
+    return forecastAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (forecast) {
+        if (forecast == null) return const SizedBox.shrink();
+        return Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.brandPrimary600.withValues(alpha: isDark ? 0.18 : 0.08),
+                AppColors.secondaryBlue600.withValues(alpha: isDark ? 0.12 : 0.04),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: AppColors.brandPrimary600
+                  .withValues(alpha: isDark ? 0.35 : 0.20),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          AppColors.brandPrimary600,
+                          AppColors.secondaryBlue600,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.trending_up_rounded,
+                        color: Colors.white, size: 18),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Previsão de Consumo',
+                          style: AppTypography.labelLarge.copyWith(
+                            color: cs.onSurface,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Modelo Prophet · ${forecast.dataPoints} pontos',
+                          style: AppTypography.bodySmall.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TrendChip(
+                    trend: forecast.trend,
+                    trendPercent: forecast.trendPercent,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ForecastStat(
+                      label: '7 dias',
+                      value: forecast.forecastWeekly.toStringAsFixed(1),
+                      unit: 'un.',
+                      color: AppColors.brandPrimary600,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: _ForecastStat(
+                      label: '30 dias',
+                      value: forecast.forecastMonthly.toStringAsFixed(1),
+                      unit: 'un.',
+                      color: AppColors.secondaryBlue600,
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: _ForecastStat(
+                      label: 'Estoque',
+                      value: '${forecast.currentStock}',
+                      unit: 'un.',
+                      color: forecast.isCriticalStock
+                          ? AppColors.danger600
+                          : forecast.isLowStock
+                              ? AppColors.warning600
+                              : AppColors.success600,
+                      isDark: isDark,
+                    ),
+                  ),
+                ],
+              ),
+              if (forecast.needsReplenishment) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning600
+                        .withValues(alpha: isDark ? 0.18 : 0.10),
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    border: Border.all(
+                      color: AppColors.warning600.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.add_shopping_cart_rounded,
+                          size: 16, color: AppColors.warning600),
+                      const SizedBox(width: AppSpacing.xs),
+                      Expanded(
+                        child: Text(
+                          'Sugestão de reposição: ${forecast.suggestedReplenishment} un.',
+                          style: AppTypography.labelMedium.copyWith(
+                            color: AppColors.warning600,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ForecastStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final String unit;
+  final Color color;
+  final bool isDark;
+
+  const _ForecastStat({
+    required this.label,
+    required this.value,
+    required this.unit,
+    required this.color,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.small),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: AppTypography.bodySmall.copyWith(
+              color: cs.onSurfaceVariant,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(
+                child: Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.labelLarge.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  unit,
+                  style: AppTypography.bodySmall.copyWith(
+                    color: color.withValues(alpha: 0.7),
+                    fontSize: 9,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
