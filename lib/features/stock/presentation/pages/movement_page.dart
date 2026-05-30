@@ -897,9 +897,9 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                       itemCount: filteredProducts.length,
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 0.88,
+                        mainAxisSpacing: 14,
+                        crossAxisSpacing: 14,
+                        childAspectRatio: 0.68,
                       ),
                       itemBuilder: (_, i) {
                           final p = filteredProducts[i];
@@ -931,46 +931,85 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                               b.expiryDate!.isBefore(now));
 
                           final mlRisk = _worstRisk(p.id, batches);
-                          final card = Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              _ProductOutputCard(
-                                product: p,
-                                available: available,
-                                qty: qty,
-                                isDark: isDark,
-                                index: i,
-                                nearExpiry: nearExpiry,
-                                expiredBatch: expiredBatch,
-                                criticalBatch: criticalBatch,
-                                onDecrement: qty > 0
-                                    ? () => setState(() {
-                                          final next = qty - 1;
-                                          if (next <= 0) {
-                                            _selectedQtyByProduct.remove(p.id);
-                                          } else {
-                                            _selectedQtyByProduct[p.id] = next;
-                                          }
-                                        })
-                                    : null,
-                                onIncrement: available > qty
-                                    ? () => setState(
-                                          () => _selectedQtyByProduct[p.id] =
-                                              qty + 1,
-                                        )
-                                    : null,
-                              ),
-                              if (mlRisk != null)
-                                Positioned(
-                                  top: 6,
-                                  left: 6,
-                                  child: Tooltip(
+                          // Paleta + badge de validade
+                          List<Color> palette;
+                          String? expLabel;
+                          Color expColor = AppColors.brandPrimary600;
+                          IconData expIcon = Icons.event_rounded;
+                          if (expiredBatch) {
+                            palette = CasaProductCard.paletteRed;
+                            expLabel = 'VENCIDO';
+                            expColor = const Color(0xFFFCA5A5);
+                            expIcon = Icons.cancel_rounded;
+                          } else if (criticalBatch) {
+                            palette = CasaProductCard.paletteRed;
+                            expLabel = 'VENCE BREVE';
+                            expColor = const Color(0xFFFCA5A5);
+                            expIcon = Icons.warning_amber_rounded;
+                          } else if (nearExpiry) {
+                            palette = CasaProductCard.paletteYellow;
+                            expLabel = 'ATENÇÃO';
+                            expColor = const Color(0xFFFDE68A);
+                            expIcon = Icons.schedule_rounded;
+                          } else {
+                            palette = CasaProductCard.paletteGreen;
+                          }
+                          final card = CasaProductCard(
+                            name: p.name,
+                            imageUrl: p.imageUrl,
+                            fallbackIcon: _categoryIcon(p.category),
+                            palette: palette,
+                            animationIndex: i,
+                            // Tap no card: incrementa qty (se ainda houver disponível)
+                            onTap: available > qty
+                                ? () => setState(() =>
+                                    _selectedQtyByProduct[p.id] = qty + 1)
+                                : null,
+                            headerBadgeLeft: mlRisk != null
+                                ? Tooltip(
                                     message: 'Risco ML: ${mlRisk.label}',
                                     child: RiskBadge(
                                         level: mlRisk, compact: true),
-                                  ),
-                                ),
-                            ],
+                                  )
+                                : null,
+                            headerBadgeRight: expLabel != null
+                                ? CasaProductBadge(
+                                    icon: expIcon,
+                                    label: expLabel,
+                                    accent: expColor,
+                                  )
+                                : null,
+                            footer: Text(
+                              'Disp.: $available ${p.unit ?? "un"}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.labelSmall.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            actionFooter: CasaProductStepper(
+                              qty: qty,
+                              max: available,
+                              accent: palette[0],
+                              onDecrement: qty > 0
+                                  ? () => setState(() {
+                                        final next = qty - 1;
+                                        if (next <= 0) {
+                                          _selectedQtyByProduct.remove(p.id);
+                                        } else {
+                                          _selectedQtyByProduct[p.id] = next;
+                                        }
+                                      })
+                                  : null,
+                              onIncrement: available > qty
+                                  ? () => setState(() =>
+                                      _selectedQtyByProduct[p.id] = qty + 1)
+                                  : null,
+                            ),
                           );
                           // Spotlight do tutorial só no PRIMEIRO card
                           if (i == 0) {
