@@ -9,9 +9,27 @@ import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../ml/data/repositories/rule_based_risk_classifier.dart';
+import '../../../ml/domain/entities/risk_prediction.dart';
+import '../../../ml/presentation/widgets/risk_widgets.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../domain/entities/product.dart';
 import '../controllers/products_provider.dart';
+
+// Helper compartilhado: classifica todos os lotes de um produto e devolve o pior nível.
+RiskLevel? worstRiskLevel(List<Batch> batches) {
+  if (batches.isEmpty) return null;
+  final classifier = RuleBasedRiskClassifier();
+  var worst = RiskLevel.verde;
+  for (final b in batches) {
+    final lvl = classifier.classifySync(b).level;
+    if (lvl == RiskLevel.vermelho) return RiskLevel.vermelho;
+    if (lvl == RiskLevel.amarelo && worst == RiskLevel.verde) {
+      worst = RiskLevel.amarelo;
+    }
+  }
+  return worst;
+}
 
 // ─── Filtros ───────────────────────────────────────────────────────────────
 
@@ -552,6 +570,30 @@ class _CsvImportSheetState extends ConsumerState<_CsvImportSheet> {
     if (!mounted) return;
     if (count > 0) {
       Navigator.of(context).pop();
+      // Resumo ML pós-import: roda classifier nos lotes recém-importados
+      // (após pequena espera para o stream refresh).
+      Future.delayed(const Duration(milliseconds: 800), () async {
+        if (!mounted) return;
+        final batches =
+            ref.read(allAvailableBatchesProvider).valueOrNull ?? const [];
+        final classifier = RuleBasedRiskClassifier();
+        var red = 0, yellow = 0;
+        for (final b in batches) {
+          final lvl = classifier.classifySync(b).level;
+          if (lvl == RiskLevel.vermelho) red++;
+          if (lvl == RiskLevel.amarelo) yellow++;
+        }
+        if (!mounted) return;
+        final extra = (red > 0 || yellow > 0)
+            ? ' · 🤖 IA: $red crítico${red == 1 ? '' : 's'}, $yellow em atenção'
+            : '';
+        showCasaSnackbar(
+          context,
+          message:
+              '$count produto(s) importado(s)$extra',
+          isError: false,
+        );
+      });
       showCasaSnackbar(
         context,
         message: '$count produto(s) importado(s) com sucesso!',
@@ -1480,6 +1522,7 @@ class _ProductGridCard extends ConsumerWidget {
     final nearestBatch = batches.where((b) => !b.noExpiry).toList()
       ..sort((a, b) => a.daysToExpiry.compareTo(b.daysToExpiry));
     final batchData = nearestBatch.firstOrNull;
+    final mlRisk = worstRiskLevel(batches);
 
     // Status de validade
     Color expiryColor;
@@ -1697,6 +1740,16 @@ class _ProductGridCard extends ConsumerWidget {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
+                      ),
+                    ),
+
+                  // Badge ML (canto superior esquerdo) — risco previsto
+                  if (mlRisk != null && !inactive)
+                    Positioned(
+                      top: 5, left: 5,
+                      child: Tooltip(
+                        message: 'Risco ML: ${mlRisk.label}',
+                        child: RiskBadge(level: mlRisk, compact: true),
                       ),
                     ),
 
