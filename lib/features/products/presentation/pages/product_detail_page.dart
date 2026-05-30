@@ -140,13 +140,10 @@ class _DetailBody extends ConsumerWidget {
                   ),
                 )
               else if (batches.isEmpty)
-                CasaEmptyState(
-                  icon: Icons.inbox_outlined,
-                  title: 'Nenhum lote cadastrado',
-                  description:
-                      'Cadastre o primeiro lote para controlar a validade.',
-                  ctaLabel: 'Cadastrar Lote',
-                  onCta: () => context
+                _EmptyBatchesCallout(
+                  isDark: isDark,
+                  cs: cs,
+                  onAdd: () => context
                       .push('${AppRoutes.batchForm}?productId=$productId'),
                 )
               else
@@ -281,7 +278,7 @@ class _ProductSliverAppBar extends ConsumerWidget {
         : user!.name.trim().substring(0, 1).toUpperCase();
 
     return SliverAppBar(
-      expandedHeight: 165,
+      expandedHeight: 210,
       pinned: true,
       backgroundColor: AppColors.brandPrimary600,
       foregroundColor: Colors.white,
@@ -381,42 +378,7 @@ class _ProductSliverAppBar extends ConsumerWidget {
               icon: Icons.arrow_back_rounded,
               onTap: () => context.pop(),
             ),
-            const SizedBox(width: 12),
-            Container(
-              width: 3.5,
-              height: 16,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(2),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.7),
-                    blurRadius: 6,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                product.name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                  letterSpacing: -0.3,
-                  shadows: [
-                    Shadow(
-                      color: Color(0x99000000),
-                      blurRadius: 6,
-                      offset: Offset(0, 1),
-                    ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            const Spacer(),
             _NavButton(
               icon: Icons.edit_rounded,
               onTap: () =>
@@ -517,8 +479,8 @@ class _ProductSliverAppBar extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Container(
-                          width: 48,
-                          height: 48,
+                          width: 82,
+                          height: 82,
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
@@ -528,22 +490,29 @@ class _ProductSliverAppBar extends ConsumerWidget {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
-                            borderRadius: BorderRadius.circular(13),
+                            borderRadius: BorderRadius.circular(18),
                             border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.35),
-                                width: 1),
+                                color: Colors.white.withValues(alpha: 0.40),
+                                width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.22),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
                           child: product.imageUrl != null &&
                                   product.imageUrl!.isNotEmpty
                               ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(16.5),
                                   child: Image.network(product.imageUrl!,
                                       fit: BoxFit.cover),
                                 )
                               : const Icon(Icons.inventory_2_rounded,
-                                  color: Colors.white, size: 23),
+                                  color: Colors.white, size: 40),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -554,26 +523,48 @@ class _ProductSliverAppBar extends ConsumerWidget {
                                   product.brand!.toUpperCase(),
                                   style: TextStyle(
                                     color:
-                                        Colors.white.withValues(alpha: 0.7),
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1.2,
+                                        Colors.white.withValues(alpha: 0.78),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.4,
                                   ),
                                 ),
-                              if ((product.barcode ?? '').isNotEmpty)
+                              const SizedBox(height: 4),
+                              Text(
+                                product.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.productName(
+                                  size: 18,
+                                  weight: FontWeight.w900,
+                                  color: Colors.white,
+                                  letterSpacing: -0.3,
+                                  height: 1.15,
+                                ),
+                              ),
+                              if ((product.barcode ?? '').isNotEmpty) ...[
+                                const SizedBox(height: 5),
                                 Row(children: [
                                   Icon(Icons.qr_code_rounded,
-                                      size: 10,
+                                      size: 12,
                                       color: Colors.white
-                                          .withValues(alpha: 0.55)),
-                                  const SizedBox(width: 3),
-                                  Text(product.barcode!,
+                                          .withValues(alpha: 0.65)),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      product.barcode!,
+                                      overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.55),
-                                          fontSize: 9.5,
-                                          letterSpacing: 0.5)),
+                                        color: Colors.white
+                                            .withValues(alpha: 0.65),
+                                        fontSize: 11,
+                                        letterSpacing: 0.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
                                 ]),
+                              ],
                             ],
                           ),
                         ),
@@ -1083,13 +1074,6 @@ class _BatchCard extends StatelessWidget {
     this.onActions,
   });
 
-  /// Lote merece o botão de ações modal (tem alerta de validade ou está vencido).
-  bool get _hasAlert {
-    if (batch.noExpiry) return false;
-    if (batch.isExpired) return true;
-    return batch.daysToExpiry <= 30;
-  }
-
   Color _statusColor() {
     if (batch.noExpiry) return const Color(0xFF22C55E);
     if (batch.isExpired) return const Color(0xFFEF4444);
@@ -1188,19 +1172,19 @@ class _BatchCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 7),
-                Icon(_statusIcon(), size: 13, color: sc),
-                const SizedBox(width: 4),
+                Icon(_statusIcon(), size: 15, color: sc),
+                const SizedBox(width: 5),
                 Text(
                   _statusLabel(),
                   style: TextStyle(
                     color: sc,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
                   ),
                 ),
                 if (!batch.noExpiry) ...[
                   Text('  ·  ',
-                      style: TextStyle(color: onCardSub, fontSize: 11)),
+                      style: TextStyle(color: onCardSub, fontSize: 12.5)),
                   Expanded(
                     child: Text(
                       batch.isExpired
@@ -1210,8 +1194,8 @@ class _BatchCard extends StatelessWidget {
                               : 'Sem data',
                       style: TextStyle(
                           color: onCardSub,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -1219,27 +1203,25 @@ class _BatchCard extends StatelessWidget {
                   const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 2),
+                      horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(
-                    color: sc.withValues(alpha: isDark ? 0.18 : 0.10),
+                    color: sc.withValues(alpha: isDark ? 0.20 : 0.12),
                     borderRadius: BorderRadius.circular(20),
                     border:
-                        Border.all(color: sc.withValues(alpha: 0.32)),
+                        Border.all(color: sc.withValues(alpha: 0.35)),
                   ),
                   child: Text(
                     '${batch.quantity} un.',
                     style: TextStyle(
                         color: sc,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800),
                   ),
                 ),
                 const SizedBox(width: 6),
-                // Quando o lote tem alerta (atenção/crítico/vencido), mostra
-                // um único botão kebab que abre o sheet moderno com TODAS as
-                // ações (distribuir, editar, excluir). Caso contrário, mantém
-                // os botões inline de editar/excluir para acesso rápido.
-                if (_hasAlert && onActions != null)
+                // Botão kebab SEMPRE disponível — abre sheet com todas as
+                // ações (distribuir, editar, excluir).
+                if (onActions != null)
                   _ActionBtn(
                     icon: Icons.more_vert_rounded,
                     color: sc,
@@ -1314,17 +1296,54 @@ class _BatchCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.notes_rounded,
-                          size: 11, color: onCardSub),
+                          size: 12, color: onCardSub),
                       const SizedBox(width: 5),
                       Expanded(
                         child: Text(
                           batch.notes!,
                           style: TextStyle(
-                            fontSize: 10.5,
+                            fontSize: 12,
                             color: onCardSub,
                             fontStyle: FontStyle.italic,
                           ),
                         ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (onActions != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _InlineActionBtn(
+                          icon: batch.isExpired
+                              ? Icons.delete_sweep_rounded
+                              : Icons.outbound_rounded,
+                          label: batch.isExpired
+                              ? 'Descartar'
+                              : 'Registrar saída',
+                          color: batch.isExpired
+                              ? AppColors.danger600
+                              : AppColors.brandPrimary600,
+                          onTap: onActions!,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      _ActionBtn(
+                        icon: Icons.edit_rounded,
+                        color: const Color(0xFF60A5FA),
+                        isDark: isDark,
+                        onTap: onEdit,
+                        tooltip: 'Editar',
+                      ),
+                      const SizedBox(width: 4),
+                      _ActionBtn(
+                        icon: Icons.delete_outline_rounded,
+                        color: const Color(0xFFEF4444),
+                        isDark: isDark,
+                        onTap: onDelete,
+                        tooltip: 'Excluir',
                       ),
                     ],
                   ),
@@ -1338,6 +1357,57 @@ class _BatchCard extends StatelessWidget {
     );
   }
 
+}
+
+// ─── Inline action button (primário, no rodapé do card de lote) ──────────────
+class _InlineActionBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _InlineActionBtn({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: color.withValues(alpha: isDark ? 0.20 : 0.10),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border:
+                Border.all(color: color.withValues(alpha: 0.35), width: 1),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: AppTypography.labelMedium.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ─── Action button ─────────────────────────────────────────────────────────
@@ -1650,6 +1720,118 @@ class _ForecastStat extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Empty state moderno para lotes ──────────────────────────────────────────
+
+class _EmptyBatchesCallout extends StatelessWidget {
+  final bool isDark;
+  final ColorScheme cs;
+  final VoidCallback onAdd;
+
+  const _EmptyBatchesCallout({
+    required this.isDark,
+    required this.cs,
+    required this.onAdd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.brandPrimary600.withValues(alpha: isDark ? 0.18 : 0.08),
+            AppColors.secondaryBlue600
+                .withValues(alpha: isDark ? 0.10 : 0.04),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.brandPrimary600
+              .withValues(alpha: isDark ? 0.35 : 0.22),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  AppColors.brandPrimary600,
+                  AppColors.secondaryBlue600,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.brandPrimary600.withValues(alpha: 0.45),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.inventory_2_rounded,
+              color: Colors.white,
+              size: 38,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Nenhum lote cadastrado',
+            textAlign: TextAlign.center,
+            style: AppTypography.productName(
+              size: 17,
+              weight: FontWeight.w900,
+              color: cs.onSurface,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Cadastre o primeiro lote para começar a controlar '
+            'validade, quantidade e localização deste produto.',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyMedium.copyWith(
+              color: cs.onSurfaceVariant,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_box_rounded, size: 20),
+              label: Text(
+                'Cadastrar primeiro lote',
+                style: AppTypography.productName(
+                  size: 14,
+                  weight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.brandPrimary600,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
           ),
         ],
       ),
