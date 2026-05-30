@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../ml/domain/entities/risk_prediction.dart';
+import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../controllers/alerts_provider.dart';
 
@@ -21,6 +23,7 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
   final _keyFilters = GlobalKey();
 
   AlertLevel? _filter; // null = todos
+  RiskLevel? _riskFilter; // null = não filtrado por ML
 
   @override
   void initState() {
@@ -182,6 +185,33 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
                                   ? null
                                   : AlertLevel.info),
                         ),
+                        // ─── Separador visual ──────────────────────────────
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          height: 22,
+                          width: 1,
+                          color: Colors.white.withValues(alpha: 0.25),
+                        ),
+                        // ─── Filtros por Risco ML ───────────────────────────
+                        _HeaderFilterChip(
+                          label: '🤖 Risco Crítico',
+                          selected: _riskFilter == RiskLevel.vermelho,
+                          color: AppColors.danger600,
+                          onTap: () => setState(() => _riskFilter =
+                              _riskFilter == RiskLevel.vermelho
+                                  ? null
+                                  : RiskLevel.vermelho),
+                        ),
+                        const SizedBox(width: 6),
+                        _HeaderFilterChip(
+                          label: '🤖 Atenção',
+                          selected: _riskFilter == RiskLevel.amarelo,
+                          color: AppColors.warning600,
+                          onTap: () => setState(() => _riskFilter =
+                              _riskFilter == RiskLevel.amarelo
+                                  ? null
+                                  : RiskLevel.amarelo),
+                        ),
                       ],
                     ),
                   ),
@@ -259,9 +289,24 @@ class _AlertsPageState extends ConsumerState<AlertsPage> {
               return _EmptyAllClear(cs: cs);
             }
 
-            final filtered = _filter == null
+            var filtered = _filter == null
                 ? alerts
                 : alerts.where((a) => a.level == _filter).toList();
+
+            // Filtro ML — cruza com batchRiskPredictionsProvider
+            if (_riskFilter != null) {
+              final predictions =
+                  ref.watch(batchRiskPredictionsProvider).valueOrNull ??
+                      const [];
+              final riskByBatch = <String, RiskLevel>{
+                for (final p in predictions) p.batchId: p.level,
+              };
+              filtered = filtered
+                  .where((a) =>
+                      a.batchId != null &&
+                      riskByBatch[a.batchId] == _riskFilter)
+                  .toList();
+            }
 
             return CustomScrollView(
               slivers: [
