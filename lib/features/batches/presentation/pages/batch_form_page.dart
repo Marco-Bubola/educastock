@@ -12,6 +12,7 @@ import '../../../locations/domain/entities/storage_location.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/controllers/products_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
+import '../../../ml/presentation/widgets/risk_widgets.dart';
 import '../../domain/entities/batch.dart';
 import '../controllers/batches_provider.dart';
 
@@ -615,6 +616,16 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                             ),
                           ],
                         ),
+                        // Preview ML em tempo real (assim que a data é definida)
+                        if (_noExpiry || _expiryDate != null) ...[
+                          const SizedBox(height: AppSpacing.sm),
+                          RiskPreviewBanner(
+                            expiryDate: _expiryDate,
+                            noExpiry: _noExpiry,
+                            quantity: _quantity,
+                            entryDate: _entryDate,
+                          ),
+                        ],
                       ],
                     ),
                   ),
