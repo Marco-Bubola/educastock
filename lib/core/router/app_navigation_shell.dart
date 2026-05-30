@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/ml/domain/entities/risk_prediction.dart';
+import '../../features/ml/presentation/controllers/risk_classifier_provider.dart';
 import '../design_system/components/casa_tutorial.dart';
 import 'app_router.dart';
 
@@ -119,7 +122,7 @@ const _tabs = [
 
 // ─── Animated Tab Bar ────────────────────────────────────────────────────────
 
-class _AnimatedTabBar extends StatelessWidget {
+class _AnimatedTabBar extends ConsumerWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
 
@@ -129,8 +132,15 @@ class _AnimatedTabBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    // Badge ML: # de lotes em risco vermelho (lê do classifier).
+    // Aparece em Estoque (idx 1) e Saída (idx 2) — ambos lidam com lotes.
+    final criticalCount = ref.watch(riskCountsProvider).maybeWhen(
+          data: (counts) => counts[RiskLevel.vermelho] ?? 0,
+          orElse: () => 0,
+        );
+
     return Container(
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
@@ -154,11 +164,15 @@ class _AnimatedTabBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           child: Row(
             children: List.generate(_tabs.length, (i) {
-              return Expanded(child: _TabItem(
-                tab: _tabs[i],
-                selected: selectedIndex == i,
-                onTap: () => onTap(i),
-              ));
+              final showBadge = criticalCount > 0 && (i == 1 || i == 2);
+              return Expanded(
+                child: _TabItem(
+                  tab: _tabs[i],
+                  selected: selectedIndex == i,
+                  badgeCount: showBadge ? criticalCount : 0,
+                  onTap: () => onTap(i),
+                ),
+              );
             }),
           ),
         ),
@@ -170,11 +184,13 @@ class _AnimatedTabBar extends StatelessWidget {
 class _TabItem extends StatelessWidget {
   final _TabDef tab;
   final bool selected;
+  final int badgeCount;
   final VoidCallback onTap;
 
   const _TabItem({
     required this.tab,
     required this.selected,
+    required this.badgeCount,
     required this.onTap,
   });
 
@@ -200,15 +216,26 @@ class _TabItem extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedScale(
-              scale: selected ? 1.18 : 1.0,
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutBack,
-              child: Icon(
-                selected ? tab.activeIcon : tab.icon,
-                size: 24,
-                color: selected ? tab.color : inactiveColor,
-              ),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                AnimatedScale(
+                  scale: selected ? 1.18 : 1.0,
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutBack,
+                  child: Icon(
+                    selected ? tab.activeIcon : tab.icon,
+                    size: 24,
+                    color: selected ? tab.color : inactiveColor,
+                  ),
+                ),
+                if (badgeCount > 0)
+                  Positioned(
+                    right: -7,
+                    top: -4,
+                    child: _MlBadge(count: badgeCount),
+                  ),
+              ],
             ),
             const SizedBox(height: 3),
             AnimatedDefaultTextStyle(
@@ -233,6 +260,49 @@ class _TabItem extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MlBadge extends StatelessWidget {
+  final int count;
+  const _MlBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = count > 9 ? '9+' : '$count';
+    return Container(
+      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE53E3E), Color(0xFFC53030)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.surface,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFE53E3E).withValues(alpha: 0.45),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          height: 1,
         ),
       ),
     );
