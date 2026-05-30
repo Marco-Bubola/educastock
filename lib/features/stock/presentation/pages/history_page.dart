@@ -23,15 +23,17 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   final _keyHistoryHeader = GlobalKey();
 
   static const _reasonColors = <String, List<Color>>{
+    'entrada': [Color(0xFF059669), Color(0xFF047857)],
     'uso': [Color(0xFF2563EB), Color(0xFF1D4ED8)],
     'receita': [Color(0xFF7C3AED), Color(0xFF6D28D9)],
     'validade': [Color(0xFFD97706), Color(0xFFB45309)],
     'avaria': [Color(0xFFDC2626), Color(0xFFB91C1C)],
-    'doacao': [Color(0xFF059669), Color(0xFF047857)],
+    'doacao': [Color(0xFF14B8A6), Color(0xFF0F766E)],
     'outro': [Color(0xFF6B7280), Color(0xFF4B5563)],
   };
 
   static const _reasonLabels = <String, String>{
+    'entrada': 'Entrada',
     'uso': 'Distribuição',
     'receita': 'Receita',
     'validade': 'Vencimento',
@@ -41,6 +43,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   };
 
   static const _reasonIcons = <String, IconData>{
+    'entrada': Icons.add_box_rounded,
     'uso': Icons.outbound_rounded,
     'receita': Icons.menu_book_rounded,
     'validade': Icons.hourglass_disabled_rounded,
@@ -403,7 +406,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       body: Column(children: [
       ModernProfileAppBar(
         title: 'Histórico',
-        subtitle: 'Registro de distribuições',
+        subtitle: 'Entradas, saídas e descartes',
         pageIcon: Icons.history_rounded,
         iconColor: const Color(0xFFA78BFA),
         extraContent: Column(
@@ -603,18 +606,22 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                   ),
                 ),
                 data: (allMovements) {
-                  // Filtra apenas saídas/descartes
+                  // Inclui entradas, saídas e descartes
                   var outputs = allMovements
                       .where((m) =>
+                          m.type == MovementType.entrada ||
                           m.type == MovementType.saida ||
                           m.type == MovementType.descarte)
                       .toList();
 
-                  // Filtro de motivo
+                  // Filtro de motivo (entrada usa 'entrada' como pseudo-reasonCode)
                   if (_filterReason != null) {
-                    outputs = outputs
-                        .where((m) => m.reasonCode == _filterReason)
-                        .toList();
+                    outputs = outputs.where((m) {
+                      if (_filterReason == 'entrada') {
+                        return m.type == MovementType.entrada;
+                      }
+                      return m.reasonCode == _filterReason;
+                    }).toList();
                   }
 
                   // Filtro de período
@@ -1078,10 +1085,16 @@ class _SessionCardState extends State<_SessionCard> {
   @override
   Widget build(BuildContext context) {
     final first = widget.movements.first;
-    final reasonKey = first.reasonCode ?? 'outro';
+    final isEntrada = first.type == MovementType.entrada;
+    // Para entradas, usa o pseudo-key 'entrada' para cor/ícone/label
+    final reasonKey = isEntrada ? 'entrada' : (first.reasonCode ?? 'outro');
     final colors = widget.reasonColors[reasonKey] ?? widget.reasonColors['outro']!;
-    final reasonLabel = widget.reasonLabels[reasonKey] ?? 'Saída';
-    final reasonIcon = widget.reasonIcons[reasonKey] ?? Icons.outbound_rounded;
+    final reasonLabel = isEntrada
+        ? 'Cadastro de lote'
+        : (widget.reasonLabels[reasonKey] ?? 'Saída');
+    final reasonIcon = isEntrada
+        ? Icons.inbox_rounded
+        : (widget.reasonIcons[reasonKey] ?? Icons.outbound_rounded);
     final totalQty = widget.movements.fold<int>(0, (s, m) => s + m.quantity);
     final timeStr = widget.formatTime(first.performedAt);
     final firstName = first.performedByName.split(' ').first;
@@ -1090,9 +1103,11 @@ class _SessionCardState extends State<_SessionCard> {
     final subColor = isDark ? const Color(0xFF9CA3AF) : const Color(0xFF64748B);
     final divColor = isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9);
     final discard = _isDiscard;
-    final typeLabel = discard ? 'DESCARTE' : 'SAÍDA';
-    final typeIcon =
-        discard ? Icons.delete_sweep_rounded : Icons.outbound_rounded;
+    final typeLabel =
+        isEntrada ? 'ENTRADA' : (discard ? 'DESCARTE' : 'SAÍDA');
+    final typeIcon = isEntrada
+        ? Icons.add_box_rounded
+        : (discard ? Icons.delete_sweep_rounded : Icons.outbound_rounded);
 
     final preview = widget.movements.take(4).toList();
     final extra = widget.movements.length > 4 ? widget.movements.length - 4 : 0;
