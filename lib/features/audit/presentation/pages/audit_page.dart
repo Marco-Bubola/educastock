@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/design_system/design_system.dart';
+import '../../../ml/domain/entities/risk_prediction.dart';
+import '../../../ml/presentation/controllers/risk_classifier_provider.dart';
 import '../../../stock/presentation/pages/movement_page.dart';
 
 final auditLogsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
@@ -425,15 +427,17 @@ class _AuditPageState extends ConsumerState<AuditPage> {
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
-              itemCount: filtered.length,
+              itemCount: filtered.length + 1, // +1 para o snapshot ML
               separatorBuilder: (_, __) =>
                   const SizedBox(height: AppSpacing.sm),
               itemBuilder: (_, i) {
-                final tile = _AuditLogTile(log: filtered[i], cs: cs);
-                if (i == 0) {
+                if (i == 0) return const _AuditMlSnapshotCard();
+                final realIdx = i - 1;
+                final tile = _AuditLogTile(log: filtered[realIdx], cs: cs);
+                if (realIdx == 0) {
                   return KeyedSubtree(key: _keyAuditList, child: tile);
                 }
-                if (i == 1) {
+                if (realIdx == 1) {
                   return KeyedSubtree(key: _keyAuditTile, child: tile);
                 }
                 return tile;
@@ -608,5 +612,190 @@ class _AuditLogTile extends StatelessWidget {
         'descarte' => Icons.delete_outline_rounded,
         _ => Icons.history_rounded,
       };
+}
+
+// ─── ML Snapshot card (no topo do audit) ────────────────────────────────────
+
+class _AuditMlSnapshotCard extends ConsumerWidget {
+  const _AuditMlSnapshotCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final countsAsync = ref.watch(riskCountsProvider);
+    final counts = countsAsync.valueOrNull ?? const {};
+    final total = counts.values.fold<int>(0, (s, v) => s + v);
+
+    final red = counts[RiskLevel.vermelho] ?? 0;
+    final yellow = counts[RiskLevel.amarelo] ?? 0;
+    final green = counts[RiskLevel.verde] ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.brandPrimary600
+                .withValues(alpha: isDark ? 0.18 : 0.08),
+            AppColors.secondaryBlue600
+                .withValues(alpha: isDark ? 0.10 : 0.03),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+            color: AppColors.brandPrimary600
+                .withValues(alpha: isDark ? 0.35 : 0.20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [
+                    AppColors.brandPrimary600,
+                    AppColors.secondaryBlue600,
+                  ]),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.psychology_rounded,
+                    color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Snapshot ML — agora',
+                        style: AppTypography.labelLarge.copyWith(
+                            color: cs.onSurface,
+                            fontWeight: FontWeight.w800)),
+                    Text(
+                      '$total lote${total == 1 ? '' : 's'} classificado${total == 1 ? '' : 's'}',
+                      style: AppTypography.bodySmall.copyWith(
+                          color: cs.onSurfaceVariant, fontSize: 10.5),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: _RiskMiniCount(
+                  label: 'Crítico',
+                  count: red,
+                  color: AppColors.danger600,
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: _RiskMiniCount(
+                  label: 'Atenção',
+                  count: yellow,
+                  color: AppColors.warning600,
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: _RiskMiniCount(
+                  label: 'Seguro',
+                  count: green,
+                  color: AppColors.success600,
+                  isDark: isDark,
+                ),
+              ),
+            ],
+          ),
+          if (total > 0) ...[
+            const SizedBox(height: AppSpacing.sm),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: SizedBox(
+                height: 6,
+                child: Row(
+                  children: [
+                    if (green > 0)
+                      Expanded(
+                        flex: green,
+                        child: Container(color: AppColors.success600),
+                      ),
+                    if (yellow > 0)
+                      Expanded(
+                        flex: yellow,
+                        child: Container(color: AppColors.warning600),
+                      ),
+                    if (red > 0)
+                      Expanded(
+                        flex: red,
+                        child: Container(color: AppColors.danger600),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RiskMiniCount extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+  final bool isDark;
+
+  const _RiskMiniCount({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '$count',
+            style: TextStyle(
+              color: color,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              color: color.withValues(alpha: 0.85),
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
