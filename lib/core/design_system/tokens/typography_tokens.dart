@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 abstract class AppTypography {
   // Poppins — títulos e destaques
@@ -6,6 +7,25 @@ abstract class AppTypography {
 
   // Nunito Sans — textos, formulários, números
   static const String fontNunito = 'NunitoSans';
+
+  /// Fonte distinta para NOMES DE PRODUTOS — usada em todas as áreas
+  /// que listam produtos (Estoque, Saída, Receita, etc).
+  /// Plus Jakarta Sans é moderna, com bom peso visual e excelente leitura.
+  static TextStyle productName({
+    double size = 14,
+    FontWeight weight = FontWeight.w800,
+    Color? color,
+    double height = 1.15,
+    double letterSpacing = -0.2,
+  }) {
+    return GoogleFonts.plusJakartaSans(
+      fontSize: size,
+      fontWeight: weight,
+      color: color,
+      height: height,
+      letterSpacing: letterSpacing,
+    );
+  }
 
   // Display
   static const TextStyle displayLarge = TextStyle(
