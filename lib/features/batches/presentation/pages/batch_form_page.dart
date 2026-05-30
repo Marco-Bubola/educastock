@@ -395,7 +395,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.lg),
 
               // ── 2. Validade ──────────────────────────────────────────
               Builder(builder: (_) {
@@ -631,7 +631,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                   ),
                 );
               }),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.lg),
 
               // ── 3. Origem ────────────────────────────────────────────
               _BatchSection(
@@ -723,7 +723,7 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.lg),
 
               // ── 4. Localização ───────────────────────────────────────
               locationsState.when(
@@ -741,23 +741,9 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                 loading: () => const CasaCardSkeleton(),
                 error: (_, __) => const SizedBox.shrink(),
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.lg),
 
-              // ── 5. Foto do lote (local) ──────────────────────────────
-              _ImageSection(
-                existingPath: _existingImagePath,
-                pickedFile: _pickedImageFile,
-                cs: cs,
-                onPickCamera: () => _pickImage(ImageSource.camera),
-                onPickGallery: () => _pickImage(ImageSource.gallery),
-                onRemove: () => setState(() {
-                  _pickedImageFile = null;
-                  _existingImagePath = null;
-                }),
-              ),
-              const SizedBox(height: AppSpacing.md),
-
-              // ── 6. Observações ───────────────────────────────────────
+              // ── 5. Observações ───────────────────────────────────────
               _BatchSection(
                 icon: Icons.notes_rounded,
                 iconColor: AppColors.neutral500,
@@ -866,41 +852,69 @@ class _BatchSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [iconColor, iconColor.withValues(alpha: 0.7)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(9),
-                boxShadow: [
-                  BoxShadow(
-                    color: iconColor.withValues(alpha: 0.28),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(icon, size: 15, color: Colors.white),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              title,
-              style: AppTypography.labelLarge.copyWith(
-                  color: cs.onSurface, fontWeight: FontWeight.w700),
-            ),
-          ],
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: isDark ? 0.30 : 0.45),
         ),
-        const SizedBox(height: AppSpacing.md),
-        child,
-      ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [iconColor, Color.lerp(iconColor, Colors.black, 0.18)!],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(11),
+                  boxShadow: [
+                    BoxShadow(
+                      color: iconColor.withValues(alpha: 0.40),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, size: 18, color: Colors.white),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTypography.productName(
+                    size: 16,
+                    weight: FontWeight.w900,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          child,
+        ],
+      ),
     );
   }
 }
@@ -1619,6 +1633,7 @@ class _ShelfChipRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -1630,53 +1645,85 @@ class _ShelfChipRow extends StatelessWidget {
           return GestureDetector(
             onTap: () => onTap(g),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
               margin: const EdgeInsets.only(right: AppSpacing.sm),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
               decoration: BoxDecoration(
                 gradient: isSelected
-                    ? LinearGradient(colors: [
-                        color,
-                        color.withValues(alpha: 0.75)
-                      ])
+                    ? LinearGradient(
+                        colors: [color, Color.lerp(color, Colors.black, 0.18)!],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
                     : null,
-                color: isSelected ? null : cs.surfaceContainer,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
+                color: isSelected
+                    ? null
+                    : color.withValues(alpha: isDark ? 0.10 : 0.05),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isSelected
                       ? Colors.transparent
-                      : color.withValues(alpha: 0.4),
+                      : color.withValues(alpha: 0.30),
+                  width: 1.2,
                 ),
                 boxShadow: isSelected
                     ? [
                         BoxShadow(
-                          color: color.withValues(alpha: 0.35),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+                          color: color.withValues(alpha: 0.45),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         )
                       ]
                     : [],
               ),
-              child: Column(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Prat. $g',
-                    style: AppTypography.labelMedium.copyWith(
-                      color: isSelected ? Colors.white : color,
-                      fontWeight: FontWeight.w800,
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.white.withValues(alpha: 0.22)
+                          : color.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        g.toUpperCase(),
+                        style: AppTypography.productName(
+                          size: 16,
+                          weight: FontWeight.w900,
+                          color: isSelected ? Colors.white : color,
+                        ),
+                      ),
                     ),
                   ),
-                  Text(
-                    '$levelCount nível${levelCount != 1 ? 'eis' : ''}',
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: isSelected
-                          ? Colors.white.withValues(alpha: 0.8)
-                          : color.withValues(alpha: 0.7),
-                      fontWeight: FontWeight.w500,
-                    ),
+                  const SizedBox(width: 9),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Prateleira',
+                        style: AppTypography.labelSmall.copyWith(
+                          fontSize: 10,
+                          color: isSelected
+                              ? Colors.white.withValues(alpha: 0.78)
+                              : cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '$levelCount nív${levelCount != 1 ? 'eis' : 'el'}',
+                        style: AppTypography.labelMedium.copyWith(
+                          fontSize: 12,
+                          color: isSelected ? Colors.white : color,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
