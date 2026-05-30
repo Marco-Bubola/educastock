@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../ml/presentation/controllers/consumption_forecast_provider.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/controllers/products_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
@@ -719,7 +720,7 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
 
 // ─── Lista horizontal de ingredientes selecionados ────────────────────────
 
-class _SelectedIngredientsList extends StatelessWidget {
+class _SelectedIngredientsList extends ConsumerWidget {
   final Map<String, int> selectedQty;
   final List<Product> products;
   final bool isDark;
@@ -745,8 +746,11 @@ class _SelectedIngredientsList extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final selected = selectedQty.entries.where((e) => e.value > 0).toList();
+    final forecasts =
+        ref.watch(liveForecastsProvider).valueOrNull ?? const [];
+    final forecastByPid = {for (final f in forecasts) f.productId: f};
 
     return Column(
       children: selected.map((entry) {
@@ -754,6 +758,11 @@ class _SelectedIngredientsList extends StatelessWidget {
         final name = p?.name ?? entry.key;
         final unit = p?.unit ?? 'un';
         final qty = entry.value;
+        final forecast = forecastByPid[entry.key];
+        // Aviso: se o estoque ao vivo não cobre o consumo previsto 7d + a quantidade da receita
+        final showWarning = forecast != null &&
+            forecast.currentStock <
+                (forecast.forecastWeekly + qty).round();
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
@@ -761,16 +770,24 @@ class _SelectedIngredientsList extends StatelessWidget {
           decoration: BoxDecoration(
             color: cardBg,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _kPurple.withValues(alpha: 0.25)),
+            border: Border.all(
+              color: showWarning
+                  ? AppColors.warning600.withValues(alpha: 0.45)
+                  : _kPurple.withValues(alpha: 0.25),
+            ),
             boxShadow: [
               BoxShadow(
-                color: _kPurple.withValues(alpha: isDark ? 0.08 : 0.04),
+                color: (showWarning ? AppColors.warning600 : _kPurple)
+                    .withValues(alpha: isDark ? 0.08 : 0.04),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
             children: [
               // Ícone
               Container(
@@ -830,6 +847,42 @@ class _SelectedIngredientsList extends StatelessWidget {
                   child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFDC2626)),
                 ),
               ),
+            ],
+          ),
+          if (showWarning) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.warning600
+                    .withValues(alpha: isDark ? 0.18 : 0.10),
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(
+                  color: AppColors.warning600.withValues(alpha: 0.30),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.psychology_alt_rounded,
+                      size: 13, color: AppColors.warning600),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      'Prophet: estoque (${forecast!.currentStock}) '
+                      'pode não cobrir o consumo previsto '
+                      '(~${forecast.forecastWeekly.toStringAsFixed(0)}/sem) + receita',
+                      style: TextStyle(
+                        color: AppColors.warning600,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
             ],
           ),
         );
