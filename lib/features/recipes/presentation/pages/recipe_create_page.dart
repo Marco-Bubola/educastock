@@ -368,7 +368,7 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
                                 crossAxisCount: 2,
                                 mainAxisSpacing: 14,
                                 crossAxisSpacing: 14,
-                                childAspectRatio: 0.68,
+                                childAspectRatio: 0.82,
                               ),
                               delegate: SliverChildBuilderDelegate(
                                 (context, i) {
