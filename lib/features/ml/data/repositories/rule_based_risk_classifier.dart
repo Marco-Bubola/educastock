@@ -22,6 +22,10 @@ class RuleBasedRiskClassifier implements RiskClassifierRepository {
     return batches.map(_classifySync).toList();
   }
 
+  /// Variante síncrona pública — útil para previews em formulários,
+  /// onde queremos classificar sem await/FutureBuilder.
+  RiskPrediction classifySync(Batch batch) => _classifySync(batch);
+
   RiskPrediction _classifySync(Batch batch) {
     final f = BatchFeatures.fromBatch(batch);
     final (level, probs) = _applyRules(batch, f);
