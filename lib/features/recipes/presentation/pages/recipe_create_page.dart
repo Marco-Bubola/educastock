@@ -364,10 +364,10 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
                             )
                           : SliverGrid(
                               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
+                                crossAxisCount: 2,
                                 mainAxisSpacing: 10,
                                 crossAxisSpacing: 10,
-                                childAspectRatio: 0.70,
+                                childAspectRatio: 0.88,
                               ),
                               delegate: SliverChildBuilderDelegate(
                                 (context, i) {
