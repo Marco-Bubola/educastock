@@ -10,6 +10,7 @@ export 'components/casa_text_field.dart';
 export 'components/casa_status_chip.dart';
 export 'components/casa_info_card.dart';
 export 'components/casa_section_header.dart';
+export 'components/casa_product_card.dart';
 export 'components/casa_empty_state.dart';
 export 'components/casa_loading_skeleton.dart';
 export 'components/casa_dialog.dart';
