@@ -148,7 +148,7 @@ class DashboardPage extends ConsumerWidget {
                     crossAxisCount: cross,
                     mainAxisSpacing: AppSpacing.sm,
                     crossAxisSpacing: AppSpacing.sm,
-                    childAspectRatio: 0.92,
+                    childAspectRatio: 1.0,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
@@ -594,14 +594,14 @@ class _HeaderKpiCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: gradientColors,
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: gradientColors.first.withValues(alpha: 0.4),
@@ -614,28 +614,47 @@ class _HeaderKpiCard extends StatelessWidget {
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(icon,
-                    color: Colors.white.withValues(alpha: 0.9), size: 22),
-                const SizedBox(height: 10),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                  ),
+                // Linha 1: ícone + número lado a lado
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.20),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 18),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.productName(
+                          size: 26,
+                          weight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 6),
+                // Linha 2: label maior, contraste melhor
                 Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.82),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
+                  style: AppTypography.labelMedium.copyWith(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.1,
                   ),
                 ),
               ],
@@ -748,20 +767,20 @@ class _QuickActionTileState extends State<_QuickActionTile> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+                padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Ícone em círculo com gradiente
+                    // Ícone em círculo com gradiente (maior e mais presente)
                     Container(
-                      width: 38,
-                      height: 38,
+                      width: 46,
+                      height: 46,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
                             color,
-                            Color.lerp(color, Colors.black, 0.15)!,
+                            Color.lerp(color, Colors.black, 0.18)!,
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -769,26 +788,26 @@ class _QuickActionTileState extends State<_QuickActionTile> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: color.withValues(alpha: 0.45),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
+                            color: color.withValues(alpha: 0.50),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
-                      child: Icon(widget.icon, color: Colors.white, size: 19),
+                      child: Icon(widget.icon, color: Colors.white, size: 24),
                     ),
-                    const SizedBox(height: 6),
-                    // Label
+                    const SizedBox(height: 8),
+                    // Label maior e bem legível
                     Text(
                       widget.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: AppTypography.labelMedium.copyWith(
+                      style: AppTypography.productName(
+                        size: 13.5,
+                        weight: FontWeight.w800,
                         color: cs.onSurface,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11.5,
-                        letterSpacing: -0.1,
+                        letterSpacing: -0.2,
                       ),
                     ),
                   ],
