@@ -12,6 +12,7 @@ import '../controllers/scanner_provider.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
 import '../../../batches/domain/entities/batch.dart';
 import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../ml/presentation/widgets/risk_widgets.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/controllers/products_provider.dart';
 
@@ -1819,7 +1820,15 @@ class _ExistingBatchCardState extends ConsumerState<_ExistingBatchCard> {
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
+                // Preview ML — risco projetado após adicionar as unidades
+                RiskPreviewBanner(
+                  expiryDate: widget.batch.expiryDate,
+                  noExpiry: widget.batch.noExpiry,
+                  quantity: widget.batch.quantity + amount,
+                  entryDate: widget.batch.entryDate,
+                ),
+                const SizedBox(height: AppSpacing.md),
                 Consumer(
                   builder: (ctx, cref, _) {
                     final addState = cref.watch(addBatchQuantityProvider);
