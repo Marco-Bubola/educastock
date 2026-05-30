@@ -16,6 +16,41 @@ import 'output_view_page.dart';
 
 enum _OutputMode { products, recipes }
 
+/// Filtro de validade dos lotes disponíveis do produto.
+enum _ExpiryFilter {
+  todos,
+  vencidos, // já vencidos
+  criticos, // vence em ≤7 dias
+  atencao, // vence em 8–30 dias
+  seguros, // >30 dias ou sem validade
+}
+
+extension _ExpiryFilterX on _ExpiryFilter {
+  String get label => switch (this) {
+        _ExpiryFilter.todos => 'Todos',
+        _ExpiryFilter.vencidos => 'Vencidos',
+        _ExpiryFilter.criticos => 'Vence em 7 dias',
+        _ExpiryFilter.atencao => 'Vence em 30 dias',
+        _ExpiryFilter.seguros => 'Validade segura',
+      };
+
+  IconData get icon => switch (this) {
+        _ExpiryFilter.todos => Icons.all_inclusive_rounded,
+        _ExpiryFilter.vencidos => Icons.cancel_rounded,
+        _ExpiryFilter.criticos => Icons.warning_amber_rounded,
+        _ExpiryFilter.atencao => Icons.schedule_rounded,
+        _ExpiryFilter.seguros => Icons.check_circle_rounded,
+      };
+
+  Color get color => switch (this) {
+        _ExpiryFilter.todos => const Color(0xFF1D5FA8),
+        _ExpiryFilter.vencidos => const Color(0xFFDC2626),
+        _ExpiryFilter.criticos => const Color(0xFFEF4444),
+        _ExpiryFilter.atencao => const Color(0xFFD97706),
+        _ExpiryFilter.seguros => const Color(0xFF059669),
+      };
+}
+
 // Mesmo mapeamento usado na página Estoque, para manter o estilo visual
 // consistente entre as duas telas.
 IconData _categoryIcon(ProductCategory cat) => switch (cat) {
@@ -54,6 +89,7 @@ class _MovementPageState extends ConsumerState<MovementPage> {
   _OutputMode _mode = _OutputMode.products;
   String _search = '';
   String? _categoryKey;
+  _ExpiryFilter _expiryFilter = _ExpiryFilter.todos;
   String _reasonCode = MovementReasonCode.uso.name;
   String? _selectedRecipeId;
   final Map<String, int> _selectedQtyByProduct = {};
@@ -122,102 +158,264 @@ class _MovementPageState extends ConsumerState<MovementPage> {
         .fold<int>(0, (acc, b) => acc + b.quantity);
   }
 
+  /// Verifica se o produto possui ao menos um lote disponível que satisfaz
+  /// o filtro de validade selecionado.
+  bool _matchesExpiryFilter(String productId, List<Batch> batches) {
+    if (_expiryFilter == _ExpiryFilter.todos) return true;
+    final now = DateTime.now();
+    final available = batches.where(
+        (b) => b.productId == productId && b.status == BatchStatus.disponivel);
+    for (final b in available) {
+      if (b.expiryDate == null || b.noExpiry) {
+        if (_expiryFilter == _ExpiryFilter.seguros) return true;
+        continue;
+      }
+      final d = b.expiryDate!.difference(now).inDays;
+      final isExpired = b.expiryDate!.isBefore(now);
+      switch (_expiryFilter) {
+        case _ExpiryFilter.vencidos:
+          if (isExpired) return true;
+        case _ExpiryFilter.criticos:
+          if (!isExpired && d <= 7) return true;
+        case _ExpiryFilter.atencao:
+          if (!isExpired && d > 7 && d <= 30) return true;
+        case _ExpiryFilter.seguros:
+          if (!isExpired && d > 30) return true;
+        case _ExpiryFilter.todos:
+          return true;
+      }
+    }
+    return false;
+  }
+
   Future<void> _openFilterModal({
     required List<String> categoryKeys,
     required Map<String, String> categoryLabelMap,
   }) async {
     String? draftCategory = _categoryKey;
     String draftReason = _reasonCode;
+    _ExpiryFilter draftExpiry = _expiryFilter;
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             return Container(
-              decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.85,
               ),
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.lg,
-                AppSpacing.lg,
-                MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg,
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(26)),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Filtros de saída', style: AppTypography.headingMedium),
-                  const SizedBox(height: AppSpacing.md),
-                  Text('Categoria', style: AppTypography.labelMedium),
-                  const SizedBox(height: AppSpacing.xs),
-                  Wrap(
-                    spacing: AppSpacing.xs,
-                    runSpacing: AppSpacing.xs,
-                    children: [
-                      ChoiceChip(
-                        label: const Text('Todas'),
-                        selected: draftCategory == null,
-                        onSelected: (_) => setSheetState(() => draftCategory = null),
+                  // ── Handle + header gradiente ──
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF0F2444), Color(0xFF1D5FA8)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      ...categoryKeys.map(
-                        (key) => ChoiceChip(
-                          label: Text(categoryLabelMap[key] ?? key),
-                          selected: draftCategory == key,
-                          onSelected: (_) => setSheetState(() => draftCategory = key),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text('Motivo da saída', style: AppTypography.labelMedium),
-                  const SizedBox(height: AppSpacing.xs),
-                  Wrap(
-                    spacing: AppSpacing.xs,
-                    runSpacing: AppSpacing.xs,
-                    children: _reasonLabels.entries
-                        .map(
-                          (e) => ChoiceChip(
-                            label: Text(e.value),
-                            selected: draftReason == e.key,
-                            onSelected: (_) => setSheetState(() => draftReason = e.key),
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(26)),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                        )
-                        .toList(),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.3)),
+                              ),
+                              child: const Icon(Icons.tune_rounded,
+                                  color: Colors.white, size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Filtros de Saída',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w800,
+                                      )),
+                                  Text('Refine os produtos exibidos',
+                                      style: TextStyle(
+                                        color: Color(0xFFBFD7F2),
+                                        fontSize: 12,
+                                      )),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            setState(() {
-                              _categoryKey = null;
-                              _reasonCode = MovementReasonCode.uso.name;
-                            });
-                            Navigator.pop(ctx);
-                          },
-                          child: const Text('Limpar'),
-                        ),
+
+                  // ── Corpo scrollável ──
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ── Validade ──
+                          _FilterSectionLabel(
+                            icon: Icons.event_busy_rounded,
+                            label: 'Validade',
+                            color: const Color(0xFFD97706),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _ExpiryFilter.values.map((f) {
+                              return _ModernFilterChip(
+                                label: f.label,
+                                icon: f.icon,
+                                color: f.color,
+                                selected: draftExpiry == f,
+                                isDark: isDark,
+                                onTap: () =>
+                                    setSheetState(() => draftExpiry = f),
+                              );
+                            }).toList(),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // ── Categoria ──
+                          _FilterSectionLabel(
+                            icon: Icons.category_rounded,
+                            label: 'Categoria',
+                            color: const Color(0xFF1D5FA8),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _ModernFilterChip(
+                                label: 'Todas',
+                                icon: Icons.apps_rounded,
+                                color: const Color(0xFF1D5FA8),
+                                selected: draftCategory == null,
+                                isDark: isDark,
+                                onTap: () =>
+                                    setSheetState(() => draftCategory = null),
+                              ),
+                              ...categoryKeys.map(
+                                (key) => _ModernFilterChip(
+                                  label: categoryLabelMap[key] ?? key,
+                                  icon: Icons.label_rounded,
+                                  color: const Color(0xFF1D5FA8),
+                                  selected: draftCategory == key,
+                                  isDark: isDark,
+                                  onTap: () => setSheetState(
+                                      () => draftCategory = key),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // ── Motivo ──
+                          _FilterSectionLabel(
+                            icon: Icons.assignment_rounded,
+                            label: 'Motivo da saída',
+                            color: const Color(0xFF7C3AED),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _reasonLabels.entries.map((e) {
+                              return _ModernFilterChip(
+                                label: e.value,
+                                icon: _reasonIcon(e.key),
+                                color: const Color(0xFF7C3AED),
+                                selected: draftReason == e.key,
+                                isDark: isDark,
+                                onTap: () =>
+                                    setSheetState(() => draftReason = e.key),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: CasaButton(
-                          label: 'Aplicar filtros',
-                          onPressed: () {
-                            setState(() {
-                              _categoryKey = draftCategory;
-                              _reasonCode = draftReason;
-                            });
-                            Navigator.pop(ctx);
-                          },
+                    ),
+                  ),
+
+                  // ── Botões fixos ──
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(20, 8, 20,
+                        MediaQuery.of(ctx).viewInsets.bottom +
+                            MediaQuery.of(ctx).padding.bottom +
+                            14),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _categoryKey = null;
+                                _reasonCode = MovementReasonCode.uso.name;
+                                _expiryFilter = _ExpiryFilter.todos;
+                              });
+                              Navigator.pop(ctx);
+                            },
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('Limpar'),
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          flex: 2,
+                          child: CasaButton(
+                            label: 'Aplicar filtros',
+                            icon: Icons.check_rounded,
+                            onPressed: () {
+                              setState(() {
+                                _categoryKey = draftCategory;
+                                _reasonCode = draftReason;
+                                _expiryFilter = draftExpiry;
+                              });
+                              Navigator.pop(ctx);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -227,6 +425,14 @@ class _MovementPageState extends ConsumerState<MovementPage> {
       },
     );
   }
+
+  IconData _reasonIcon(String key) => switch (key) {
+        'uso' => Icons.outbound_rounded,
+        'validade' => Icons.event_busy_rounded,
+        'avaria' => Icons.report_problem_rounded,
+        'outro' => Icons.more_horiz_rounded,
+        _ => Icons.label_rounded,
+      };
 
   Future<void> _openSummary(List<Product> products) async {
     if (_selectedQtyByProduct.isEmpty ||
@@ -571,7 +777,8 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                     p.name.toLowerCase().contains(q) ||
                     (p.brand?.toLowerCase().contains(q) ?? false);
                 final categoryOk = _categoryKey == null || p.category.name == _categoryKey;
-                return searchOk && categoryOk;
+                final expiryOk = _matchesExpiryFilter(p.id, batches);
+                return searchOk && categoryOk && expiryOk;
               }).toList();
 
               final width = MediaQuery.of(context).size.width;
@@ -581,10 +788,26 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                     AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 100),
                 children: [
                   // Chips de filtros ativos
-                  if (_categoryKey != null || _reasonCode != MovementReasonCode.uso.name)
+                  if (_categoryKey != null ||
+                      _reasonCode != MovementReasonCode.uso.name ||
+                      _expiryFilter != _ExpiryFilter.todos)
                     Wrap(
                       spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
                       children: [
+                        if (_expiryFilter != _ExpiryFilter.todos)
+                          Chip(
+                            avatar: Icon(_expiryFilter.icon,
+                                size: 15, color: _expiryFilter.color),
+                            label: Text(_expiryFilter.label),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () => setState(
+                                () => _expiryFilter = _ExpiryFilter.todos),
+                            visualDensity: VisualDensity.compact,
+                            side: BorderSide(
+                                color: _expiryFilter.color
+                                    .withValues(alpha: 0.4)),
+                          ),
                         if (_categoryKey != null)
                           Chip(
                             label: Text(
@@ -608,7 +831,28 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                       ],
                     ),
                   const SizedBox(height: AppSpacing.sm),
-                  if (_mode == _OutputMode.products) ...[
+                  if (_mode == _OutputMode.products && filteredProducts.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xxl),
+                      child: CasaEmptyState(
+                        icon: _expiryFilter != _ExpiryFilter.todos
+                            ? _expiryFilter.icon
+                            : Icons.search_off_rounded,
+                        title: 'Nenhum produto encontrado',
+                        description: _expiryFilter != _ExpiryFilter.todos
+                            ? 'Nenhum lote disponível em "${_expiryFilter.label}". Tente outro filtro.'
+                            : 'Ajuste a busca ou os filtros para ver produtos.',
+                        ctaLabel: 'Limpar filtros',
+                        onCta: () => setState(() {
+                          _categoryKey = null;
+                          _reasonCode = MovementReasonCode.uso.name;
+                          _expiryFilter = _ExpiryFilter.todos;
+                          _search = '';
+                          _searchController.clear();
+                        }),
+                      ),
+                    )
+                  else if (_mode == _OutputMode.products) ...[
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -1064,6 +1308,129 @@ class _HeaderModeTab extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Label de seção do modal de filtro ─────────────────────────────────────
+
+class _FilterSectionLabel extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  const _FilterSectionLabel({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: color),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: Theme.of(context).colorScheme.onSurface,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Chip moderno selecionável do modal de filtro ───────────────────────────
+
+class _ModernFilterChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _ModernFilterChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? LinearGradient(
+                  colors: [color, color.withValues(alpha: 0.78)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: selected
+              ? null
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : cs.surfaceContainerHighest.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected
+                ? Colors.transparent
+                : color.withValues(alpha: isDark ? 0.30 : 0.22),
+            width: 1.2,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: selected ? Colors.white : color,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: selected
+                    ? Colors.white
+                    : (isDark ? Colors.white : cs.onSurface),
+              ),
+            ),
+          ],
         ),
       ),
     );
