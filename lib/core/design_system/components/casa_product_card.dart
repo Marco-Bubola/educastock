@@ -81,7 +81,7 @@ class CasaProductCard extends StatelessWidget {
           children: [
             // ─── Header com imagem grande / ícone categoria ─────────────
             AspectRatio(
-              aspectRatio: 16 / 11,
+              aspectRatio: 16 / 9,
               child: Stack(
                 children: [
                   // Background gradient (visível como fallback)
@@ -124,38 +124,38 @@ class CasaProductCard extends StatelessWidget {
                             ),
                             errorWidget: (_, __, ___) => Center(
                               child: Container(
-                                width: 60,
-                                height: 60,
+                                width: 52,
+                                height: 52,
                                 decoration: BoxDecoration(
                                   color: Colors.white.withValues(alpha: 0.18),
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(13),
                                   border: Border.all(
                                     color: Colors.white.withValues(alpha: 0.32),
-                                    width: 1.5,
+                                    width: 1.4,
                                   ),
                                 ),
                                 child: Icon(fallbackIcon,
-                                    color: Colors.white, size: 30),
+                                    color: Colors.white, size: 26),
                               ),
                             ),
                           )
                         : Center(
                             child: Container(
-                              width: 60,
-                              height: 60,
+                              width: 52,
+                              height: 52,
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(13),
                                 border: Border.all(
                                   color:
                                       Colors.white.withValues(alpha: 0.32),
-                                  width: 1.5,
+                                  width: 1.4,
                                 ),
                               ),
                               child: Icon(
                                 fallbackIcon,
                                 color: Colors.white,
-                                size: 30,
+                                size: 26,
                               ),
                             ),
                           ),
@@ -169,10 +169,11 @@ class CasaProductCard extends StatelessWidget {
                 ],
               ),
             ),
-            // ─── Corpo ─────────────────────────────────────────────────
+            // ─── Corpo (mais compacto) ────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -180,12 +181,12 @@ class CasaProductCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.productName(
-                      size: 14.5,
+                      size: 14,
                       color: cs.onSurface,
                     ),
                   ),
                   if (footer != null) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     footer!,
                   ],
                 ],
