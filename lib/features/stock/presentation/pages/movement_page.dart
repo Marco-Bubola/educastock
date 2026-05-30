@@ -858,10 +858,10 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: filteredProducts.length,
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
+                        crossAxisCount: 2,
                         mainAxisSpacing: 10,
                         crossAxisSpacing: 10,
-                        childAspectRatio: 0.72,
+                        childAspectRatio: 0.88,
                       ),
                       itemBuilder: (_, i) {
                           final p = filteredProducts[i];
