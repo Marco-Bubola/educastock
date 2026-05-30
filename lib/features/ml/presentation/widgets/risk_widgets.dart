@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/design_system/design_system.dart';
+import '../../../batches/domain/entities/batch.dart';
+import '../../data/repositories/rule_based_risk_classifier.dart';
 import '../../domain/entities/risk_prediction.dart';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -307,3 +309,139 @@ class _RiskCounter extends StatelessWidget {
   }
 }
 
+// ─── RiskPreviewBanner ──────────────────────────────────────────────────────
+
+/// Calcula em tempo real (regras síncronas) o risco previsto para um lote em
+/// criação/edição, antes de salvar. Aparece como um banner colorido com
+/// recomendação acionável.
+///
+/// Útil para alimentar o usuário com feedback ML imediato no batch_form_page,
+/// scanner review etc., sem precisar de TFLite (que requer build com batches).
+class RiskPreviewBanner extends StatelessWidget {
+  final DateTime? expiryDate;
+  final bool noExpiry;
+  final int quantity;
+  final DateTime entryDate;
+
+  const RiskPreviewBanner({
+    super.key,
+    required this.expiryDate,
+    required this.noExpiry,
+    required this.quantity,
+    required this.entryDate,
+  });
+
+  RiskPrediction get _prediction {
+    final fake = Batch(
+      id: '_preview',
+      productId: '_preview',
+      productName: '',
+      quantity: quantity < 1 ? 1 : quantity,
+      initialQuantity: quantity < 1 ? 1 : quantity,
+      expiryDate: noExpiry ? null : expiryDate,
+      noExpiry: noExpiry,
+      entryDate: entryDate,
+      origin: 'doacao',
+      createdBy: '_preview',
+      createdAt: entryDate,
+    );
+    return RuleBasedRiskClassifier().classifySync(fake);
+  }
+
+  String _recommendation(RiskLevel level, bool noExpiry) {
+    if (noExpiry) return 'Sem validade — risco baixo de perda.';
+    switch (level) {
+      case RiskLevel.verde:
+        return 'Lote em condição ideal. Distribua normalmente.';
+      case RiskLevel.amarelo:
+        return 'Vencimento próximo. Acompanhe para evitar perda.';
+      case RiskLevel.vermelho:
+        return 'Risco alto. Priorize distribuição rápida.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Quando não há data e não está marcado "sem validade", não exibe preview.
+    if (!noExpiry && expiryDate == null) return const SizedBox.shrink();
+
+    final p = _prediction;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = _fgForLevel(p.level);
+    final bg = _bgForLevel(p.level, isDark);
+    final pct = (p.confidence * 100).toInt();
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: Container(
+        key: ValueKey(p.level),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: fg.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: fg,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(_iconForLevel(p.level),
+                  color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Risco previsto: ${p.level.label}',
+                        style: AppTypography.labelMedium.copyWith(
+                          color: fg,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: fg.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$pct%',
+                          style: AppTypography.labelSmall.copyWith(
+                            color: fg,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _recommendation(p.level, noExpiry),
+                    style: AppTypography.bodySmall.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
