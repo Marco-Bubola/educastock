@@ -189,9 +189,10 @@ class ForecastSuggestionCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             forecast.productName,
-                            style: AppTypography.labelLarge.copyWith(
+                            style: AppTypography.productName(
+                              size: 15,
+                              weight: FontWeight.w800,
                               color: cs.onSurface,
-                              fontWeight: FontWeight.w700,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -204,14 +205,15 @@ class ForecastSuggestionCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(
                       daysLeft < 999
-                          ? 'Estoque para ~$daysLeft dias • Repor ${forecast.suggestedReplenishment} un.'
-                          : 'Repor ${forecast.suggestedReplenishment} un. • Sem histórico de saída',
-                      style: AppTypography.bodySmall.copyWith(
+                          ? 'Estoque p/ ~$daysLeft dias  •  Repor ${forecast.suggestedReplenishment} un.'
+                          : 'Repor ${forecast.suggestedReplenishment} un.  •  Sem histórico',
+                      style: AppTypography.bodyMedium.copyWith(
                         color: cs.onSurfaceVariant,
-                        fontSize: 11,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -256,30 +258,33 @@ class _ForecastBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final ratio = forecastMonthly > 0
-        ? (currentStock / forecastMonthly).clamp(0.0, 1.0)
+    // Target = consumo previsto × 1.2 (mesmo cálculo de suggestedReplenishment)
+    final target = (forecastMonthly * 1.2).round();
+    final ratio = target > 0
+        ? (currentStock / target).clamp(0.0, 1.0)
         : 0.0;
+    final pct = (ratio * 100).round();
 
     return Row(
       children: [
         Expanded(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
               value: ratio,
-              minHeight: 4,
+              minHeight: 6,
               backgroundColor: cs.outlineVariant.withValues(alpha: 0.3),
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 6),
         Text(
-          '$currentStock / ${forecastMonthly.toStringAsFixed(0)}',
+          '$pct% de $target',
           style: AppTypography.labelSmall.copyWith(
             color: color,
-            fontWeight: FontWeight.w700,
-            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            fontSize: 10.5,
           ),
         ),
       ],
