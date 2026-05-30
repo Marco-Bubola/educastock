@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
+import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../ml/data/repositories/rule_based_risk_classifier.dart';
+import '../../../ml/domain/entities/risk_prediction.dart';
 import '../controllers/locations_provider.dart';
 import '../../domain/entities/storage_location.dart';
 
@@ -388,7 +391,7 @@ class _GroupHeader extends StatelessWidget {
 
 // ─── Location Card ────────────────────────────────────────────────────────────
 
-class _LocationCard extends StatelessWidget {
+class _LocationCard extends ConsumerWidget {
   final StorageLocation location;
   final VoidCallback onDeactivate;
   final bool isDark;
@@ -415,12 +418,33 @@ class _LocationCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final accent = _accentFor(location.groupKey);
     final cardBg = isDark ? const Color(0xFF1A2234) : Colors.white;
     final titleColor = isDark ? Colors.white : const Color(0xFF111827);
     final subColor =
         isDark ? const Color(0xFFADB5BD) : const Color(0xFF6B7280);
+
+    // ─── Saúde da prateleira (ML) ───────────────────────────────────────
+    // Conta lotes vinculados a esta localização e classifica por nível.
+    final allBatches =
+        ref.watch(allAvailableBatchesProvider).valueOrNull ?? const [];
+    final myBatches = allBatches
+        .where((b) => b.shelfLocation == location.label)
+        .toList();
+    final classifier = RuleBasedRiskClassifier();
+    int red = 0, yellow = 0, green = 0;
+    for (final b in myBatches) {
+      final lvl = classifier.classifySync(b).level;
+      if (lvl == RiskLevel.vermelho) {
+        red++;
+      } else if (lvl == RiskLevel.amarelo) {
+        yellow++;
+      } else {
+        green++;
+      }
+    }
+    final totalBatches = myBatches.length;
 
     final hasName = (location.locationName ?? '').isNotEmpty;
     final hasLevel = (location.level ?? '').isNotEmpty;
@@ -608,6 +632,17 @@ class _LocationCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                    // ─── Barra de saúde ML ───────────────────────────
+                    if (totalBatches > 0) ...[
+                      const SizedBox(height: 8),
+                      _ShelfHealthBar(
+                        red: red,
+                        yellow: yellow,
+                        green: green,
+                        total: totalBatches,
+                        isDark: isDark,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -656,6 +691,105 @@ class _Chip extends StatelessWidget {
             label,
             style: TextStyle(
                 fontSize: 11, fontWeight: FontWeight.w600, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Shelf health bar (ML) ────────────────────────────────────────────────
+
+class _ShelfHealthBar extends StatelessWidget {
+  final int red;
+  final int yellow;
+  final int green;
+  final int total;
+  final bool isDark;
+
+  const _ShelfHealthBar({
+    required this.red,
+    required this.yellow,
+    required this.green,
+    required this.total,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final greenPct = green / total;
+    final yellowPct = yellow / total;
+    final redPct = red / total;
+    final healthScore = ((greenPct * 100) + (yellowPct * 50)).round();
+    final scoreColor = healthScore >= 70
+        ? AppColors.success600
+        : healthScore >= 40
+            ? AppColors.warning600
+            : AppColors.danger600;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: scoreColor.withValues(alpha: isDark ? 0.10 : 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: scoreColor.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.health_and_safety_rounded,
+                  size: 11, color: scoreColor),
+              const SizedBox(width: 4),
+              Text(
+                'Saúde ML',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: scoreColor,
+                  letterSpacing: 0.1,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$healthScore/100 · $total lote${total == 1 ? '' : 's'}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: scoreColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              height: 6,
+              child: Row(
+                children: [
+                  if (greenPct > 0)
+                    Expanded(
+                      flex: (greenPct * 1000).round(),
+                      child: Container(color: AppColors.success600),
+                    ),
+                  if (yellowPct > 0)
+                    Expanded(
+                      flex: (yellowPct * 1000).round(),
+                      child: Container(color: AppColors.warning600),
+                    ),
+                  if (redPct > 0)
+                    Expanded(
+                      flex: (redPct * 1000).round(),
+                      child: Container(color: AppColors.danger600),
+                    ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
