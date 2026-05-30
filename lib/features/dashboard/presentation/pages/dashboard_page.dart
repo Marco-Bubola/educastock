@@ -766,51 +766,55 @@ class _QuickActionTileState extends State<_QuickActionTile> {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 12, 8, 10),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // Ícone em círculo com gradiente (maior e mais presente)
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            color,
-                            Color.lerp(color, Colors.black, 0.18)!,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: color.withValues(alpha: 0.50),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Ícone maior centralizado
+                      Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              color,
+                              Color.lerp(color, Colors.black, 0.18)!,
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                        ],
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.50),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Icon(widget.icon,
+                            color: Colors.white, size: 28),
                       ),
-                      child: Icon(widget.icon, color: Colors.white, size: 24),
-                    ),
-                    const SizedBox(height: 8),
-                    // Label maior e bem legível
-                    Text(
-                      widget.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: AppTypography.productName(
-                        size: 13.5,
-                        weight: FontWeight.w800,
-                        color: cs.onSurface,
-                        letterSpacing: -0.2,
+                      const SizedBox(height: 8),
+                      // Label centralizada
+                      Text(
+                        widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: AppTypography.productName(
+                          size: 13.5,
+                          weight: FontWeight.w800,
+                          color: cs.onSurface,
+                          letterSpacing: -0.2,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
