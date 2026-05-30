@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
@@ -103,6 +104,25 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
     );
   }
 
+  static const _kBarcodeHistoryKey = 'barcode_history_v1';
+  static const _kBarcodeHistoryMax = 8;
+
+  Future<List<String>> _loadBarcodeHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_kBarcodeHistoryKey) ?? [];
+  }
+
+  Future<void> _saveBarcodeHistory(String code) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_kBarcodeHistoryKey) ?? [];
+    list.remove(code);
+    list.insert(0, code);
+    if (list.length > _kBarcodeHistoryMax) {
+      list.removeRange(_kBarcodeHistoryMax, list.length);
+    }
+    await prefs.setStringList(_kBarcodeHistoryKey, list);
+  }
+
   void _showManualBarcodeInput() {
     final ctrl = TextEditingController();
     showModalBottomSheet(
@@ -111,75 +131,282 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
+        Future<void> submit(String value) async {
+          final barcode = value.trim();
+          if (barcode.isEmpty) return;
+          await _saveBarcodeHistory(barcode);
+          if (!ctx.mounted) return;
+          Navigator.of(ctx).pop();
+          if (!mounted) return;
+          context.push('${AppRoutes.productReview}?barcode=$barcode');
+        }
+
         return Padding(
           padding:
               EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Container(
             decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
+              color: cs.surfaceContainerLowest,
               borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(AppRadius.modal)),
             ),
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: cs.outlineVariant,
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
+            child: StatefulBuilder(
+              builder: (sb, setSheet) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ─── Handle
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: cs.outlineVariant,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                Text('Código de barras manual',
-                    style: AppTypography.headingSmall.copyWith(
-                        color: cs.onSurface, fontWeight: FontWeight.w700)),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                    'Digite o código para verificar se o produto já existe.',
-                    style: AppTypography.bodySmall
-                        .copyWith(color: cs.onSurfaceVariant)),
-                const SizedBox(height: AppSpacing.lg),
-                TextField(
-                  controller: ctrl,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: 'Ex: 7891234567890',
-                    prefixIcon: const Icon(Icons.qr_code_rounded),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.input)),
-                    labelText: 'Código de barras',
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () {
-                      final barcode = ctrl.text.trim();
-                      if (barcode.isEmpty) return;
-                      Navigator.of(ctx).pop();
-                      context.push(
-                          '${AppRoutes.productReview}?barcode=$barcode');
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.brandPrimary600,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.button)),
+                    // ─── Header com ícone gradiente
+                    Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppColors.brandPrimary600,
+                                AppColors.secondaryBlue600,
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.brandPrimary600
+                                    .withValues(alpha: 0.40),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.keyboard_rounded,
+                              color: Colors.white, size: 22),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Digitar código',
+                                style: AppTypography.productName(
+                                  size: 18,
+                                  weight: FontWeight.w900,
+                                  color: cs.onSurface,
+                                ),
+                              ),
+                              Text(
+                                'Cadastre por código de barras',
+                                style: AppTypography.bodySmall.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    child: const Text('Buscar produto'),
-                  ),
-                ),
-              ],
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ─── Input moderno
+                    Container(
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainer,
+                        borderRadius:
+                            BorderRadius.circular(AppRadius.input),
+                        border: Border.all(
+                          color: AppColors.brandPrimary600
+                              .withValues(alpha: 0.30),
+                          width: 1.4,
+                        ),
+                      ),
+                      child: TextField(
+                        controller: ctrl,
+                        autofocus: true,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: submit,
+                        style: AppTypography.productName(
+                          size: 18,
+                          weight: FontWeight.w800,
+                          color: cs.onSurface,
+                          letterSpacing: 1.2,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: '7891234567890',
+                          hintStyle: TextStyle(
+                            color: cs.onSurfaceVariant
+                                .withValues(alpha: 0.45),
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.qr_code_rounded,
+                            color: AppColors.brandPrimary600,
+                            size: 24,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                              vertical: 16, horizontal: 4),
+                        ),
+                      ),
+                    ),
+
+                    // ─── Histórico de códigos
+                    FutureBuilder<List<String>>(
+                      future: _loadBarcodeHistory(),
+                      builder: (_, snap) {
+                        final history = snap.data ?? const [];
+                        if (history.isEmpty) return const SizedBox.shrink();
+                        return Padding(
+                          padding:
+                              const EdgeInsets.only(top: AppSpacing.md),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.history_rounded,
+                                    size: 14,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    'Recentes',
+                                    style: AppTypography.labelMedium.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 11.5,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  GestureDetector(
+                                    onTap: () async {
+                                      final prefs = await SharedPreferences
+                                          .getInstance();
+                                      await prefs
+                                          .remove(_kBarcodeHistoryKey);
+                                      if (!sb.mounted) return;
+                                      setSheet(() {});
+                                    },
+                                    child: Text(
+                                      'Limpar',
+                                      style: AppTypography.labelSmall
+                                          .copyWith(
+                                        color: AppColors.danger600,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: history.map((code) {
+                                  return GestureDetector(
+                                    onTap: () {
+                                      ctrl.text = code;
+                                      submit(code);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 7),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.brandPrimary600
+                                            .withValues(
+                                                alpha: isDark ? 0.18 : 0.08),
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: AppColors.brandPrimary600
+                                              .withValues(alpha: 0.28),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.qr_code_rounded,
+                                            size: 12,
+                                            color: AppColors.brandPrimary600,
+                                          ),
+                                          const SizedBox(width: 5),
+                                          Text(
+                                            code,
+                                            style: AppTypography.labelMedium
+                                                .copyWith(
+                                              color: AppColors.brandPrimary600,
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 11.5,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ─── Botão buscar
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: FilledButton.icon(
+                        onPressed: () => submit(ctrl.text),
+                        icon: const Icon(Icons.search_rounded, size: 20),
+                        label: Text(
+                          'Buscar produto',
+                          style: AppTypography.productName(
+                            size: 15,
+                            weight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.brandPrimary600,
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.button),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         );
@@ -450,7 +677,7 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                       crossAxisCount: 2,
                       mainAxisSpacing: AppSpacing.md,
                       crossAxisSpacing: AppSpacing.md,
-                      childAspectRatio: 0.74,
+                      childAspectRatio: 0.92,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
@@ -482,7 +709,7 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                     crossAxisCount: 2,
                     mainAxisSpacing: AppSpacing.md,
                     crossAxisSpacing: AppSpacing.md,
-                    childAspectRatio: 0.74,
+                    childAspectRatio: 0.92,
                   ),
                   itemCount: 6,
                   itemBuilder: (_, __) => const CasaCardSkeleton(),
