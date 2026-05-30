@@ -366,34 +366,46 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
                           : SliverGrid(
                               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 2,
-                                mainAxisSpacing: 10,
-                                crossAxisSpacing: 10,
-                                childAspectRatio: 0.88,
+                                mainAxisSpacing: 14,
+                                crossAxisSpacing: 14,
+                                childAspectRatio: 0.68,
                               ),
                               delegate: SliverChildBuilderDelegate(
                                 (context, i) {
                                   final p = filtered[i];
                                   final qty = _selectedQty[p.id] ?? 0;
-                                  return _ProductCard(
-                                    product: p,
-                                    qty: qty,
-                                    isDark: isDark,
-                                    cardBg: cardBg,
-                                    borderColor: borderColor,
-                                    textPrimary: textPrimary,
-                                    textSub: textSub,
-                                    onDecrement: qty > 0
-                                        ? () => setState(() {
-                                              final next = qty - 1;
-                                              if (next <= 0) {
-                                                _selectedQty.remove(p.id);
-                                              } else {
-                                                _selectedQty[p.id] = next;
-                                              }
-                                            })
-                                        : null,
-                                    onIncrement: () =>
-                                        setState(() => _selectedQty[p.id] = qty + 1),
+                                  return CasaProductCard(
+                                    name: p.name,
+                                    imageUrl: p.imageUrl,
+                                    fallbackIcon: Icons.restaurant_menu_rounded,
+                                    palette: const [_kPurple, _kPurpleDark],
+                                    animationIndex: i,
+                                    onTap: () => setState(
+                                        () => _selectedQty[p.id] = qty + 1),
+                                    footer: Text(
+                                      p.unit ?? 'un',
+                                      style: AppTypography.labelSmall.copyWith(
+                                        color: textSub,
+                                        fontSize: 11.5,
+                                      ),
+                                    ),
+                                    actionFooter: CasaProductStepper(
+                                      qty: qty,
+                                      max: 9999,
+                                      accent: _kPurple,
+                                      onDecrement: qty > 0
+                                          ? () => setState(() {
+                                                final next = qty - 1;
+                                                if (next <= 0) {
+                                                  _selectedQty.remove(p.id);
+                                                } else {
+                                                  _selectedQty[p.id] = next;
+                                                }
+                                              })
+                                          : null,
+                                      onIncrement: () => setState(() =>
+                                          _selectedQty[p.id] = qty + 1),
+                                    ),
                                   );
                                 },
                                 childCount: filtered.length,
