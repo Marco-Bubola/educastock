@@ -169,30 +169,36 @@ class CasaProductCard extends StatelessWidget {
                 ],
               ),
             ),
-            // ─── Corpo (mais compacto) ────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.productName(
-                      size: 14,
-                      color: cs.onSurface,
+            // ─── Corpo (altura fixa pra posições consistentes) ────────
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(10, 8, 10, actionFooter != null ? 4 : 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Nome com altura RESERVADA de 2 linhas (mesmo se 1 linha)
+                    SizedBox(
+                      height: 34,
+                      child: Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.productName(
+                          size: 14,
+                          color: cs.onSurface,
+                        ),
+                      ),
                     ),
-                  ),
-                  if (footer != null) ...[
-                    const SizedBox(height: 4),
-                    footer!,
+                    if (footer != null) ...[
+                      const Spacer(),
+                      footer!,
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-            // ─── Action footer (stepper / botão) ──────────────────────
+            // ─── Action footer (stepper / botão) — colado na borda ────
             if (actionFooter != null) actionFooter!,
           ],
         ),
@@ -251,8 +257,12 @@ class CasaProductStepper extends StatelessWidget {
             width: 1,
           ),
         ),
+        // Cantos inferiores arredondados pra ficar colado na borda do card
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(18),
+        ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Row(
         children: [
           _StepperButton(
