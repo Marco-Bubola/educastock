@@ -13,6 +13,8 @@ import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/controllers/products_provider.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../../ml/presentation/widgets/risk_widgets.dart';
+import '../../../stock/domain/entities/stock_movement.dart';
+import '../../../stock/presentation/pages/movement_page.dart' show stockDatasourceProvider;
 import '../../domain/entities/batch.dart';
 import '../controllers/batches_provider.dart';
 
@@ -102,9 +104,14 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
           _expiryDate ?? DateTime.now().add(const Duration(days: 30)),
       firstDate: DateTime.now().subtract(const Duration(days: 1)),
       lastDate: DateTime.now().add(const Duration(days: 3650)),
-      helpText: 'Data de Validade do Lote',
-      confirmText: 'Confirmar',
-      cancelText: 'Cancelar',
+      helpText: 'Data de validade do lote',
+      confirmText: 'CONFIRMAR',
+      cancelText: 'CANCELAR',
+      fieldLabelText: 'Data',
+      fieldHintText: 'dd/mm/aaaa',
+      errorFormatText: 'Formato inválido (dd/mm/aaaa)',
+      errorInvalidText: 'Data fora do intervalo permitido',
+      locale: const Locale('pt', 'BR'),
     );
     if (picked != null) setState(() => _expiryDate = picked);
   }
@@ -245,6 +252,35 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
         .saveBatch(batch, imageFile: _pickedImageFile);
 
     final state = ref.read(batchFormProvider);
+
+    // Registra ENTRADA no histórico (somente novos lotes) — aparece como
+    // card de entrada na aba Histórico.
+    if (!_isEdit) {
+      final newId = state.valueOrNull;
+      if (newId != null && newId.isNotEmpty) {
+        try {
+          await ref.read(stockDatasourceProvider).logEntryMovement(
+                StockMovement(
+                  id: '',
+                  productId: effectiveProductId,
+                  productName: productName,
+                  batchId: newId,
+                  type: MovementType.entrada,
+                  quantity: qty,
+                  reasonCode: _origin,
+                  reason: 'Cadastro de lote',
+                  performedBy: user.id,
+                  performedByName: user.name,
+                  performedAt: DateTime.now(),
+                  auditAfter: {'quantity': qty},
+                ),
+              );
+        } catch (_) {
+          // Histórico é best-effort; não bloqueia o cadastro.
+        }
+      }
+    }
+
     if (!mounted) return;
     state.when(
       data: (id) {
@@ -587,38 +623,24 @@ class _BatchFormPageState extends ConsumerState<BatchFormPage> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Row(
-                          children: [
-                            Icon(Icons.touch_app_rounded,
-                                size: 12,
-                                color: cs.onSurfaceVariant
-                                    .withValues(alpha: 0.45)),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Toque para abrir o calendário',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: cs.onSurfaceVariant
-                                      .withValues(alpha: 0.55)),
-                            ),
-                            const Spacer(),
-                            ExpiryOcrButton(
-                              onDateSuggested: (date) {
-                                setState(() => _expiryDate = date);
-                                showCasaSnackbar(
-                                  context,
-                                  message:
-                                      'Data lida: ${DateFormat('dd/MM/yyyy').format(date)} — confirme se está correta',
-                                  isSuccess: true,
-                                );
-                              },
-                            ),
-                          ],
+                        // OCR fica embaixo, alinhado à direita
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ExpiryOcrButton(
+                            onDateSuggested: (date) {
+                              setState(() => _expiryDate = date);
+                              showCasaSnackbar(
+                                context,
+                                message:
+                                    'Data lida: ${DateFormat('dd/MM/yyyy').format(date)} — confirme se está correta',
+                                isSuccess: true,
+                              );
+                            },
+                          ),
                         ),
                         // Preview ML em tempo real (assim que a data é definida)
                         if (_noExpiry || _expiryDate != null) ...[
-                          const SizedBox(height: AppSpacing.sm),
+                          const SizedBox(height: AppSpacing.md),
                           RiskPreviewBanner(
                             expiryDate: _expiryDate,
                             noExpiry: _noExpiry,
