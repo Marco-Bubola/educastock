@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/controllers/auth_provider.dart';
@@ -13,6 +12,7 @@ import '../../../batches/presentation/controllers/batches_provider.dart';
 import '../../../ml/data/repositories/rule_based_risk_classifier.dart';
 import '../../../ml/domain/entities/risk_prediction.dart';
 import '../../../ml/presentation/widgets/risk_widgets.dart';
+import '../../../scanner/data/scan_history_repository.dart';
 import '../../../settings/presentation/controllers/system_settings_provider.dart';
 import '../../domain/entities/product.dart';
 import '../controllers/products_provider.dart';
@@ -104,25 +104,6 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
     );
   }
 
-  static const _kBarcodeHistoryKey = 'barcode_history_v1';
-  static const _kBarcodeHistoryMax = 8;
-
-  Future<List<String>> _loadBarcodeHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_kBarcodeHistoryKey) ?? [];
-  }
-
-  Future<void> _saveBarcodeHistory(String code) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList(_kBarcodeHistoryKey) ?? [];
-    list.remove(code);
-    list.insert(0, code);
-    if (list.length > _kBarcodeHistoryMax) {
-      list.removeRange(_kBarcodeHistoryMax, list.length);
-    }
-    await prefs.setStringList(_kBarcodeHistoryKey, list);
-  }
-
   void _showManualBarcodeInput() {
     final ctrl = TextEditingController();
     showModalBottomSheet(
@@ -136,7 +117,10 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
         Future<void> submit(String value) async {
           final barcode = value.trim();
           if (barcode.isEmpty) return;
-          await _saveBarcodeHistory(barcode);
+          // Salva no banco (Firestore) como digitado — persiste entre reloads.
+          await ref
+              .read(scanHistoryRepositoryProvider)
+              .record(barcode, source: 'typed');
           if (!ctx.mounted) return;
           Navigator.of(ctx).pop();
           if (!mounted) return;
@@ -271,11 +255,13 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                       ),
                     ),
 
-                    // ─── Histórico de códigos
-                    FutureBuilder<List<String>>(
-                      future: _loadBarcodeHistory(),
-                      builder: (_, snap) {
-                        final history = snap.data ?? const [];
+                    // ─── Histórico de códigos (do banco, em tempo real) ──
+                    Consumer(
+                      builder: (_, sheetRef, __) {
+                        final history = sheetRef
+                                .watch(scanHistoryProvider)
+                                .valueOrNull ??
+                            const [];
                         if (history.isEmpty) return const SizedBox.shrink();
                         return Padding(
                           padding:
@@ -302,14 +288,9 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                                   ),
                                   const Spacer(),
                                   GestureDetector(
-                                    onTap: () async {
-                                      final prefs = await SharedPreferences
-                                          .getInstance();
-                                      await prefs
-                                          .remove(_kBarcodeHistoryKey);
-                                      if (!sb.mounted) return;
-                                      setSheet(() {});
-                                    },
+                                    onTap: () => sheetRef
+                                        .read(scanHistoryRepositoryProvider)
+                                        .clear(),
                                     child: Text(
                                       'Limpar',
                                       style: AppTypography.labelSmall
@@ -326,11 +307,12 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                               Wrap(
                                 spacing: 6,
                                 runSpacing: 6,
-                                children: history.map((code) {
+                                children: history.map((item) {
+                                  final isScanned = item.source == 'scanned';
                                   return GestureDetector(
                                     onTap: () {
-                                      ctrl.text = code;
-                                      submit(code);
+                                      ctrl.text = item.code;
+                                      submit(item.code);
                                     },
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
@@ -349,14 +331,16 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Icon(
-                                            Icons.qr_code_rounded,
+                                          Icon(
+                                            isScanned
+                                                ? Icons.qr_code_scanner_rounded
+                                                : Icons.keyboard_rounded,
                                             size: 12,
                                             color: AppColors.brandPrimary600,
                                           ),
                                           const SizedBox(width: 5),
                                           Text(
-                                            code,
+                                            item.code,
                                             style: AppTypography.labelMedium
                                                 .copyWith(
                                               color: AppColors.brandPrimary600,
