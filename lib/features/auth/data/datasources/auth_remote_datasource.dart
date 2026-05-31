@@ -152,28 +152,41 @@ class AuthRemoteDatasource {
   Future<AppUser?> getCurrentUser() async {
     final user = _auth.currentUser;
     if (user == null) return null;
+    // Garante que o ID token esteja pronto antes de ler o Firestore — evita
+    // a corrida de `permission-denied` no primeiro load (web/PWA iOS).
+    try {
+      await user.getIdToken();
+    } catch (_) {
+      // Se falhar, _fetchUser ainda tem retry para cobrir.
+    }
     final profile = await _fetchUser(user.uid);
     return profile ?? _fromFirebaseUser(user);
   }
 
   Future<AppUser?> _fetchUser(String uid) async {
-    const maxAttempts = 3;
+    // No web/PWA, logo após o Firebase restaurar a sessão (primeiro load),
+    // o token de auth pode ainda não estar anexado à 1ª requisição do
+    // Firestore → retorna `permission-denied` momentâneo. Antes isso fazia
+    // o app cair no fallback com role `consulta` (permissão mínima),
+    // exigindo reload. Agora `permission-denied` é tratado como transitório
+    // e re-tentado algumas vezes antes de desistir.
+    const maxAttempts = 5;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         final doc = await _firestore.collection('users').doc(uid).get();
         if (!doc.exists || doc.data() == null) return null;
         return AppUser.fromMap(doc.data()!, doc.id);
       } on FirebaseException catch (e) {
-        if (e.code == 'permission-denied') return null;
-
-        final isTransient = e.code == 'unavailable' || e.code == 'deadline-exceeded';
+        final isTransient = e.code == 'permission-denied' ||
+            e.code == 'unavailable' ||
+            e.code == 'deadline-exceeded';
         final isLastAttempt = attempt == maxAttempts;
         if (!isTransient || isLastAttempt) {
           if (isTransient) return null;
           rethrow;
         }
-
-        await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
+        // Backoff progressivo: 200, 400, 600, 800ms
+        await Future<void>.delayed(Duration(milliseconds: 200 * attempt));
       }
     }
 
