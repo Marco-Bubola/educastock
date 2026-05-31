@@ -31,6 +31,26 @@ class LocationsNotifier extends AsyncNotifier<void> {
     });
   }
 
+  /// Cria uma prateleira inteira com N níveis. Retorna quantos foram criados.
+  Future<int> createShelfWithLevels({
+    required String shelf,
+    required int levels,
+    int? capacityPerLevel,
+  }) async {
+    state = const AsyncLoading();
+    int created = 0;
+    state = await AsyncValue.guard(() async {
+      created = await ref
+          .read(locationsDatasourceProvider)
+          .createShelfWithLevels(
+            shelf: shelf,
+            levels: levels,
+            capacityPerLevel: capacityPerLevel,
+          );
+    });
+    return created;
+  }
+
   Future<void> deactivateLocation(String id) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
