@@ -1146,10 +1146,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                 selectedCount: _selectedQtyByProduct.values
                     .where((v) => v > 0)
                     .length,
-                totalUnits: _selectedQtyByProduct.values
-                    .fold(0, (s, v) => s + v),
-                label: 'Confirmar Distribuição',
-                icon: Icons.outbound_rounded,
                 onPressed: () => _openSummary(productsAsync.valueOrNull ?? []),
               ),
             )
@@ -1159,9 +1155,6 @@ class _MovementPageState extends ConsumerState<MovementPage> {
                   child: _ConfirmFabWithSummary(
                     isLoading: _isLoading,
                     selectedCount: 1,
-                    totalUnits: 0,
-                    label: 'Executar Receita',
-                    icon: Icons.play_arrow_rounded,
                     onPressed: () {
                       final recipe = recipesAsync.valueOrNull!
                           .firstWhere((r) => r.id == _selectedRecipeId);
@@ -1180,197 +1173,110 @@ class _MovementPageState extends ConsumerState<MovementPage> {
 class _ConfirmFabWithSummary extends StatelessWidget {
   final bool isLoading;
   final int selectedCount;
-  final int totalUnits;
-  final String label;
-  final IconData icon;
   final VoidCallback? onPressed;
 
   const _ConfirmFabWithSummary({
     required this.isLoading,
     required this.selectedCount,
-    required this.totalUnits,
-    required this.label,
-    required this.icon,
     required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
     final hasItems = selectedCount > 0;
+    final enabled = hasItems && !isLoading;
 
-    // Quando vazio: FAB circular compacto (só ícone do carrinho)
-    if (!hasItems && !isLoading) {
-      return Align(
-        alignment: Alignment.bottomRight,
-        child: Padding(
-          padding: const EdgeInsets.only(right: AppSpacing.lg),
-          child: Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFCBD5E1), Color(0xFF94A3B8)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.18),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.shopping_cart_outlined,
-              color: Colors.white,
-              size: 26,
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Quando tem itens (ou loading): pílula expandida com gradient
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: SizedBox(
-        width: double.infinity,
-        height: 60,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFF1E40AF),
-                Color(0xFF2563EB),
-                Color(0xFF0EA5E9),
-              ],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF2563EB).withValues(alpha: 0.40),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: isLoading ? null : onPressed,
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    // Carrinho com badge de qty
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.22),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.30),
-                            ),
-                          ),
-                          child: isLoading
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2.5,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.shopping_cart_rounded,
-                                  color: Colors.white,
-                                  size: 22,
-                                ),
-                        ),
-                        if (!isLoading)
-                          Positioned(
-                            right: -6,
-                            top: -6,
-                            child: Container(
-                              constraints: const BoxConstraints(
-                                  minWidth: 22, minHeight: 22),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEF4444),
-                                borderRadius: BorderRadius.circular(11),
-                                border: Border.all(
-                                    color: Colors.white, width: 1.5),
-                              ),
-                              child: Text(
-                                '$selectedCount',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 11,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
+    // FAB circular único — SEMPRE o mesmo ícone de carrinho.
+    // Vazio = cinza; com itens = colorido (gradient brand) + badge de qty.
+    return Align(
+      alignment: Alignment.bottomRight,
+      child: Padding(
+        padding: const EdgeInsets.only(right: AppSpacing.lg),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            GestureDetector(
+              onTap: enabled ? onPressed : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                width: 62,
+                height: 62,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: enabled
+                        ? const [
+                            Color(0xFF1E40AF),
+                            Color(0xFF2563EB),
+                            Color(0xFF0EA5E9),
+                          ]
+                        : const [Color(0xFFCBD5E1), Color(0xFF94A3B8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: (enabled
+                              ? const Color(0xFF2563EB)
+                              : Colors.black)
+                          .withValues(alpha: enabled ? 0.45 : 0.18),
+                      blurRadius: enabled ? 16 : 10,
+                      offset: const Offset(0, 5),
                     ),
-                    const SizedBox(width: 14),
-                    // Texto central
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isLoading ? 'Registrando saída...' : label,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 14,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (!isLoading)
-                            Text(
-                              '$totalUnits ${totalUnits == 1 ? 'unidade' : 'unidades'}',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.78),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (!isLoading)
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        child: const Icon(
-                          Icons.arrow_forward_rounded,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                      ),
                   ],
                 ),
+                child: Center(
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.shopping_cart_outlined,
+                          color: Colors.white,
+                          size: 27,
+                        ),
+                ),
               ),
             ),
-          ),
+            if (enabled)
+              Positioned(
+                right: -4,
+                top: -4,
+                child: Container(
+                  constraints:
+                      const BoxConstraints(minWidth: 24, minHeight: 24),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.5),
+                        blurRadius: 5,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    '$selectedCount',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                      height: 1.1,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
