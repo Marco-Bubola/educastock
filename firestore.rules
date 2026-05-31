@@ -55,6 +55,11 @@ service cloud.firestore {
       allow update: if isAdmin();
 
       allow delete: if false; // nunca deletar usuários via cliente
+
+      // Histórico de códigos lidos/digitados — privado de cada usuário.
+      match /scan_history/{codeId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     // ─── products ───────────────────────────────────────────────────────────
