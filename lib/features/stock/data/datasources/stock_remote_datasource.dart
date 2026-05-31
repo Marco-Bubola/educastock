@@ -57,6 +57,24 @@ class StockRemoteDatasource {
     });
   }
 
+  /// Registra um movimento de ENTRADA (cadastro de lote) no histórico.
+  /// Diferente de [registerMovement], NÃO usa transação nem altera o batch —
+  /// o lote já foi criado pelo BatchesRemoteDatasource. Apenas grava o
+  /// documento em `stock_movements` + um log de auditoria.
+  Future<void> logEntryMovement(StockMovement movement) async {
+    await _movements.add(movement.toMap());
+    await _auditLogs.add({
+      'collection': 'batches',
+      'documentId': movement.batchId,
+      'action': 'entrada',
+      'before': null,
+      'after': {'quantity': movement.quantity},
+      'performedBy': movement.performedBy,
+      'performedByName': movement.performedByName,
+      'performedAt': movement.performedAt.toIso8601String(),
+    });
+  }
+
   Stream<List<StockMovement>> watchMovements({int limit = 200}) {
     return _movements
         .orderBy('performedAt', descending: true)
