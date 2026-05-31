@@ -61,6 +61,42 @@ class LocationsRemoteDatasource {
     return ref.id;
   }
 
+  /// Cria uma prateleira inteira com [levels] níveis de uma vez.
+  /// Ex.: prateleira "A" com 5 níveis → cria A/1, A/2, … A/5.
+  /// Pula níveis que já existirem. Retorna quantos foram criados.
+  Future<int> createShelfWithLevels({
+    required String shelf,
+    required int levels,
+    int? capacityPerLevel,
+  }) async {
+    var created = 0;
+    for (var i = 1; i <= levels; i++) {
+      final lvl = '$i';
+      final normalized =
+          _normalizedKey(locationName: null, shelf: shelf, level: lvl);
+      final existing = await _col
+          .where('normalizedKey', isEqualTo: normalized)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty) continue;
+      final location = StorageLocation(
+        id: '',
+        locationName: null,
+        section: '',
+        shelf: shelf.trim(),
+        level: lvl,
+        room: null,
+        productsPerLevel: capacityPerLevel,
+        isActive: true,
+        createdAt: DateTime.now(),
+        normalizedKey: normalized,
+      );
+      await _col.add(location.toMap());
+      created++;
+    }
+    return created;
+  }
+
   Future<void> deactivateLocation(String id) async {
     await _col.doc(id).update({'isActive': false});
   }
