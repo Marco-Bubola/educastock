@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../core/design_system/design_system.dart';
 import '../../../../core/router/app_router.dart';
+import '../../data/scan_history_repository.dart';
 import '../controllers/scanner_provider.dart';
 // Interop de scan direto para web (polyfill BarcodeDetector via JS bridge)
 import 'web_scan_interop_stub.dart'
