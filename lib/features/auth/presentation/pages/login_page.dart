@@ -418,56 +418,12 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                     ],
                                   ),
                                   const SizedBox(height: 16),
-                                  // ── Google (real) ──
+                                  // ── Google (real) — único método social ──
                                   GoogleSignInButton(
                                     onPressed: isLoading
                                         ? null
                                         : _signInWithGoogle,
                                     isLoading: false,
-                                  ),
-                                  const SizedBox(height: 10),
-                                  // ── Outros métodos (placeholders) ──
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _SocialIconButton(
-                                          icon: Icons.apple_rounded,
-                                          tooltip: 'Em breve: Apple',
-                                          isDark: isDark,
-                                          onPressed: () =>
-                                              showCasaSnackbar(context,
-                                                  message:
-                                                      'Login com Apple em breve.',
-                                                  isError: false),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: _SocialIconButton(
-                                          icon: Icons.facebook_rounded,
-                                          tooltip: 'Em breve: Facebook',
-                                          isDark: isDark,
-                                          onPressed: () =>
-                                              showCasaSnackbar(context,
-                                                  message:
-                                                      'Login com Facebook em breve.',
-                                                  isError: false),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: _SocialIconButton(
-                                          icon: Icons.phone_iphone_rounded,
-                                          tooltip: 'Em breve: SMS',
-                                          isDark: isDark,
-                                          onPressed: () =>
-                                              showCasaSnackbar(context,
-                                                  message:
-                                                      'Login por SMS em breve.',
-                                                  isError: false),
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                 ],
                               ),
@@ -508,14 +464,6 @@ class _LoginPageState extends ConsumerState<LoginPage>
                 ),
               ),
             ),
-            // Overlay loading
-            if (isLoading)
-              Positioned.fill(
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.30),
-                  child: const Center(child: CircularProgressIndicator()),
-                ),
-              ),
           ],
         ),
       ),
@@ -841,55 +789,3 @@ class _PrimaryLoginButton extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Ícone social secundário
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _SocialIconButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final bool isDark;
-  final VoidCallback onPressed;
-  const _SocialIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.isDark,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: SizedBox(
-        height: 44,
-        child: Material(
-          color: isDark ? const Color(0xFF1F2937) : Colors.white,
-          elevation: 0,
-          borderRadius: BorderRadius.circular(12),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: onPressed,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isDark
-                      ? const Color(0xFF374151)
-                      : const Color(0xFFE5E7EB),
-                ),
-              ),
-              child: Center(
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: isDark ? Colors.white : const Color(0xFF1F2937),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
