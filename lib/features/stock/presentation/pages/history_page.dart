@@ -606,7 +606,6 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
 
             // ─── Lista ─────────────────────────────────────────────────────
             Expanded(
-              key: _keyHistoryList,
               child: movementsAsync.when(
                 loading: () => const Center(
                     child: CircularProgressIndicator(
@@ -739,17 +738,25 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                             label: entry.key,
                             isDark: isDark,
                             textSub: textSub),
-                        ...entry.value.map((s) => _SessionCard(
-                              movements: s,
-                              isDark: isDark,
-                              cardBg: cardBg,
-                              borderColor: borderColor,
-                              reasonColors: _reasonColors,
-                              reasonLabels: _reasonLabels,
-                              reasonIcons: _reasonIcons,
-                              formatTime: _formatTime,
-                              onDetailsTap: () => _openOutputDetail(s),
-                            )),
+                        ...entry.value.map((s) {
+                          final card = _SessionCard(
+                            movements: s,
+                            isDark: isDark,
+                            cardBg: cardBg,
+                            borderColor: borderColor,
+                            reasonColors: _reasonColors,
+                            reasonLabels: _reasonLabels,
+                            reasonIcons: _reasonIcons,
+                            formatTime: _formatTime,
+                            onDetailsTap: () => _openOutputDetail(s),
+                          );
+                          // Tutorial foca apenas o PRIMEIRO card da lista.
+                          if (identical(s, sessions.first)) {
+                            return KeyedSubtree(
+                                key: _keyHistoryList, child: card);
+                          }
+                          return card;
+                        }),
                       ],
                     ],
                   );
