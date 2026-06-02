@@ -233,11 +233,24 @@ void showCasaTutorial({
           builder: (ctx, controller) {
             // Sincroniza o estado dos botões com o step atual
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              // A barra fica SEMPRE no lado OPOSTO ao conteúdo do tutorial:
-              //  - conteúdo ABAIXO do alvo (align bottom) → barra no TOPO
-              //  - conteúdo ACIMA do alvo (align top)     → barra no RODAPÉ
-              // Assim a barra nunca cobre o texto descritivo.
-              final barAtTop = step.align == ContentAlign.bottom;
+              // Decide a posição da barra pela posição REAL do alvo na tela
+              // (não apenas pelo align). Se o alvo está na metade de baixo,
+              // a barra vai pro TOPO; se está na metade de cima, vai pro
+              // RODAPÉ. Assim a barra nunca cobre o elemento em foco nem o
+              // card de conteúdo (que fica do lado oposto ao alvo).
+              bool barAtTop = step.align == ContentAlign.bottom;
+              final keyCtx = step.key.currentContext;
+              if (keyCtx != null && keyCtx.mounted) {
+                final ro = keyCtx.findRenderObject();
+                if (ro is RenderBox && ro.attached && ro.hasSize) {
+                  final pos = ro.localToGlobal(Offset.zero);
+                  final centerY = pos.dy + ro.size.height / 2;
+                  final screenH =
+                      MediaQuery.of(ctx).size.height;
+                  // alvo na metade de baixo → barra no topo (e vice-versa)
+                  barAtTop = centerY > screenH * 0.5;
+                }
+              }
               _barStateNotifier.value = _BarState(
                 stepIndex: i,
                 totalSteps: steps.length,
@@ -355,17 +368,47 @@ class _TutorialContentState extends State<_TutorialContent>
     //  - ~120 spotlight do tutorial_coach_mark
     //  - ~180 barra de navegação fixa no RODAPÉ (Próximo/Anterior/Fechar)
     //  - ~24 padding extra de respiro
-    final reservedSpace = mq.padding.top + mq.padding.bottom + 60 + 120 + 180 + 24;
-    final maxHeight = (screenHeight - reservedSpace).clamp(220.0, 560.0);
+    final reservedSpace = mq.padding.top + mq.padding.bottom + 56 + 110 + 168 + 16;
+    final maxHeight = (screenHeight - reservedSpace).clamp(240.0, 600.0);
 
     return ConstrainedBox(
       constraints: BoxConstraints(
         maxWidth: maxWidth,
         maxHeight: maxHeight,
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: Stack(
+      child: Container(
+        decoration: BoxDecoration(
+          // Card de fundo sólido (gradiente navy) → texto sempre legível,
+          // nunca se mistura com os elementos da tela atrás.
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xF50A1428),
+              Color(0xF50D1F3D),
+              Color(0xF50F2B52),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: _kSkyBlue.withValues(alpha: 0.35),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: _kSkyBlue.withValues(alpha: 0.22),
+              blurRadius: 28,
+              offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.55),
+              blurRadius: 18,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
           children: [
             // ── Conteúdo scrollável ──────────────────────────────────
             Scrollbar(
@@ -373,7 +416,7 @@ class _TutorialContentState extends State<_TutorialContent>
               radius: const Radius.circular(8),
               thickness: 4,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(2, 10, 8, 28),
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
                 physics: const BouncingScrollPhysics(),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -526,8 +569,8 @@ class _TutorialContentState extends State<_TutorialContent>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF050D1A).withValues(alpha: 0.85),
-                        const Color(0xFF050D1A).withValues(alpha: 0),
+                        const Color(0xFF0A1428).withValues(alpha: 0.85),
+                        const Color(0xFF0A1428).withValues(alpha: 0),
                       ],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
@@ -548,8 +591,8 @@ class _TutorialContentState extends State<_TutorialContent>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF050D1A).withValues(alpha: 0),
-                        const Color(0xFF050D1A).withValues(alpha: 0.85),
+                        const Color(0xFF0A1428).withValues(alpha: 0),
+                        const Color(0xFF0A1428).withValues(alpha: 0.85),
                       ],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
@@ -576,6 +619,7 @@ class _TutorialContentState extends State<_TutorialContent>
               ),
             ),
           ],
+        ),
         ),
       ),
     );
