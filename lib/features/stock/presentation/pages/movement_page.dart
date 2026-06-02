@@ -1530,18 +1530,25 @@ class _SummarySheet extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 46,
+                    height: 46,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
                     ),
                     child: const Icon(Icons.outbound_rounded,
-                        color: Colors.white, size: 20),
+                        color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1550,16 +1557,20 @@ class _SummarySheet extends StatelessWidget {
                       children: [
                         Text(
                           'Resumo da Distribuição',
-                          style: TextStyle(
+                          style: AppTypography.productName(
+                            size: 19,
+                            weight: FontWeight.w900,
                             color: onBg,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
                           ),
                         ),
+                        const SizedBox(height: 3),
                         Text(
                           '$reasonLabel  ·  ${items.length} produto${items.length != 1 ? 's' : ''}  ·  $totalItems ${totalItems != 1 ? 'unidades' : 'unidade'}',
                           style: TextStyle(
-                              color: sub, fontSize: 11, height: 1.3),
+                              color: sub,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3),
                         ),
                       ],
                     ),
@@ -1567,14 +1578,14 @@ class _SummarySheet extends StatelessWidget {
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(false),
                     child: Container(
-                      width: 32,
-                      height: 32,
+                      width: 36,
+                      height: 36,
                       decoration: BoxDecoration(
                         color: sub.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.close_rounded,
-                          size: 16, color: sub),
+                          size: 18, color: sub),
                     ),
                   ),
                 ],
@@ -1600,10 +1611,10 @@ class _SummarySheet extends StatelessWidget {
                 itemBuilder: (_, i) {
                   final item = items[i];
                   return Container(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     decoration: BoxDecoration(
                       color: cardBg,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: sub.withValues(alpha: isDark ? 0.12 : 0.08),
                       ),
@@ -1620,45 +1631,46 @@ class _SummarySheet extends StatelessWidget {
                       children: [
                         // Avatar
                         Container(
-                          width: 36,
-                          height: 36,
+                          width: 46,
+                          height: 46,
                           decoration: BoxDecoration(
                             color: const Color(0xFF2563EB)
                                 .withValues(alpha: isDark ? 0.15 : 0.08),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                                 color: const Color(0xFF2563EB)
                                     .withValues(alpha: isDark ? 0.25 : 0.15)),
                           ),
+                          clipBehavior: Clip.antiAlias,
                           child: item.product.imageUrl != null &&
                                   item.product.imageUrl!.isNotEmpty
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(7),
-                                  child: Image.network(item.product.imageUrl!,
-                                      fit: BoxFit.cover),
-                                )
+                              ? Image.network(item.product.imageUrl!,
+                                  fit: BoxFit.cover)
                               : const Icon(Icons.inventory_2_rounded,
-                                  color: Color(0xFF2563EB), size: 16),
+                                  color: Color(0xFF2563EB), size: 22),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 item.product.name,
-                                style: TextStyle(
+                                style: AppTypography.productName(
+                                  size: 15,
+                                  weight: FontWeight.w800,
                                   color: onBg,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
                                 ),
-                                maxLines: 1,
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
+                              const SizedBox(height: 2),
                               Text(
                                 item.product.category.name,
-                                style:
-                                    TextStyle(color: sub, fontSize: 11),
+                                style: TextStyle(
+                                    color: sub,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w500),
                               ),
                             ],
                           ),
@@ -1667,11 +1679,11 @@ class _SummarySheet extends StatelessWidget {
                         // Quantidade
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 5),
+                              horizontal: 12, vertical: 7),
                           decoration: BoxDecoration(
                             color: const Color(0xFF2563EB)
                                 .withValues(alpha: isDark ? 0.15 : 0.08),
-                            borderRadius: BorderRadius.circular(7),
+                            borderRadius: BorderRadius.circular(9),
                             border: Border.all(
                                 color: const Color(0xFF2563EB)
                                     .withValues(alpha: isDark ? 0.3 : 0.2)),
@@ -1680,8 +1692,8 @@ class _SummarySheet extends StatelessWidget {
                             '${item.qty} ${item.product.unit}',
                             style: const TextStyle(
                               color: Color(0xFF2563EB),
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
                             ),
                           ),
                         ),
