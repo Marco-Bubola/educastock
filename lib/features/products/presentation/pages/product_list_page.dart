@@ -1829,7 +1829,7 @@ class _ProductGridCard extends ConsumerWidget {
                       size: 11, color: palette[0]),
                   const SizedBox(width: 4),
                   Text(
-                    inactive ? 'Sem estoque' : '$totalQty ${product.unit ?? "un"}',
+                    inactive ? 'Sem estoque' : '$totalQty ${product.unit}',
                     style: AppTypography.labelSmall.copyWith(
                       color: palette[0],
                       fontWeight: FontWeight.w800,
@@ -1934,44 +1934,4 @@ class _ProductGridCard extends ConsumerWidget {
   }
 }
 
-// ─── Botão de ação rápida (raio) ───────────────────────────────────────────
-
-class _QuickActionButton extends StatelessWidget {
-  final Color color;
-  final VoidCallback onTap;
-  const _QuickActionButton({required this.color, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        child: Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: [color, Color.lerp(color, Colors.black, 0.18) ?? color],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: Border.all(color: Colors.white, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: 0.45),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.bolt_rounded,
-              color: Colors.white, size: 14),
-        ),
-      ),
-    );
-  }
-}
 
