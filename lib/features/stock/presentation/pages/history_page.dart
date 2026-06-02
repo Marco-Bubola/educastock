@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/design_system/design_system.dart';
+import '../../../batches/presentation/controllers/batches_provider.dart';
+import '../../../products/presentation/controllers/products_provider.dart';
 import '../../domain/entities/stock_movement.dart';
 import '../controllers/stock_provider.dart';
 import 'output_view_page.dart';
@@ -55,40 +57,64 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   int get _activeFilterCount =>
       (_filterReason != null ? 1 : 0) + (_filterDateRange != null ? 1 : 0);
 
+  // Guard: evita empilhar várias rotas de relatório com toques repetidos.
+  bool _openingReport = false;
+
   Future<void> _openOutputDetail(List<StockMovement> session) async {
-    final first = session.first;
-    final createdAt = first.performedAt.toIso8601String();
-    final performedBy = first.performedBy;
-
-    Map<String, dynamic>? output;
+    if (_openingReport) return;
+    _openingReport = true;
     try {
-      output = await ref.read(stockDatasourceProvider).fetchOutputBySession(createdAt, performedBy);
-    } catch (_) {}
-
-    output ??= _reconstructOutputFromMovements(session);
-
-    if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(builder: (_) => OutputViewPage(output: output!)),
-    );
+      // Navega IMEDIATAMENTE com os dados que já temos (sem query bloqueante).
+      // O relatório completo é reconstruído a partir dos movimentos da sessão,
+      // que já contêm tudo necessário. Isso elimina a demora ao abrir.
+      final output = _reconstructOutputFromMovements(session);
+      if (!mounted) return;
+      await Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute(builder: (_) => OutputViewPage(output: output)),
+      );
+    } finally {
+      _openingReport = false;
+    }
   }
 
   Map<String, dynamic> _reconstructOutputFromMovements(List<StockMovement> movements) {
+    final first = movements.first;
+    // Enriquece com dados dos lotes/produtos já em cache (imagem, localização,
+    // validade, unidade) — sem nenhuma query extra ao Firestore.
+    final allBatches =
+        ref.read(allAvailableBatchesProvider).valueOrNull ?? const [];
+    final products =
+        ref.read(productsProvider).valueOrNull ?? const [];
     return {
-      'outputId': movements.first.id,
-      'createdAt': movements.first.performedAt.toIso8601String(),
-      'performedByName': movements.first.performedByName,
-      'reason': movements.first.reason,
-      'reasonCode': movements.first.reasonCode,
-      'movements': movements.map((m) => {
-        'productId': m.productId,
-        'productName': m.productName,
-        'batchId': m.batchId,
-        'consumed': m.quantity,
-        'before': (m.auditBefore?['quantity'] as num?)?.toInt() ?? 0,
-        'after': (m.auditAfter?['quantity'] as num?)?.toInt() ?? 0,
-        'shelfLocation': null,
-        'expiryDate': null,
+      'outputId': first.id,
+      'createdAt': first.performedAt.toIso8601String(),
+      'performedByName': first.performedByName,
+      'reason': first.reason,
+      'reasonCode': first.reasonCode,
+      // Tipo do movimento — usado para diferenciar Entrada / Saída / Descarte.
+      'movementType': first.type.name,
+      'isInbound': first.isInbound,
+      'movements': movements.map((m) {
+        final batch = allBatches
+            .where((b) => b.id == m.batchId)
+            .cast<dynamic>()
+            .firstOrNull;
+        final product = products
+            .where((p) => p.id == m.productId)
+            .cast<dynamic>()
+            .firstOrNull;
+        return {
+          'productId': m.productId,
+          'productName': m.productName,
+          'batchId': m.batchId,
+          'consumed': m.quantity,
+          'before': (m.auditBefore?['quantity'] as num?)?.toInt() ?? 0,
+          'after': (m.auditAfter?['quantity'] as num?)?.toInt() ?? 0,
+          'shelfLocation': batch?.shelfLocation,
+          'expiryDate': batch?.expiryDate?.toIso8601String(),
+          'imageUrl': product?.imageUrl ?? batch?.imageUrl,
+          'unit': product?.unit,
+        };
       }).toList(),
     };
   }
@@ -1400,33 +1426,62 @@ class _SessionCardState extends State<_SessionCard> {
                   ),
                 ],
 
-                // Linha 4: botão ver relatório
+                // Linha 4: botão ver relatório (moderno, full-width gradient)
                 const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: widget.onDetailsTap,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: colors[0].withValues(alpha: isDark ? 0.15 : 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: colors[0].withValues(alpha: isDark ? 0.30 : 0.20)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.receipt_long_rounded, size: 14, color: colors[0]),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Ver relatório completo',
-                          style: TextStyle(
-                            color: colors[0],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: widget.onDetailsTap,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            colors[0],
+                            Color.lerp(colors[0], Colors.black, 0.18)!,
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
                         ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.arrow_forward_rounded, size: 13, color: colors[0]),
-                      ],
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors[0].withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 11),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.22),
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: const Icon(Icons.receipt_long_rounded,
+                                  size: 14, color: Colors.white),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Ver relatório completo',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Icon(Icons.arrow_forward_rounded,
+                                size: 15, color: Colors.white),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
