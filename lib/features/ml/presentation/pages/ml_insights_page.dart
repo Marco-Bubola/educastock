@@ -112,15 +112,17 @@ class _MlInsightsPageState extends ConsumerState<MlInsightsPage> {
                 const SizedBox(height: AppSpacing.md),
 
                 // ─── Grid de lotes ─────────────────────────────────────────
-                CasaSectionHeader(
-                  title: _filter == _RiskFilter.todos
-                      ? 'Lotes classificados'
-                      : 'Lotes — ${_filter.label}',
-                ),
-                const SizedBox(height: AppSpacing.sm),
                 KeyedSubtree(
                   key: _keyCriticalSection,
-                  child: predictionsAsync.when(
+                  child: CasaSectionHeader(
+                    title: _filter == _RiskFilter.todos
+                        ? 'Lotes classificados'
+                        : 'Lotes — ${_filter.label}',
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Builder(
+                  builder: (_) => predictionsAsync.when(
                     data: (all) {
                       final filtered = _applyFilter(all);
                       if (filtered.isEmpty) {
