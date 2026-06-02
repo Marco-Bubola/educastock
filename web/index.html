@@ -14,7 +14,14 @@
   <!-- iOS PWA — Add to Home Screen -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!--
+    'default' (não 'black-translucent'): com black-translucent o WebView ocupa
+    a tela inteira ATRÁS da status bar, mas o hit-test do Flutter/CanvasKit no
+    iOS PWA standalone fica DESLOCADO pela altura da barra — o usuário precisa
+    tocar acima dos elementos. Com 'default', o conteúdo respeita a status bar
+    e os toques alinham corretamente.
+  -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="EducaStock">
   <meta name="format-detection" content="telephone=no">
   <link rel="apple-touch-icon" sizes="192x192" href="icons/Icon-192.png">
@@ -25,6 +32,35 @@
 
   <title>EducaStock</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Garante que o app ocupe exatamente a viewport visível, sem offsets que
+    desalinham o hit-test no iOS PWA standalone. Usa 100dvh (dynamic viewport
+    height) quando suportado para evitar o "salto" da barra do Safari.
+  -->
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    flutter-view, flt-glass-pane, body > flt-scene-host {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
+  </style>
 
   <!--
     iOS PWA hack: quando aberto via Add-to-Home-Screen (display: standalone),
