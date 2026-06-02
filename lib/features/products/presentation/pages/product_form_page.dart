@@ -423,341 +423,357 @@ class _ProductFormPageState extends ConsumerState<ProductFormPage> {
               ],
 
               // ── Seção: Identificação ──────────────────────────────
-              _SectionLabel(
+              _FormSection(
                 icon: Icons.inventory_2_rounded,
-                label: 'IDENTIFICAÇÃO',
-                color: AppColors.brandPrimary600,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              CasaTextField(
-                key: _keyNameField,
-                label: 'Nome do Produto *',
-                hint: 'Ex: Arroz Integral, Sabonete Líquido...',
-                controller: _nameController,
-                textInputAction: TextInputAction.next,
-                prefixIcon: const Icon(Icons.label_rounded, size: 20),
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Nome obrigatório' : null,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              CasaTextField(
-                label: 'Marca',
-                hint: 'Ex: Camil, Unilever...',
-                controller: _brandController,
-                textInputAction: TextInputAction.next,
-                prefixIcon: const Icon(Icons.branding_watermark_rounded, size: 20),
-              ),
-              const SizedBox(height: AppSpacing.xl),
-
-              // ── Seção: Classificação ──────────────────────────────
-              _SectionLabel(
-                icon: Icons.category_rounded,
-                label: 'CLASSIFICAÇÃO',
-                color: AppColors.secondaryBlue600,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              DropdownButtonFormField<ProductCategory>(
-                key: _keyCategoryField,
-                initialValue: _category,
-                decoration: const InputDecoration(
-                  labelText: 'Categoria *',
-                  prefixIcon: Icon(Icons.category_outlined, size: 20),
-                ),
-                items: activeCategories
-                    .map((c) => DropdownMenuItem(
-                          value: c,
-                          child: Text(
-                            categoryLabelMap[c.name] ?? defaultCategoryLabel(c),
-                          ),
-                        ))
-                    .toList(),
-                onChanged: (v) => setState(() => _category = v!),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              DropdownButtonFormField<String>(
-                initialValue: _unit,
-                decoration: const InputDecoration(
-                  labelText: 'Unidade de Medida *',
-                  prefixIcon: Icon(Icons.straighten_outlined, size: 20),
-                ),
-                items: _units
-                    .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  _unit = v!;
-                  if (!_sizedUnits.contains(v)) {
-                    _unitSizeController.clear();
-                  }
-                }),
-              ),
-              // Campo de tamanho da embalagem (aparece para kg, g, L, mL)
-              if (_needsSize) ...[
-                const SizedBox(height: AppSpacing.md),
-                Row(
+                title: 'Identificação',
+                iconColor: AppColors.brandPrimary600,
+                child: Column(
                   children: [
-                    Expanded(
-                      child: CasaTextField(
-                        label: _unitLabel,
-                        hint: _unitHint,
-                        controller: _unitSizeController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        textInputAction: TextInputAction.next,
-                        prefixIcon: const Icon(Icons.scale_outlined, size: 20),
-                        onChanged: (_) => setState(() {}),
-                      ),
+                    CasaTextField(
+                      key: _keyNameField,
+                      label: 'Nome do Produto *',
+                      hint: 'Ex: Arroz Integral, Sabonete Líquido...',
+                      controller: _nameController,
+                      textInputAction: TextInputAction.next,
+                      prefixIcon: const Icon(Icons.label_rounded, size: 20),
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Nome obrigatório' : null,
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: AppColors.brandPrimary600.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(AppRadius.input),
-                        border: Border.all(
-                            color: AppColors.brandPrimary600
-                                .withValues(alpha: 0.3)),
-                      ),
-                      child: Text(
-                        _unitSizeController.text.trim().isNotEmpty
-                            ? '${_unitSizeController.text.trim()}$_unit'
-                            : _unit,
-                        style: AppTypography.labelLarge.copyWith(
-                          color: AppColors.brandPrimary600,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                    const SizedBox(height: AppSpacing.md),
+                    CasaTextField(
+                      label: 'Marca',
+                      hint: 'Ex: Camil, Unilever...',
+                      controller: _brandController,
+                      textInputAction: TextInputAction.next,
+                      prefixIcon: const Icon(
+                          Icons.branding_watermark_rounded, size: 20),
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: Text(
-                    'Exemplo: "500g", "1kg", "250mL" serão salvos como unidade.',
-                    style: AppTypography.bodySmall.copyWith(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 11,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              // ── Seção: Classificação ──────────────────────────────
+              _FormSection(
+                icon: Icons.category_rounded,
+                title: 'Classificação',
+                iconColor: AppColors.secondaryBlue600,
+                child: Column(
+                  children: [
+                    DropdownButtonFormField<ProductCategory>(
+                      key: _keyCategoryField,
+                      initialValue: _category,
+                      decoration: const InputDecoration(
+                        labelText: 'Categoria *',
+                        prefixIcon: Icon(Icons.category_outlined, size: 20),
+                      ),
+                      items: activeCategories
+                          .map((c) => DropdownMenuItem(
+                                value: c,
+                                child: Text(
+                                  categoryLabelMap[c.name] ??
+                                      defaultCategoryLabel(c),
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setState(() => _category = v!),
                     ),
-                  ),
+                    const SizedBox(height: AppSpacing.md),
+                    DropdownButtonFormField<String>(
+                      initialValue: _unit,
+                      decoration: const InputDecoration(
+                        labelText: 'Unidade de Medida *',
+                        prefixIcon: Icon(Icons.straighten_outlined, size: 20),
+                      ),
+                      items: _units
+                          .map((u) =>
+                              DropdownMenuItem(value: u, child: Text(u)))
+                          .toList(),
+                      onChanged: (v) => setState(() {
+                        _unit = v!;
+                        if (!_sizedUnits.contains(v)) {
+                          _unitSizeController.clear();
+                        }
+                      }),
+                    ),
+                    // Campo de tamanho da embalagem (kg, g, L, mL)
+                    if (_needsSize) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: CasaTextField(
+                              label: _unitLabel,
+                              hint: _unitHint,
+                              controller: _unitSizeController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              textInputAction: TextInputAction.next,
+                              prefixIcon:
+                                  const Icon(Icons.scale_outlined, size: 20),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: AppColors.brandPrimary600
+                                  .withValues(alpha: 0.1),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.input),
+                              border: Border.all(
+                                  color: AppColors.brandPrimary600
+                                      .withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              _unitSizeController.text.trim().isNotEmpty
+                                  ? '${_unitSizeController.text.trim()}$_unit'
+                                  : _unit,
+                              style: AppTypography.labelLarge.copyWith(
+                                color: AppColors.brandPrimary600,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Exemplo: "500g", "1kg", "250mL" serão salvos como unidade.',
+                          style: AppTypography.bodySmall.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-              const SizedBox(height: AppSpacing.xl),
+              ),
+              const SizedBox(height: AppSpacing.lg),
 
               // ── Seção: Configurações ──────────────────────────────
-              _SectionLabel(
+              _FormSection(
                 icon: Icons.settings_rounded,
-                label: 'CONFIGURAÇÕES',
-                color: AppColors.success600,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-
-              // Perecível
-              Container(
-                key: _keyPerishableToggle,
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(
-                    color: _isPerishable
-                        ? AppColors.warning600.withValues(alpha: 0.4)
-                        : cs.outlineVariant.withValues(alpha: 0.4),
-                  ),
-                ),
-                child: SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg,
-                    vertical: AppSpacing.xs,
-                  ),
-                  secondary: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: _isPerishable
-                          ? AppColors.warning600.withValues(alpha: 0.12)
-                          : cs.surfaceContainer,
-                      borderRadius: BorderRadius.circular(AppRadius.small),
-                    ),
-                    child: Icon(
-                      Icons.schedule_rounded,
-                      size: 20,
-                      color: _isPerishable
-                          ? AppColors.warning600
-                          : cs.onSurfaceVariant,
-                    ),
-                  ),
-                  title: Text(
-                    'Produto Perecível',
-                    style: AppTypography.labelLarge
-                        .copyWith(color: cs.onSurface),
-                  ),
-                  subtitle: Text(
-                    _isPerishable
-                        ? 'Validade obrigatória nos lotes'
-                        : 'Sem controle de validade',
-                    style: AppTypography.bodySmall.copyWith(
-                      color: _isPerishable
-                          ? AppColors.warning600
-                          : cs.onSurfaceVariant,
-                    ),
-                  ),
-                  value: _isPerishable,
-                  onChanged: (v) => setState(() => _isPerishable = v),
-                  activeThumbColor: AppColors.warning600,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-
-              // Estoque mínimo
-              Container(
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(AppRadius.card),
-                  border: Border.all(
-                      color: cs.outlineVariant.withValues(alpha: 0.4)),
-                ),
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(
+                title: 'Configurações',
+                iconColor: AppColors.success600,
+                child: Column(
                   children: [
+                    // Perecível
                     Container(
-                      width: 38,
-                      height: 38,
+                      key: _keyPerishableToggle,
                       decoration: BoxDecoration(
-                        color: AppColors.danger600.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(AppRadius.small),
+                        color: cs.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(AppRadius.card),
+                        border: Border.all(
+                          color: _isPerishable
+                              ? AppColors.warning600.withValues(alpha: 0.4)
+                              : cs.outlineVariant.withValues(alpha: 0.4),
+                        ),
                       ),
-                      child: const Icon(Icons.warning_amber_rounded,
-                          size: 20, color: AppColors.danger600),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Estoque Mínimo',
-                            style: AppTypography.labelLarge
-                                .copyWith(color: cs.onSurface),
+                      child: SwitchListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.xs,
+                        ),
+                        secondary: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: _isPerishable
+                                ? AppColors.warning600
+                                    .withValues(alpha: 0.12)
+                                : cs.surfaceContainer,
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.small),
                           ),
-                          Text(
-                            'Alerta abaixo deste valor',
-                            style: AppTypography.bodySmall
-                                .copyWith(color: cs.onSurfaceVariant),
+                          child: Icon(
+                            Icons.schedule_rounded,
+                            size: 20,
+                            color: _isPerishable
+                                ? AppColors.warning600
+                                : cs.onSurfaceVariant,
+                          ),
+                        ),
+                        title: Text(
+                          'Produto Perecível',
+                          style: AppTypography.labelLarge
+                              .copyWith(color: cs.onSurface),
+                        ),
+                        subtitle: Text(
+                          _isPerishable
+                              ? 'Validade obrigatória nos lotes'
+                              : 'Sem controle de validade',
+                          style: AppTypography.bodySmall.copyWith(
+                            color: _isPerishable
+                                ? AppColors.warning600
+                                : cs.onSurfaceVariant,
+                          ),
+                        ),
+                        value: _isPerishable,
+                        onChanged: (v) => setState(() => _isPerishable = v),
+                        activeThumbColor: AppColors.warning600,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    // Estoque mínimo
+                    Container(
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(AppRadius.card),
+                        border: Border.all(
+                            color: cs.outlineVariant.withValues(alpha: 0.4)),
+                      ),
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.danger600.withValues(alpha: 0.1),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.small),
+                            ),
+                            child: const Icon(Icons.warning_amber_rounded,
+                                size: 20, color: AppColors.danger600),
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Estoque Mínimo',
+                                  style: AppTypography.labelLarge
+                                      .copyWith(color: cs.onSurface),
+                                ),
+                                Text(
+                                  'Alerta abaixo deste valor',
+                                  style: AppTypography.bodySmall.copyWith(
+                                      color: cs.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  if (_minimumStock > 0) {
+                                    setState(() => _minimumStock--);
+                                  }
+                                },
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    color: cs.surfaceContainer,
+                                    shape: BoxShape.circle,
+                                    border:
+                                        Border.all(color: cs.outlineVariant),
+                                  ),
+                                  child: Icon(Icons.remove_rounded,
+                                      size: 16, color: cs.onSurfaceVariant),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 36,
+                                child: Text(
+                                  '$_minimumStock',
+                                  textAlign: TextAlign.center,
+                                  style: AppTypography.headingSmall
+                                      .copyWith(color: cs.onSurface),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () =>
+                                    setState(() => _minimumStock++),
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        AppColors.brandPrimary600,
+                                        AppColors.secondaryBlue600,
+                                      ],
+                                    ),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.add_rounded,
+                                      size: 16, color: Colors.white),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.md),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: () {
-                            if (_minimumStock > 0) {
-                              setState(() => _minimumStock--);
-                            }
-                          },
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainer,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: cs.outlineVariant),
-                            ),
-                            child: Icon(Icons.remove_rounded,
-                                size: 16, color: cs.onSurfaceVariant),
-                          ),
-                        ),
-                        SizedBox(
-                          width: 36,
-                          child: Text(
-                            '$_minimumStock',
-                            textAlign: TextAlign.center,
-                            style: AppTypography.headingSmall.copyWith(
-                              color: cs.onSurface,
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => setState(() => _minimumStock++),
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [
-                                  AppColors.brandPrimary600,
-                                  AppColors.secondaryBlue600,
-                                ],
-                              ),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.add_rounded,
-                                size: 16, color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.lg),
 
               // ── Seção: Observações ──────────────────────────────
-              _SectionLabel(
+              _FormSection(
                 icon: Icons.notes_rounded,
-                label: 'OBSERVAÇÕES',
-                color: AppColors.neutral500,
+                title: 'Observações',
+                iconColor: AppColors.neutral500,
+                child: CasaTextField(
+                  label: 'Descrição (opcional)',
+                  hint: 'Informações adicionais sobre o produto...',
+                  controller: _descController,
+                  maxLines: 3,
+                  prefixIcon: const Icon(Icons.notes_rounded, size: 20),
+                ),
               ),
-              const SizedBox(height: AppSpacing.sm),
-              CasaTextField(
-                label: 'Descrição (opcional)',
-                hint: 'Informações adicionais sobre o produto...',
-                controller: _descController,
-                maxLines: 3,
-                prefixIcon: const Icon(Icons.notes_rounded, size: 20),
-              ),
-              const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.lg),
 
               // ── Seção: Foto do Produto ─────────────────────────
-              _SectionLabel(
+              _FormSection(
                 icon: Icons.photo_camera_rounded,
-                label: 'FOTO DO PRODUTO',
-                color: AppColors.brandPrimary600,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _ProductImagePicker(
-                imageFile: _imageFile,
-                existingImageUrl: _existingImageUrl,
-                cs: cs,
-                onPickCamera: () async {
-                  final picked = await _imagePicker.pickImage(
-                    source: ImageSource.camera,
-                    imageQuality: 72,
-                    maxWidth: 600,
-                    maxHeight: 600,
-                  );
-                  if (picked != null && mounted) {
-                    setState(() => _imageFile = File(picked.path));
-                  }
-                },
-                onPickGallery: () async {
-                  final picked = await _imagePicker.pickImage(
-                    source: ImageSource.gallery,
-                    imageQuality: 72,
-                    maxWidth: 600,
-                    maxHeight: 600,
-                  );
-                  if (picked != null && mounted) {
-                    setState(() => _imageFile = File(picked.path));
-                  }
-                },
-                onRemove: () => setState(() {
-                  _imageFile = null;
-                  _existingImageUrl = null;
-                }),
+                title: 'Foto do Produto',
+                iconColor: AppColors.brandPrimary600,
+                child: _ProductImagePicker(
+                  imageFile: _imageFile,
+                  existingImageUrl: _existingImageUrl,
+                  cs: cs,
+                  onPickCamera: () async {
+                    final picked = await _imagePicker.pickImage(
+                      source: ImageSource.camera,
+                      imageQuality: 72,
+                      maxWidth: 600,
+                      maxHeight: 600,
+                    );
+                    if (picked != null && mounted) {
+                      setState(() => _imageFile = File(picked.path));
+                    }
+                  },
+                  onPickGallery: () async {
+                    final picked = await _imagePicker.pickImage(
+                      source: ImageSource.gallery,
+                      imageQuality: 72,
+                      maxWidth: 600,
+                      maxHeight: 600,
+                    );
+                    if (picked != null && mounted) {
+                      setState(() => _imageFile = File(picked.path));
+                    }
+                  },
+                  onRemove: () => setState(() {
+                    _imageFile = null;
+                    _existingImageUrl = null;
+                  }),
+                ),
               ),
             ],
           ),
@@ -914,16 +930,26 @@ class _ProductImagePicker extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
+        color: cs.surfaceContainerHigh.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: 0.4),
-            style: BorderStyle.solid),
+          color: cs.outlineVariant.withValues(alpha: 0.4),
+          style: BorderStyle.solid,
+        ),
       ),
       child: Column(
         children: [
-          Icon(Icons.add_photo_alternate_outlined,
-              size: 40, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimary600.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.add_photo_alternate_outlined,
+                size: 28,
+                color: AppColors.brandPrimary600.withValues(alpha: 0.8)),
+          ),
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Foto opcional para identificar o produto',
@@ -969,34 +995,88 @@ class _ProductImagePicker extends StatelessWidget {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
+/// Seção em card moderno (mesmo padrão do cadastro de lote): ícone com
+/// gradiente, título em fonte de produto, borda + sombra sutil.
+class _FormSection extends StatelessWidget {
   final IconData icon;
-  final String label;
-  final Color color;
+  final String title;
+  final Color iconColor;
+  final Widget child;
+  final GlobalKey? sectionKey;
 
-  const _SectionLabel({
+  const _FormSection({
     required this.icon,
-    required this.label,
-    required this.color,
+    required this.title,
+    required this.iconColor,
+    required this.child,
+    this.sectionKey,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: AppTypography.labelSmall.copyWith(
-            color: color,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
-          ),
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      key: sectionKey,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: isDark ? 0.30 : 0.45),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(child: Divider(color: color.withValues(alpha: 0.25), height: 1)),
-      ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      iconColor,
+                      Color.lerp(iconColor, Colors.black, 0.18)!,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(11),
+                  boxShadow: [
+                    BoxShadow(
+                      color: iconColor.withValues(alpha: 0.40),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, size: 18, color: Colors.white),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTypography.productName(
+                    size: 16,
+                    weight: FontWeight.w900,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          child,
+        ],
+      ),
     );
   }
 }
