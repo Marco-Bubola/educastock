@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -556,6 +555,10 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
       if (confirmed == true) {
         _log('✔️ Confirmado → navegando para revisão');
         ref.read(scannerProvider.notifier).onBarcodeDetected(barcode);
+        // Salva no histórico do banco (Firestore) como ESCANEADO.
+        ref
+            .read(scanHistoryRepositoryProvider)
+            .record(barcode, source: 'scanned');
         context
             .push('${AppRoutes.productReview}?barcode=$barcode')
             .then((_) {
@@ -668,6 +671,9 @@ class _ScannerPageState extends ConsumerState<ScannerPage>
                     onPressed: () {
                       final code = ctrl.text.trim();
                       if (code.isEmpty) return;
+                      ref
+                          .read(scanHistoryRepositoryProvider)
+                          .record(code, source: 'typed');
                       Navigator.of(sheetCtx).pop();
                       context.push(
                           '${AppRoutes.productReview}?barcode=$code');
