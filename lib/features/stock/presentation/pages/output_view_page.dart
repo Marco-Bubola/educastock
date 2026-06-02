@@ -229,8 +229,38 @@ class _OutputViewPageState extends State<OutputViewPage>
       if (m['productId'] != null) distinctProducts.add(m['productId'] as String);
     }
     final reasonCode = _result!['reasonCode'] as String? ?? 'outro';
-    final reasonLabel =
-        _reasonLabels[reasonCode] ?? (_result!['reason'] as String? ?? 'Distribuição');
+
+    // Tipo do movimento → define a identidade do relatório (entrada/saída/descarte)
+    final movementType = _result!['movementType'] as String?;
+    final isInbound = (_result!['isInbound'] as bool?) ??
+        (movementType == 'entrada' || movementType == 'ajustePositivo');
+    final isDiscard = movementType == 'descarte' ||
+        reasonCode == 'validade' ||
+        reasonCode == 'avaria';
+
+    final ({String title, String reasonLabel, IconData icon, Color color})
+        kind = isInbound
+            ? (
+                title: 'Entrada registrada',
+                reasonLabel: 'Cadastro de lote',
+                icon: Icons.add_box_rounded,
+                color: const Color(0xFF16A34A),
+              )
+            : isDiscard
+                ? (
+                    title: 'Descarte registrado',
+                    reasonLabel: _reasonLabels[reasonCode] ?? 'Descarte',
+                    icon: Icons.delete_sweep_rounded,
+                    color: const Color(0xFFD97706),
+                  )
+                : (
+                    title: 'Saída registrada',
+                    reasonLabel: _reasonLabels[reasonCode] ??
+                        (_result!['reason'] as String? ?? 'Distribuição'),
+                    icon: Icons.outbound_rounded,
+                    color: const Color(0xFF2563EB),
+                  );
+    final reasonLabel = kind.reasonLabel;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -244,6 +274,9 @@ class _OutputViewPageState extends State<OutputViewPage>
                 outputId: _result!['outputId'] as String? ?? '-',
                 performedByName: _result!['performedByName'] as String? ?? '-',
                 reasonLabel: reasonLabel,
+                titleText: kind.title,
+                headerIcon: kind.icon,
+                accentColor: kind.color,
                 createdAt: createdAt,
                 checkAnim: _anim(0.0, 0.30, curve: Curves.elasticOut),
                 fadeAnim: _anim(0.08, 0.40),
@@ -261,17 +294,20 @@ class _OutputViewPageState extends State<OutputViewPage>
                     products: distinctProducts.length,
                     batches: movements.length,
                     units: totalConsumed,
+                    unitsLabel: isInbound ? 'Entraram' : 'Unidades',
+                    accentColor: kind.color,
                     isDark: isDark,
                   ),
                 ),
               ),
             ),
-            SliverToBoxAdapter(
-              child: FadeTransition(
-                opacity: _anim(0.32, 0.58),
-                child: _FefoNotice(key: _keyFefo, isDark: isDark),
+            if (!isInbound)
+              SliverToBoxAdapter(
+                child: FadeTransition(
+                  opacity: _anim(0.32, 0.58),
+                  child: _FefoNotice(key: _keyFefo, isDark: isDark),
+                ),
               ),
-            ),
             SliverToBoxAdapter(
               child: FadeTransition(
                 opacity: _anim(0.40, 0.64),
@@ -294,7 +330,8 @@ class _OutputViewPageState extends State<OutputViewPage>
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        '${movements.length} item${movements.length != 1 ? 'ns' : ''} nesta saída',
+                        '${movements.length} item${movements.length != 1 ? 'ns' : ''} '
+                        '${isInbound ? 'nesta entrada' : isDiscard ? 'neste descarte' : 'nesta saída'}',
                         style: AppTypography.labelLarge.copyWith(
                           color: context.onCard,
                           fontWeight: FontWeight.w800,
@@ -322,6 +359,8 @@ class _OutputViewPageState extends State<OutputViewPage>
                         movement: m,
                         index: i + 1,
                         isDark: isDark,
+                        isInbound: isInbound,
+                        accentColor: kind.color,
                         cardBg: ctx.cardBg,
                         onCard: ctx.onCard,
                         sub: ctx.sub,
@@ -731,6 +770,9 @@ class _HeroHeader extends ConsumerWidget {
   final String outputId;
   final String performedByName;
   final String reasonLabel;
+  final String titleText;
+  final IconData headerIcon;
+  final Color accentColor;
   final DateTime? createdAt;
   final Animation<double> checkAnim;
   final Animation<double> fadeAnim;
@@ -740,6 +782,9 @@ class _HeroHeader extends ConsumerWidget {
     required this.outputId,
     required this.performedByName,
     required this.reasonLabel,
+    required this.titleText,
+    required this.headerIcon,
+    required this.accentColor,
     required this.createdAt,
     required this.checkAnim,
     required this.fadeAnim,
@@ -804,19 +849,18 @@ class _HeroHeader extends ConsumerWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Ícone de sucesso
+                  // Ícone do tipo (entrada/saída/descarte)
                   Container(
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF16A34A).withValues(alpha: 0.18),
+                      color: accentColor.withValues(alpha: 0.20),
                       shape: BoxShape.circle,
                       border: Border.all(
-                          color: const Color(0xFF4ADE80).withValues(alpha: 0.45),
+                          color: accentColor.withValues(alpha: 0.50),
                           width: 1.5),
                     ),
-                    child: const Icon(Icons.check_rounded,
-                        color: Color(0xFF4ADE80), size: 24),
+                    child: Icon(headerIcon, color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 14),
                   // Texto
@@ -824,9 +868,9 @@ class _HeroHeader extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Saída registrada',
-                          style: TextStyle(
+                        Text(
+                          titleText,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w800,
                             fontSize: 22,
@@ -926,6 +970,8 @@ class _StatsRow extends StatelessWidget {
   final int products;
   final int batches;
   final int units;
+  final String unitsLabel;
+  final Color accentColor;
   final bool isDark;
 
   const _StatsRow(
@@ -933,6 +979,8 @@ class _StatsRow extends StatelessWidget {
       required this.products,
       required this.batches,
       required this.units,
+      this.unitsLabel = 'Unidades',
+      this.accentColor = const Color(0xFF16A34A),
       required this.isDark});
 
   @override
@@ -957,7 +1005,7 @@ class _StatsRow extends StatelessWidget {
           _SDivider(isDark: isDark),
           Expanded(child: _Stat(icon: Icons.layers_outlined, label: 'Lotes', value: '$batches', color: const Color(0xFF7C3AED))),
           _SDivider(isDark: isDark),
-          Expanded(child: _Stat(icon: Icons.output_rounded, label: 'Unidades', value: '$units', color: const Color(0xFF16A34A))),
+          Expanded(child: _Stat(icon: Icons.numbers_rounded, label: unitsLabel, value: '$units', color: accentColor)),
         ],
       ),
     );
@@ -1057,6 +1105,8 @@ class _ItemCard extends StatelessWidget {
   final Map<String, dynamic> movement;
   final int index;
   final bool isDark;
+  final bool isInbound;
+  final Color accentColor;
   final Color cardBg;
   final Color onCard;
   final Color sub;
@@ -1066,6 +1116,8 @@ class _ItemCard extends StatelessWidget {
     required this.movement,
     required this.index,
     required this.isDark,
+    this.isInbound = false,
+    this.accentColor = const Color(0xFF2563EB),
     required this.cardBg,
     required this.onCard,
     required this.sub,
@@ -1080,6 +1132,8 @@ class _ItemCard extends StatelessWidget {
     final consumed    = (m['consumed']   as num?)?.toInt() ?? 0;
     final before      = (m['before']     as num?)?.toInt() ?? 0;
     final after       = (m['after']      as num?)?.toInt() ?? 0;
+    final imageUrl    = m['imageUrl']    as String?;
+    final unit        = m['unit']        as String? ?? 'un';
 
     final expiryStr = m['expiryDate'] as String?;
     final expiryDt  = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
@@ -1123,7 +1177,16 @@ class _ItemCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _CardHeader(index: index, productName: productName, consumed: consumed, isDark: isDark),
+          _CardHeader(
+            index: index,
+            productName: productName,
+            consumed: consumed,
+            unit: unit,
+            imageUrl: imageUrl,
+            isInbound: isInbound,
+            accentColor: accentColor,
+            isDark: isDark,
+          ),
 
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
@@ -1200,86 +1263,118 @@ class _CardHeader extends StatelessWidget {
   final int index;
   final String productName;
   final int consumed;
+  final String unit;
+  final String? imageUrl;
+  final bool isInbound;
+  final Color accentColor;
   final bool isDark;
-  const _CardHeader(
-      {required this.index,
-      required this.productName,
-      required this.consumed,
-      required this.isDark});
+  const _CardHeader({
+    required this.index,
+    required this.productName,
+    required this.consumed,
+    required this.unit,
+    required this.imageUrl,
+    required this.isInbound,
+    required this.accentColor,
+    required this.isDark,
+  });
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isDark
-                ? [const Color(0xFF142140), const Color(0xFF111C2D)]
-                : [const Color(0xFFEFF6FF), const Color(0xFFF8FAFC)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF142140), const Color(0xFF111C2D)]
+              : [const Color(0xFFEFF6FF), const Color(0xFFF8FAFC)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1648A0), Color(0xFF2563EB)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                      color: const Color(0xFF2563EB).withValues(alpha: 0.35),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2))
-                ],
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(19)),
+      ),
+      child: Row(
+        children: [
+          // Badge numerado (etapa)
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [accentColor, Color.lerp(accentColor, Colors.black, 0.2)!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: Center(
-                child: Text('$index',
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
-              ),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                productName,
-                style: TextStyle(
-                  color: isDark
-                      ? const Color(0xFFF1F5FB)
-                      : const Color(0xFF0F172A),
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  letterSpacing: -0.2,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: const Color(0xFF16A34A)
-                    .withValues(alpha: isDark ? 0.20 : 0.10),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: const Color(0xFF16A34A).withValues(alpha: 0.30)),
-              ),
-              child: Text('$consumed un.',
+            child: Center(
+              child: Text('$index',
                   style: const TextStyle(
-                      color: Color(0xFF16A34A),
+                      color: Colors.white,
                       fontWeight: FontWeight.w800,
                       fontSize: 12)),
             ),
-          ],
-        ),
-      );
+          ),
+          const SizedBox(width: 10),
+          // Imagem do produto (ou ícone fallback)
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: isDark ? 0.18 : 0.10),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accentColor.withValues(alpha: 0.25)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: hasImage
+                ? Image.network(
+                    imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Icon(
+                        Icons.inventory_2_rounded,
+                        color: accentColor,
+                        size: 22),
+                  )
+                : Icon(Icons.inventory_2_rounded,
+                    color: accentColor, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              productName,
+              style: AppTypography.productName(
+                size: 14,
+                weight: FontWeight.w800,
+                color: isDark
+                    ? const Color(0xFFF1F5FB)
+                    : const Color(0xFF0F172A),
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: isDark ? 0.20 : 0.10),
+              borderRadius: BorderRadius.circular(20),
+              border:
+                  Border.all(color: accentColor.withValues(alpha: 0.30)),
+            ),
+            child: Text(
+              '${isInbound ? '+' : '−'}$consumed $unit',
+              style: TextStyle(
+                  color: accentColor,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _InfoChip extends StatelessWidget {
