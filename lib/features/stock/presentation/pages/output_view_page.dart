@@ -64,11 +64,6 @@ const _kNavy = LinearGradient(
   end: Alignment.bottomRight,
 );
 
-const _kBlue = LinearGradient(
-  colors: [Color(0xFF1648A0), Color(0xFF2563EB)],
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-);
 
 // ─── Steps de progresso ───────────────────────────────────────────────────────
 
@@ -1130,8 +1125,6 @@ class _ItemCard extends StatelessWidget {
     final productName = m['productName'] as String? ?? '-';
     final batchId     = m['batchId']     as String? ?? '-';
     final consumed    = (m['consumed']   as num?)?.toInt() ?? 0;
-    final before      = (m['before']     as num?)?.toInt() ?? 0;
-    final after       = (m['after']      as num?)?.toInt() ?? 0;
     final imageUrl    = m['imageUrl']    as String?;
     final unit        = m['unit']        as String? ?? 'un';
 
@@ -1724,62 +1717,4 @@ class _LevelDiagram extends StatelessWidget {
             ),
         ],
       );
-}
-
-class _StockBar extends StatelessWidget {
-  final int before;
-  final int after;
-  final int consumed;
-  final bool isDark;
-  final Color sub;
-  const _StockBar(
-      {required this.before, required this.after, required this.consumed, required this.isDark, required this.sub});
-
-  @override
-  Widget build(BuildContext context) {
-    final pct     = before > 0 ? (after / before).clamp(0.0, 1.0) : 0.0;
-    final isEmpty = after <= 0;
-    final isLow   = pct < 0.20 && !isEmpty;
-    final barColor = isEmpty ? const Color(0xFF6B7280) : isLow ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
-    final trackBg  = isDark ? const Color(0xFF1E2D42) : const Color(0xFFE2E8F0);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Estoque restante no lote', style: TextStyle(color: sub, fontSize: 11)),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: barColor.withValues(alpha: isDark ? 0.18 : 0.10),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(isEmpty ? 'Esgotado' : '$after restam',
-                  style: TextStyle(color: barColor, fontWeight: FontWeight.w700, fontSize: 11)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 0, end: pct),
-            duration: const Duration(milliseconds: 900),
-            curve: Curves.easeOutCubic,
-            builder: (_, value, __) => LinearProgressIndicator(
-              value: value,
-              minHeight: 8,
-              backgroundColor: trackBg,
-              valueColor: AlwaysStoppedAnimation<Color>(barColor),
-            ),
-          ),
-        ),
-        const SizedBox(height: 5),
-        Text('Antes: $before  ·  Retirado: $consumed  ·  Após: $after',
-            style: TextStyle(color: sub, fontSize: 10)),
-      ],
-    );
-  }
 }
