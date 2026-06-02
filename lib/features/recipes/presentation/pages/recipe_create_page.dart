@@ -12,7 +12,6 @@ import '../controllers/recipes_provider.dart';
 
 const _kPurple = Color(0xFF7C3AED);
 const _kPurpleDark = Color(0xFF4C1D95);
-const _kPurpleLight = Color(0xFFEDE9FE);
 
 class RecipeCreatePage extends ConsumerStatefulWidget {
   final StockRecipe? editRecipe;
@@ -383,7 +382,7 @@ class _RecipeCreatePageState extends ConsumerState<RecipeCreatePage>
                                     onTap: () => setState(
                                         () => _selectedQty[p.id] = qty + 1),
                                     footer: Text(
-                                      p.unit ?? 'un',
+                                      p.unit,
                                       style: AppTypography.labelSmall.copyWith(
                                         color: textSub,
                                         fontSize: 11.5,
@@ -881,7 +880,7 @@ class _SelectedIngredientsList extends ConsumerWidget {
                   const SizedBox(width: 5),
                   Expanded(
                     child: Text(
-                      'Prophet: estoque (${forecast!.currentStock}) '
+                      'Prophet: estoque (${forecast.currentStock}) '
                       'pode não cobrir o consumo previsto '
                       '(~${forecast.forecastWeekly.toStringAsFixed(0)}/sem) + receita',
                       style: TextStyle(
@@ -992,184 +991,6 @@ class _CatChip extends StatelessWidget {
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             fontSize: 12,
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Product card ─────────────────────────────────────────────────────────
-
-class _ProductCard extends StatelessWidget {
-  final Product product;
-  final int qty;
-  final bool isDark;
-  final Color cardBg;
-  final Color borderColor;
-  final Color textPrimary;
-  final Color textSub;
-  final VoidCallback? onDecrement;
-  final VoidCallback onIncrement;
-
-  const _ProductCard({
-    required this.product,
-    required this.qty,
-    required this.isDark,
-    required this.cardBg,
-    required this.borderColor,
-    required this.textPrimary,
-    required this.textSub,
-    required this.onDecrement,
-    required this.onIncrement,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = qty > 0;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      decoration: BoxDecoration(
-        color: selected
-            ? (isDark ? const Color(0xFF1A1033) : _kPurpleLight)
-            : cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: selected ? _kPurple : borderColor,
-          width: selected ? 2 : 1,
-        ),
-        boxShadow: selected && !isDark
-            ? [BoxShadow(color: _kPurple.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 4))]
-            : [],
-      ),
-      child: Column(
-        children: [
-          // Imagem / ícone
-          Expanded(
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                  child: product.imageUrl != null && product.imageUrl!.isNotEmpty
-                      ? Image.network(product.imageUrl!, width: double.infinity, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _PlaceholderIcon(isDark: isDark))
-                      : _PlaceholderIcon(isDark: isDark),
-                ),
-                // Badge de quantidade
-                if (selected)
-                  Positioned(
-                    top: 5,
-                    right: 5,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _kPurple,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4)],
-                      ),
-                      child: Text(
-                        '×$qty',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // Info + controles
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
-            child: Column(
-              children: [
-                Text(
-                  product.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: selected ? _kPurple : textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 10,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  product.unit,
-                  style: TextStyle(color: textSub, fontSize: 9),
-                ),
-                const SizedBox(height: 6),
-                // Stepper
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _QtyBtn(icon: Icons.remove_rounded, onTap: onDecrement, isDark: isDark, active: qty > 0),
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          '$qty',
-                          style: TextStyle(
-                            color: selected ? _kPurple : textSub,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ),
-                    _QtyBtn(icon: Icons.add_rounded, onTap: onIncrement, isDark: isDark, active: true),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PlaceholderIcon extends StatelessWidget {
-  final bool isDark;
-  const _PlaceholderIcon({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: isDark ? const Color(0xFF1F2937) : _kPurpleLight,
-      child: const Center(
-        child: Icon(Icons.inventory_2_outlined, size: 28, color: _kPurple),
-      ),
-    );
-  }
-}
-
-class _QtyBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onTap;
-  final bool isDark;
-  final bool active;
-
-  const _QtyBtn({required this.icon, required this.onTap, required this.isDark, required this.active});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 26,
-        height: 26,
-        decoration: BoxDecoration(
-          color: active && onTap != null
-              ? _kPurple.withValues(alpha: isDark ? 0.25 : 0.10)
-              : (isDark ? const Color(0xFF1F2937) : const Color(0xFFF1F5F9)),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          icon,
-          size: 14,
-          color: active && onTap != null
-              ? _kPurple
-              : (isDark ? const Color(0xFF4B5563) : const Color(0xFFD1D5DB)),
         ),
       ),
     );
