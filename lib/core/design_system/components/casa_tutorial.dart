@@ -117,7 +117,9 @@ void showCasaTutorial({
     try {
       // Etapa 2 — scroll com várias passagens, em alignments diferentes
       // (alguns widgets só ficam visíveis após scroll parcial — Sliver lazy).
-      const alignments = [0.30, 0.25, 0.30];
+      // ~0.40 deixa o alvo logo abaixo da barra de navegação (que fica no topo)
+      // e abre espaço para o card de conteúdo descer sem cobrir o foco.
+      const alignments = [0.40, 0.35, 0.40];
       for (final a in alignments) {
         final currentCtx = key.currentContext;
         // ignore: use_build_context_synchronously
@@ -229,28 +231,16 @@ void showCasaTutorial({
       enableTargetTab: false,
       contents: [
         TargetContent(
-          align: step.align,
+          // O auto-scroll sempre posiciona o alvo em ~30% do topo, deixando
+          // muito mais espaço ABAIXO. Por isso o conteúdo vai SEMPRE abaixo
+          // do alvo (bottom) e a barra de navegação fica SEMPRE no topo —
+          // assim a barra nunca cobre o foco nem o card de informações, e o
+          // botão "Próximo" fica sempre acessível na parte superior.
+          align: ContentAlign.bottom,
           builder: (ctx, controller) {
             // Sincroniza o estado dos botões com o step atual
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              // Decide a posição da barra pela posição REAL do alvo na tela
-              // (não apenas pelo align). Se o alvo está na metade de baixo,
-              // a barra vai pro TOPO; se está na metade de cima, vai pro
-              // RODAPÉ. Assim a barra nunca cobre o elemento em foco nem o
-              // card de conteúdo (que fica do lado oposto ao alvo).
-              bool barAtTop = step.align == ContentAlign.bottom;
-              final keyCtx = step.key.currentContext;
-              if (keyCtx != null && keyCtx.mounted) {
-                final ro = keyCtx.findRenderObject();
-                if (ro is RenderBox && ro.attached && ro.hasSize) {
-                  final pos = ro.localToGlobal(Offset.zero);
-                  final centerY = pos.dy + ro.size.height / 2;
-                  final screenH =
-                      MediaQuery.of(ctx).size.height;
-                  // alvo na metade de baixo → barra no topo (e vice-versa)
-                  barAtTop = centerY > screenH * 0.5;
-                }
-              }
+              const barAtTop = true; // barra sempre no topo
               _barStateNotifier.value = _BarState(
                 stepIndex: i,
                 totalSteps: steps.length,
