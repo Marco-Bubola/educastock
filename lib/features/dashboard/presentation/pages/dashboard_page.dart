@@ -74,7 +74,6 @@ class DashboardPage extends ConsumerWidget {
                     description: 'Esta grade colorida é seu atalho para as 6 funções principais do app. Cada cartão tem ícone, título e subtítulo descritivo. Foram projetados para acesso com 1 toque — sem precisar navegar por menus.',
                     icon: Icons.grid_view_rounded,
                     align: ContentAlign.bottom,
-                    verticalOffset: -18,
                     hints: const [
                       '📷 Escanear: entrada por código de barras (camera)',
                       '📦 Estoque: ver e editar produtos cadastrados',
@@ -226,23 +225,13 @@ class DashboardPage extends ConsumerWidget {
 
             const SizedBox(height: AppSpacing.xl),
 
-            // Análise de Risco ML — Container garante RenderBox válido p/ tutorial
-            Container(
-              key: _keyDashMlRisk,
-              constraints: const BoxConstraints(minHeight: 60),
-              width: double.infinity,
-              child: _MlRiskSection(),
-            ),
+            // Análise de Risco ML — tutorial foca apenas o header da seção
+            _MlRiskSection(headerKey: _keyDashMlRisk),
 
             const SizedBox(height: AppSpacing.xl),
 
-            // Previsão de Consumo Prophet — idem
-            Container(
-              key: _keyDashMlForecast,
-              constraints: const BoxConstraints(minHeight: 60),
-              width: double.infinity,
-              child: const _ForecastSection(),
-            ),
+            // Previsão de Consumo Prophet — tutorial foca apenas o header
+            _ForecastSection(headerKey: _keyDashMlForecast),
 
             const SizedBox(height: AppSpacing.xl),
 
@@ -907,7 +896,8 @@ class _AlertBatchTile extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _ForecastSection extends ConsumerWidget {
-  const _ForecastSection();
+  final Key? headerKey;
+  const _ForecastSection({this.headerKey});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -918,10 +908,13 @@ class _ForecastSection extends ConsumerWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CasaSectionHeader(
-            title: 'Sugestão de Reposição',
-            action: 'Ver tudo',
-            onAction: () => context.push(AppRoutes.mlForecast),
+          KeyedSubtree(
+            key: headerKey,
+            child: CasaSectionHeader(
+              title: 'Sugestão de Reposição',
+              action: 'Ver tudo',
+              onAction: () => context.push(AppRoutes.mlForecast),
+            ),
           ),
           const SizedBox(height: AppSpacing.sm),
           const ForecastEmptyState(),
@@ -932,10 +925,13 @@ class _ForecastSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CasaSectionHeader(
-          title: 'Sugestão de Reposição',
-          action: 'Ver tudo',
-          onAction: () => context.push(AppRoutes.mlForecast),
+        KeyedSubtree(
+          key: headerKey,
+          child: CasaSectionHeader(
+            title: 'Sugestão de Reposição',
+            action: 'Ver tudo',
+            onAction: () => context.push(AppRoutes.mlForecast),
+          ),
         ),
         const SizedBox(height: AppSpacing.sm),
         switch (topAsync) {
@@ -980,7 +976,8 @@ class _ForecastSection extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _MlRiskSection extends ConsumerWidget {
-  const _MlRiskSection();
+  final Key? headerKey;
+  const _MlRiskSection({this.headerKey});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -990,10 +987,13 @@ class _MlRiskSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CasaSectionHeader(
-          title: 'Análise de Risco ML',
-          action: 'Ver detalhes',
-          onAction: () => context.push(AppRoutes.mlInsights),
+        KeyedSubtree(
+          key: headerKey,
+          child: CasaSectionHeader(
+            title: 'Análise de Risco ML',
+            action: 'Ver detalhes',
+            onAction: () => context.push(AppRoutes.mlInsights),
+          ),
         ),
         const SizedBox(height: AppSpacing.sm),
 
