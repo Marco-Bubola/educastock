@@ -1,7 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import '../tokens/color_tokens.dart';
-import '../tokens/spacing_tokens.dart';
 import '../tokens/typography_tokens.dart';
 
 /// Card unificado para exibir produto em listas (Estoque, Saída, Receita).
