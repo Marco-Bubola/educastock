@@ -103,9 +103,7 @@ class LocationsPage extends ConsumerWidget {
               return _EmptyLocations(
                   onAdd: () => context.push(AppRoutes.locationCreate));
             }
-            return KeyedSubtree(
-              key: _keyLocationsList,
-              child: _LocationsList(
+            return _LocationsList(
                 items: items,
                 onAdd: () => context.push(AppRoutes.locationCreate),
                 onDeactivate: (loc) async {
@@ -122,8 +120,7 @@ class LocationsPage extends ConsumerWidget {
                       .read(locationsNotifierProvider.notifier)
                       .deactivateLocation(loc.id);
                 },
-              ),
-            );
+              );
           },
           loading: () => ListView.separated(
             padding: const EdgeInsets.all(AppSpacing.lg),
@@ -190,7 +187,13 @@ class _LocationsList extends StatelessWidget {
         const SizedBox(height: AppSpacing.xl),
 
         for (final group in groups) ...[
-          _GroupHeader(groupKey: group, count: grouped[group]!.length, isDark: isDark),
+          KeyedSubtree(
+            key: group == groups.first ? _keyLocationsList : null,
+            child: _GroupHeader(
+                groupKey: group,
+                count: grouped[group]!.length,
+                isDark: isDark),
+          ),
           const SizedBox(height: AppSpacing.sm),
           ...grouped[group]!.map((loc) {
             final card = Padding(
